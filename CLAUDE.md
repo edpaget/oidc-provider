@@ -133,6 +133,14 @@ Lint warnings must be treated as errors. The lint must complete with 0 warnings 
 clj-kondo --lint src test
 ```
 
+## Git Commits
+- Use [Conventional Commits](https://www.conventionalcommits.org/) for all commit messages
+- Format: `<type>(<scope>): <description>`
+- Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `build`, `ci`, `chore`
+- Scope is optional but encouraged (e.g., `feat(token): add PKCE support`)
+- Keep the subject line under 72 characters
+- Use the body for additional context when needed
+
 ## Context Maintenance
 - Use `clojure_eval` with `:reload` to ensure you're working with the latest code
 - always switch into `(in-ns ...)` the namespace that you are working on
