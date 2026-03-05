@@ -23,7 +23,7 @@ In `handle-authorization-code-grant`, the `redirect_uri` parameter is currently 
 - Require `redirect_uri` in the token request when the stored code has one
 - Reject with `invalid_grant` if missing or mismatched
 
-## Phase 3: Validate grant types against client registration
+## Phase 3: Validate grant types against client registration ✅
 
 `handle-authorization-code-grant` does not check that the client is registered for the `authorization_code` grant type. A client registered only for `client_credentials` can currently exchange authorization codes.
 

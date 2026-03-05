@@ -76,6 +76,9 @@
   Returns:
     Token response map"
   [{:keys [code redirect_uri]} client provider-config code-store token-store claims-provider]
+  (when-not (some #{"authorization_code"} (:grant-types client))
+    (throw (ex-info "Client not authorized for authorization_code grant"
+                    {:client-id (:client-id client)})))
   (when-not code
     (throw (ex-info "Missing code parameter" {})))
   (let [code-data (proto/get-authorization-code code-store code)]
@@ -126,6 +129,9 @@
   Returns:
     Token response map"
   [{:keys [refresh_token scope]} client provider-config token-store]
+  (when-not (some #{"refresh_token"} (:grant-types client))
+    (throw (ex-info "Client not authorized for refresh_token grant"
+                    {:client-id (:client-id client)})))
   (when-not refresh_token
     (throw (ex-info "Missing refresh_token parameter" {})))
   (let [token-data (proto/get-refresh-token token-store refresh_token)]
