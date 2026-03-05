@@ -2,7 +2,7 @@
 
 Fixes known security issues in oidc-provider before adding new features. Each phase is a single committable unit.
 
-## Phase 1: Timing-safe client secret comparison
+## Phase 1: Timing-safe client secret comparison ✅
 
 Replace `not=` string comparison in `token_endpoint.clj` with `MessageDigest/isEqual` on byte arrays. This closes a timing side-channel that could leak client secrets.
 
@@ -15,7 +15,7 @@ Replace `not=` string comparison in `token_endpoint.clj` with `MessageDigest/isE
 
 Update `authenticate-client` to use this instead of `not=`.
 
-## Phase 2: Enforce redirect_uri matching per RFC 6749 Section 4.1.3
+## Phase 2: Enforce redirect_uri matching per RFC 6749 Section 4.1.3 ✅
 
 In `handle-authorization-code-grant`, the `redirect_uri` parameter is currently optional. Per spec, if `redirect_uri` was included in the authorization request, it MUST be present and identical in the token request.
 

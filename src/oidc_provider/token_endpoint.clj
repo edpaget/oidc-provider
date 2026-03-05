@@ -39,7 +39,7 @@
     (let [encoded                   (subs authorization-header 6)
           decoded                   (String. (.decode (Base64/getDecoder) encoded))
           [client-id client-secret] (str/split decoded #":" 2)]
-      {:client-id client-id
+      {:client-id     client-id
        :client-secret client-secret})))
 
 (defn- constant-time-eq
@@ -86,10 +86,12 @@
       (throw (ex-info "Authorization code expired" {:code code})))
     (when (not= (:client-id code-data) (:client-id client))
       (throw (ex-info "Client mismatch" {:expected (:client-id code-data)
-                                         :actual (:client-id client)})))
+                                         :actual   (:client-id client)})))
+    (when (and (:redirect-uri code-data) (not redirect_uri))
+      (throw (ex-info "Missing redirect_uri parameter" {:code code})))
     (when (and redirect_uri (not= (:redirect-uri code-data) redirect_uri))
       (throw (ex-info "Redirect URI mismatch" {:expected (:redirect-uri code-data)
-                                               :actual redirect_uri})))
+                                               :actual   redirect_uri})))
     (let [user-id       (:user-id code-data)
           scope         (:scope code-data)
           access-token  (token/generate-access-token)
@@ -105,12 +107,12 @@
                          {:nonce (:nonce code-data)})]
       (proto/save-access-token token-store access-token user-id (:client-id client) scope expiry)
       (proto/save-refresh-token token-store refresh-token user-id (:client-id client) scope)
-      {:access_token access-token
-       :token_type "Bearer"
-       :expires_in ttl
-       :id_token id-token
+      {:access_token  access-token
+       :token_type    "Bearer"
+       :expires_in    ttl
+       :id_token      id-token
        :refresh_token refresh-token
-       :scope (str/join " " scope)})))
+       :scope         (str/join " " scope)})))
 
 (defn handle-refresh-token-grant
   "Handles refresh_token grant type.
@@ -131,14 +133,14 @@
       (throw (ex-info "Invalid refresh token" {:refresh-token refresh_token})))
     (when (not= (:client-id token-data) (:client-id client))
       (throw (ex-info "Client mismatch" {:expected (:client-id token-data)
-                                         :actual (:client-id client)})))
+                                         :actual   (:client-id client)})))
     (let [requested-scope (when scope (vec (str/split scope #" ")))
           token-scope     (:scope token-data)
           final-scope     (or requested-scope token-scope)]
       (when (and requested-scope
                  (not (every? (set token-scope) requested-scope)))
         (throw (ex-info "Requested scope exceeds original scope"
-                        {:original token-scope
+                        {:original  token-scope
                          :requested requested-scope})))
       (let [access-token (token/generate-access-token)
             ttl          (or (:access-token-ttl-seconds provider-config) 3600)
@@ -146,9 +148,9 @@
         (proto/save-access-token token-store access-token (:user-id token-data)
                                  (:client-id client) final-scope expiry)
         {:access_token access-token
-         :token_type "Bearer"
-         :expires_in ttl
-         :scope (str/join " " final-scope)}))))
+         :token_type   "Bearer"
+         :expires_in   ttl
+         :scope        (str/join " " final-scope)}))))
 
 (defn handle-client-credentials-grant
   "Handles client_credentials grant type.
@@ -173,16 +175,16 @@
     (when-not (every? (set client-scope) final-scope)
       (throw (ex-info "Invalid scope for client"
                       {:requested final-scope
-                       :allowed client-scope})))
+                       :allowed   client-scope})))
     (let [access-token (token/generate-access-token)
           ttl          (or (:access-token-ttl-seconds provider-config) 3600)
           expiry       (+ (System/currentTimeMillis) (* 1000 ttl))]
       (proto/save-access-token token-store access-token (:client-id client)
                                (:client-id client) final-scope expiry)
       {:access_token access-token
-       :token_type "Bearer"
-       :expires_in ttl
-       :scope (str/join " " final-scope)})))
+       :token_type   "Bearer"
+       :expires_in   ttl
+       :scope        (str/join " " final-scope)})))
 
 (defn handle-token-request
   "Handles token endpoint requests.
@@ -235,8 +237,8 @@
   Returns:
     Map with :status, :headers, and :body"
   [error error-description & {:keys [status] :or {status 400}}]
-  {:status status
+  {:status  status
    :headers {"Content-Type" "application/json"}
-   :body (json/generate-string
-          (cond-> {:error error}
-            error-description (assoc :error_description error-description)))})
+   :body    (json/generate-string
+             (cond-> {:error error}
+               error-description (assoc :error_description error-description)))})
