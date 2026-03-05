@@ -55,13 +55,13 @@
            client-store
            code-store
            token-store
-           claims-provider] :as config}]
+           claims-provider]               :as config}]
   {:pre [(m/validate ProviderSetup config)]}
   (let [key             (or signing-key (token/generate-rsa-key))
-        provider-config {:issuer issuer
-                         :signing-key key
-                         :access-token-ttl-seconds (or access-token-ttl-seconds 3600)
-                         :id-token-ttl-seconds (or id-token-ttl-seconds 3600)
+        provider-config {:issuer                         issuer
+                         :signing-key                    key
+                         :access-token-ttl-seconds       (or access-token-ttl-seconds 3600)
+                         :id-token-ttl-seconds           (or id-token-ttl-seconds 3600)
                          :authorization-code-ttl-seconds (or authorization-code-ttl-seconds 600)}]
     (->Provider config
                 provider-config

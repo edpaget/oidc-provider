@@ -143,15 +143,15 @@
       (when-not (= issuer-val issuer)
         (throw (ex-info "Issuer mismatch"
                         {:expected issuer
-                         :actual issuer-val})))
+                         :actual   issuer-val})))
       (when-not (some #{expected-client-id} audience)
         (throw (ex-info "Audience mismatch"
                         {:expected expected-client-id
-                         :actual audience})))
+                         :actual   audience})))
       (when (.before expiry now)
         (throw (ex-info "Token expired"
                         {:expiry expiry
-                         :now now})))
+                         :now    now})))
       (into {} (map (fn [[k v]] [(keyword k) v]))
             (.getClaims claims)))))
 

@@ -1,4 +1,4 @@
-# Roadmap 02: Decouple authn Dependency
+# Roadmap 02: Decouple authn Dependency ✅ COMPLETED
 
 The oidc-provider library currently depends on `local/authn` and re-exports five symbols from `authn.protocol`: the `CredentialValidator` and `ClaimsProvider` protocols, `get-claims`, and two Malli schemas (`CredentialHash`, `Claims`). This coupling prevents independent publishing and forces consumers to pull in the entire `authn` library (which includes session management, Ring middleware, etc.) when they only need the provider.
 

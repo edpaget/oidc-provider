@@ -34,12 +34,12 @@
 (defrecord InMemoryAuthorizationCodeStore [codes]
   proto/AuthorizationCodeStore
   (save-authorization-code [_ code user-id client-id redirect-uri scope nonce expiry]
-    (swap! codes assoc code {:user-id user-id
-                             :client-id client-id
+    (swap! codes assoc code {:user-id      user-id
+                             :client-id    client-id
                              :redirect-uri redirect-uri
-                             :scope scope
-                             :nonce nonce
-                             :expiry expiry})
+                             :scope        scope
+                             :nonce        nonce
+                             :expiry       expiry})
     true)
 
   (get-authorization-code [_ code]
@@ -60,19 +60,19 @@
 (defrecord InMemoryTokenStore [access-tokens refresh-tokens]
   proto/TokenStore
   (save-access-token [_ token user-id client-id scope expiry]
-    (swap! access-tokens assoc token {:user-id user-id
+    (swap! access-tokens assoc token {:user-id   user-id
                                       :client-id client-id
-                                      :scope scope
-                                      :expiry expiry})
+                                      :scope     scope
+                                      :expiry    expiry})
     true)
 
   (get-access-token [_ token]
     (get @access-tokens token))
 
   (save-refresh-token [_ token user-id client-id scope]
-    (swap! refresh-tokens assoc token {:user-id user-id
+    (swap! refresh-tokens assoc token {:user-id   user-id
                                        :client-id client-id
-                                       :scope scope})
+                                       :scope     scope})
     true)
 
   (get-refresh-token [_ token]

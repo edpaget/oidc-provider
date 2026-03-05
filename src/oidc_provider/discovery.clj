@@ -41,17 +41,17 @@
            subject-types-supported
            id-token-signing-alg-values-supported
            token-endpoint-auth-methods-supported
-           claims-supported] :as config}]
+           claims-supported]                     :as config}]
   {:pre [(m/validate DiscoveryConfig config)]}
-  (cond-> {:issuer issuer
-           :authorization_endpoint authorization-endpoint
-           :token_endpoint token-endpoint
-           :jwks_uri jwks-uri
-           :response_types_supported (or response-types-supported ["code"])
-           :subject_types_supported (or subject-types-supported ["public"])
+  (cond-> {:issuer                                issuer
+           :authorization_endpoint                authorization-endpoint
+           :token_endpoint                        token-endpoint
+           :jwks_uri                              jwks-uri
+           :response_types_supported              (or response-types-supported ["code"])
+           :subject_types_supported               (or subject-types-supported ["public"])
            :id_token_signing_alg_values_supported (or id-token-signing-alg-values-supported ["RS256"])
-           :scopes_supported (or scopes-supported ["openid" "profile" "email"])
-           :grant_types_supported (or grant-types-supported ["authorization_code" "refresh_token"])
+           :scopes_supported                      (or scopes-supported ["openid" "profile" "email"])
+           :grant_types_supported                 (or grant-types-supported ["authorization_code" "refresh_token"])
            :token_endpoint_auth_methods_supported (or token-endpoint-auth-methods-supported
                                                       ["client_secret_basic" "client_secret_post" "none"])}
     userinfo-endpoint (assoc :userinfo_endpoint userinfo-endpoint)

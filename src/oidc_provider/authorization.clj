@@ -44,14 +44,14 @@
   (when-not (some #{redirect-uri} (:redirect-uris client))
     (throw (ex-info "Invalid redirect_uri"
                     {:redirect-uri redirect-uri
-                     :allowed (:redirect-uris client)}))))
+                     :allowed      (:redirect-uris client)}))))
 
 (defn- validate-response-type
   [client response-type]
   (when-not (some #{response-type} (:response-types client))
     (throw (ex-info "Unsupported response_type"
                     {:response-type response-type
-                     :supported (:response-types client)}))))
+                     :supported     (:response-types client)}))))
 
 (defn- validate-scope
   [client scope-str]
@@ -60,7 +60,7 @@
     (when (some (fn [scope] (not (some #{scope} client-scopes))) requested-scopes)
       (throw (ex-info "Invalid scope"
                       {:requested requested-scopes
-                       :allowed client-scopes})))))
+                       :allowed   client-scopes})))))
 
 (defn parse-authorization-request
   "Parses and validates an authorization request.
@@ -108,8 +108,8 @@
       (proto/save-authorization-code code-store code user-id client_id
                                      redirect_uri scopes nonce expiry)
       {:redirect-uri redirect_uri
-       :params (cond-> {:code code}
-                 state (assoc :state state))})
+       :params       (cond-> {:code code}
+                       state (assoc :state state))})
 
     :else
     (throw (ex-info "Unsupported response_type"
@@ -125,9 +125,9 @@
    and optional state parameter."
   [{:keys [redirect_uri state]} error-code error-description]
   {:redirect-uri redirect_uri
-   :params (cond-> {:error (or error-code "access_denied")}
-             error-description (assoc :error_description error-description)
-             state (assoc :state state))})
+   :params       (cond-> {:error (or error-code "access_denied")}
+                   error-description (assoc :error_description error-description)
+                   state (assoc :state state))})
 
 (defn build-redirect-url
   "Builds the redirect URL with query parameters.
