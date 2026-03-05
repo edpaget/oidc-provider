@@ -1,0 +1,43 @@
+name: Publish
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+
+jobs:
+  publish:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeLaGuardo/setup-clojure@13.4
+        with:
+          cli: latest
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+            ~/.deps.clj
+          key: deps-${{ hashFiles('deps.edn') }}
+          restore-keys: deps-
+
+      - name: Read version
+        id: version
+        run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Build JAR
+        run: clojure -T:build jar
+
+      - name: Deploy to GitHub Packages
+        run: clojure -X:deploy :artifact '"target/oidc-provider-${{ steps.version.outputs.version }}.jar"' :repository '{"id" "github" "url" "https://maven.pkg.github.com/${{ github.repository }}"}'
+        env:
+          CLOJARS_USERNAME: ${{ github.actor }}
+          CLOJARS_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
