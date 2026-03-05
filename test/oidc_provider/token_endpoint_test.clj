@@ -13,6 +13,60 @@
      :email "test@example.com"
      :name "Test User"}))
 
+(deftest authenticate-client-wrong-secret-test
+  (testing "rejects wrong client secret"
+    (let [client-store    (store/create-client-store
+                           [{:client-id "test-client"
+                             :client-secret "secret123"
+                             :redirect-uris ["https://app.example.com/callback"]
+                             :grant-types ["authorization_code"]
+                             :response-types ["code"]
+                             :scopes ["openid"]}])
+          code-store      (store/create-authorization-code-store)
+          token-store     (store/create-token-store)
+          claims-provider (->TestClaimsProvider)
+          provider-config {:issuer "https://test.example.com"
+                           :signing-key (token/generate-rsa-key)
+                           :access-token-ttl-seconds 3600}]
+      (is (thrown-with-msg? Exception #"Invalid client credentials"
+                            (token-ep/handle-token-request
+                             {:grant_type "authorization_code"
+                              :client_id "test-client"
+                              :client_secret "wrong-secret"
+                              :code "some-code"}
+                             nil
+                             provider-config
+                             client-store
+                             code-store
+                             token-store
+                             claims-provider)))))
+
+  (testing "rejects missing client secret when required"
+    (let [client-store    (store/create-client-store
+                           [{:client-id "test-client"
+                             :client-secret "secret123"
+                             :redirect-uris ["https://app.example.com/callback"]
+                             :grant-types ["authorization_code"]
+                             :response-types ["code"]
+                             :scopes ["openid"]}])
+          code-store      (store/create-authorization-code-store)
+          token-store     (store/create-token-store)
+          claims-provider (->TestClaimsProvider)
+          provider-config {:issuer "https://test.example.com"
+                           :signing-key (token/generate-rsa-key)
+                           :access-token-ttl-seconds 3600}]
+      (is (thrown-with-msg? Exception #"Invalid client credentials"
+                            (token-ep/handle-token-request
+                             {:grant_type "authorization_code"
+                              :client_id "test-client"
+                              :code "some-code"}
+                             nil
+                             provider-config
+                             client-store
+                             code-store
+                             token-store
+                             claims-provider))))))
+
 (deftest handle-authorization-code-grant-test
   (testing "exchanges authorization code for tokens"
     (let [client-store    (store/create-client-store

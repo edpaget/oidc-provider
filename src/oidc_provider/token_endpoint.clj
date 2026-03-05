@@ -7,6 +7,7 @@
    [oidc-provider.protocol :as proto]
    [oidc-provider.token :as token])
   (:import
+   [java.security MessageDigest]
    [java.util Base64]))
 
 (set! *warn-on-reflection* true)
@@ -41,6 +42,11 @@
       {:client-id client-id
        :client-secret client-secret})))
 
+(defn- constant-time-eq
+  [^String a ^String b]
+  (MessageDigest/isEqual (.getBytes a "UTF-8")
+                         (.getBytes b "UTF-8")))
+
 (defn- authenticate-client
   [params authorization-header client-store]
   (let [basic-auth    (parse-basic-auth authorization-header)
@@ -52,7 +58,7 @@
       (when-not client
         (throw (ex-info "Unknown client" {:client-id client-id})))
       (when (and (:client-secret client)
-                 (not= (:client-secret client) client-secret))
+                 (not (constant-time-eq (:client-secret client) (or client-secret ""))))
         (throw (ex-info "Invalid client credentials" {:client-id client-id})))
       client)))
 
