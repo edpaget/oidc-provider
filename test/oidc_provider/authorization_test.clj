@@ -40,7 +40,7 @@
                             (authz/parse-authorization-request query-string client-store))))))
 
 (deftest handle-authorization-approval-test
-  (testing "generates authorization code response"
+  (testing "generates authorization code stored with correct metadata"
     (let [code-store      (store/create-authorization-code-store)
           provider-config {:issuer                         "https://test.example.com"
                            :authorization-code-ttl-seconds 600}
@@ -54,14 +54,14 @@
                            request
                            "user-123"
                            provider-config
-                           code-store)]
+                           code-store)
+          code            (get-in response [:params :code])
+          code-data       (proto/get-authorization-code code-store code)]
       (is (= "https://app.example.com/callback" (:redirect-uri response)))
-      (is (some? (get-in response [:params :code])))
       (is (= "xyz" (get-in response [:params :state])))
-      (let [code      (get-in response [:params :code])
-            code-data (proto/get-authorization-code code-store code)]
-        (is (= "user-123" (:user-id code-data)))
-        (is (= "test-client" (:client-id code-data)))))))
+      (is (= "user-123" (:user-id code-data)))
+      (is (= "test-client" (:client-id code-data)))
+      (is (= ["openid" "profile"] (:scope code-data))))))
 
 (deftest handle-authorization-denial-test
   (testing "generates error response"

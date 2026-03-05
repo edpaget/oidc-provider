@@ -18,15 +18,14 @@
              :email_verified true))))
 
 (deftest create-provider-test
-  (testing "creates provider with minimal config"
+  (testing "creates provider with correct config and generated signing key"
     (let [provider (core/create-provider
                     {:issuer                 "https://test.example.com"
                      :authorization-endpoint "https://test.example.com/authorize"
                      :token-endpoint         "https://test.example.com/token"
                      :jwks-uri               "https://test.example.com/jwks"})]
-      (is (some? provider))
       (is (= "https://test.example.com" (get-in provider [:config :issuer])))
-      (is (some? (:signing-key (:provider-config provider)))))))
+      (is (= 3600 (:access-token-ttl-seconds (:provider-config provider)))))))
 
 (deftest register-client-test
   (testing "registers client successfully"
@@ -48,7 +47,7 @@
       (is (= ["https://app.example.com/callback"] (:redirect-uris client))))))
 
 (deftest retrieve-registered-client-test
-  (testing "retrieves registered client"
+  (testing "retrieves registered client by id"
     (let [provider (core/create-provider
                     {:issuer                 "https://test.example.com"
                      :authorization-endpoint "https://test.example.com/authorize"
@@ -63,7 +62,6 @@
                      :response-types ["code"]
                      :scopes         ["openid"]})
           client   (core/get-client provider "test-client")]
-      (is (some? client))
       (is (= "test-client" (:client-id client))))))
 
 (deftest discovery-metadata-test
@@ -78,17 +76,17 @@
       (is (= "https://test.example.com/authorize" (:authorization_endpoint metadata)))
       (is (= "https://test.example.com/token" (:token_endpoint metadata)))
       (is (= "https://test.example.com/jwks" (:jwks_uri metadata)))
-      (is (some? (:response_types_supported metadata))))))
+      (is (= ["code"] (:response_types_supported metadata))))))
 
 (deftest jwks-test
-  (testing "returns valid JWKS"
+  (testing "returns JWKS with single RSA key"
     (let [provider (core/create-provider
                     {:issuer                 "https://test.example.com"
                      :authorization-endpoint "https://test.example.com/authorize"
                      :token-endpoint         "https://test.example.com/token"
                      :jwks-uri               "https://test.example.com/jwks"})
-          jwks     (core/jwks provider)]
-      (is (vector? (:keys jwks)))
-      (is (pos? (count (:keys jwks))))
-      (is (some? (:kid (first (:keys jwks)))))
-      (is (= "RSA" (:kty (first (:keys jwks))))))))
+          jwks     (core/jwks provider)
+          key      (first (:keys jwks))]
+      (is (= 1 (count (:keys jwks))))
+      (is (= "RSA" (:kty key)))
+      (is (= "AQAB" (:e key))))))

@@ -69,7 +69,7 @@
                              claims-provider))))))
 
 (deftest handle-authorization-code-grant-test
-  (testing "exchanges authorization code for tokens"
+  (testing "exchanges authorization code for tokens stored with correct metadata"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
                              :client-secret  "secret123"
@@ -89,19 +89,22 @@
       (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid" "profile"] "nonce123" expiry)
-      (let [response (token-ep/handle-authorization-code-grant
-                      {:code         code
-                       :redirect_uri "https://app.example.com/callback"}
-                      (proto/get-client client-store "test-client")
-                      provider-config
-                      code-store
-                      token-store
-                      claims-provider)]
-        (is (some? (:access_token response)))
-        (is (= "Bearer" (:token_type response)))
-        (is (= 3600 (:expires_in response)))
-        (is (some? (:id_token response)))
-        (is (some? (:refresh_token response)))))))
+      (let [response   (token-ep/handle-authorization-code-grant
+                        {:code         code
+                         :redirect_uri "https://app.example.com/callback"}
+                        (proto/get-client client-store "test-client")
+                        provider-config
+                        code-store
+                        token-store
+                        claims-provider)
+            token-data (proto/get-access-token token-store (:access_token response))
+            id-claims  (token/validate-id-token provider-config (:id_token response) "test-client")]
+        (is (= {:token_type "Bearer" :expires_in 3600 :scope "openid profile"}
+               (select-keys response [:token_type :expires_in :scope])))
+        (is (= "user-123" (:user-id token-data)))
+        (is (= "test-client" (:client-id token-data)))
+        (is (= "user-123" (:sub id-claims)))
+        (is (= "nonce123" (:nonce id-claims)))))))
 
 (deftest handle-authorization-code-grant-expired-test
   (testing "throws on expired authorization code"
@@ -193,7 +196,7 @@
                              claims-provider))))))
 
 (deftest handle-refresh-token-grant-test
-  (testing "refreshes access token"
+  (testing "refreshes access token with correct stored metadata"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
                              :client-secret  "secret123"
@@ -207,15 +210,16 @@
                            :access-token-ttl-seconds 3600}
           refresh-token   (token/generate-refresh-token)]
       (proto/save-refresh-token token-store refresh-token "user-123" "test-client" ["openid" "profile"])
-      (let [response (token-ep/handle-refresh-token-grant
-                      {:refresh_token refresh-token}
-                      (proto/get-client client-store "test-client")
-                      provider-config
-                      token-store)]
-        (is (some? (:access_token response)))
-        (is (= "Bearer" (:token_type response)))
-        (is (= 3600 (:expires_in response)))
-        (is (= "openid profile" (:scope response)))))))
+      (let [response   (token-ep/handle-refresh-token-grant
+                        {:refresh_token refresh-token}
+                        (proto/get-client client-store "test-client")
+                        provider-config
+                        token-store)
+            token-data (proto/get-access-token token-store (:access_token response))]
+        (is (= {:token_type "Bearer" :expires_in 3600 :scope "openid profile"}
+               (select-keys response [:token_type :expires_in :scope])))
+        (is (= "user-123" (:user-id token-data)))
+        (is (= "test-client" (:client-id token-data)))))))
 
 (deftest grant-type-authorization-code-rejected-test
   (testing "authorization_code rejected for client without grant type"
@@ -270,7 +274,7 @@
                              token-store))))))
 
 (deftest handle-client-credentials-grant-test
-  (testing "issues token for client credentials"
+  (testing "issues token with correct stored metadata"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
                              :client-secret  "secret123"
@@ -286,8 +290,9 @@
                            {:scope "api:read"}
                            (proto/get-client client-store "test-client")
                            provider-config
-                           token-store)]
-      (is (some? (:access_token response)))
-      (is (= "Bearer" (:token_type response)))
-      (is (= 3600 (:expires_in response)))
-      (is (= "api:read" (:scope response))))))
+                           token-store)
+          token-data      (proto/get-access-token token-store (:access_token response))]
+      (is (= {:token_type "Bearer" :expires_in 3600 :scope "api:read"}
+             (select-keys response [:token_type :expires_in :scope])))
+      (is (= "test-client" (:client-id token-data)))
+      (is (= ["api:read"] (:scope token-data))))))
