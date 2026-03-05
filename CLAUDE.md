@@ -110,6 +110,9 @@ All docstrings should follow the Clojure community style guide and be written in
 - Always reload namespaces before running tests with `:reload` flag: `(require '[namespace] :reload)`
 - Test both normal execution paths and error conditions
 - use small deftest forms that have 5 or fewer assertions.
+- Each `deftest` should generally contain a single `testing` block — split separate scenarios into their own `deftest` forms
+- No blank lines inside `deftest` forms
+- No inline `;;` comments inside `deftest` forms unless the intent cannot be expressed in the `testing` message or `is` assertion message
 - avoid using with-redefs
 
 ## Using Shell Commands

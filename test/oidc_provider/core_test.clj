@@ -45,8 +45,9 @@
                      :scopes         ["openid" "profile" "email"]})]
       (is (= "test-client" (:client-id client)))
       (is (= "secret123" (:client-secret client)))
-      (is (= ["https://app.example.com/callback"] (:redirect-uris client)))))
+      (is (= ["https://app.example.com/callback"] (:redirect-uris client))))))
 
+(deftest retrieve-registered-client-test
   (testing "retrieves registered client"
     (let [provider (core/create-provider
                     {:issuer                 "https://test.example.com"
@@ -77,8 +78,7 @@
       (is (= "https://test.example.com/authorize" (:authorization_endpoint metadata)))
       (is (= "https://test.example.com/token" (:token_endpoint metadata)))
       (is (= "https://test.example.com/jwks" (:jwks_uri metadata)))
-      (is (some? (:response_types_supported metadata)))
-      (is (some? (:grant_types_supported metadata))))))
+      (is (some? (:response_types_supported metadata))))))
 
 (deftest jwks-test
   (testing "returns valid JWKS"

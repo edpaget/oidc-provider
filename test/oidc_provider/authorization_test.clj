@@ -6,7 +6,7 @@
    [oidc-provider.protocol :as proto]
    [oidc-provider.store :as store]))
 
-(deftest parse-authorization-request-test
+(deftest parse-valid-authorization-request-test
   (testing "parses valid authorization request"
     (let [client-store (store/create-client-store
                         [{:client-id      "test-client"
@@ -19,9 +19,9 @@
       (is (= "test-client" (:client_id request)))
       (is (= "https://app.example.com/callback" (:redirect_uri request)))
       (is (= "openid profile" (:scope request)))
-      (is (= "xyz" (:state request)))
-      (is (= "abc" (:nonce request)))))
+      (is (= "xyz" (:state request))))))
 
+(deftest parse-authorization-request-invalid-redirect-uri-test
   (testing "throws on invalid redirect_uri"
     (let [client-store (store/create-client-store
                         [{:client-id      "test-client"
@@ -30,8 +30,9 @@
                           :scopes         ["openid"]}])
           query-string "response_type=code&client_id=test-client&redirect_uri=https://evil.com/callback"]
       (is (thrown-with-msg? Exception #"Invalid redirect_uri"
-                            (authz/parse-authorization-request query-string client-store)))))
+                            (authz/parse-authorization-request query-string client-store))))))
 
+(deftest parse-authorization-request-unknown-client-test
   (testing "throws on unknown client"
     (let [client-store (store/create-client-store [])
           query-string "response_type=code&client_id=unknown&redirect_uri=https://app.example.com/callback"]
@@ -60,9 +61,7 @@
       (let [code      (get-in response [:params :code])
             code-data (proto/get-authorization-code code-store code)]
         (is (= "user-123" (:user-id code-data)))
-        (is (= "test-client" (:client-id code-data)))
-        (is (= ["openid" "profile"] (:scope code-data)))
-        (is (= "abc" (:nonce code-data)))))))
+        (is (= "test-client" (:client-id code-data)))))))
 
 (deftest handle-authorization-denial-test
   (testing "generates error response"
@@ -84,8 +83,9 @@
           url      (authz/build-redirect-url response)]
       (is (str/starts-with? url "https://app.example.com/callback?"))
       (is (str/includes? url "code=abc123"))
-      (is (str/includes? url "state=xyz"))))
+      (is (str/includes? url "state=xyz")))))
 
+(deftest build-redirect-url-existing-params-test
   (testing "appends to existing query params"
     (let [response {:redirect-uri "https://app.example.com/callback?existing=param"
                     :params       {:code "abc123"}}

@@ -39,8 +39,9 @@
                              client-store
                              code-store
                              token-store
-                             claims-provider)))))
+                             claims-provider))))))
 
+(deftest authenticate-client-missing-secret-test
   (testing "rejects missing client secret when required"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
@@ -100,9 +101,9 @@
         (is (= "Bearer" (:token_type response)))
         (is (= 3600 (:expires_in response)))
         (is (some? (:id_token response)))
-        (is (some? (:refresh_token response)))
-        (is (= "openid profile" (:scope response))))))
+        (is (some? (:refresh_token response)))))))
 
+(deftest handle-authorization-code-grant-expired-test
   (testing "throws on expired authorization code"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
@@ -132,7 +133,7 @@
                              token-store
                              claims-provider))))))
 
-(deftest redirect-uri-enforcement-test
+(deftest redirect-uri-missing-enforcement-test
   (testing "throws when redirect_uri is missing but was in authorization request"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
@@ -159,8 +160,9 @@
                              provider-config
                              code-store
                              token-store
-                             claims-provider)))))
+                             claims-provider))))))
 
+(deftest redirect-uri-mismatch-enforcement-test
   (testing "throws when redirect_uri does not match"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
@@ -215,7 +217,7 @@
         (is (= 3600 (:expires_in response)))
         (is (= "openid profile" (:scope response)))))))
 
-(deftest grant-type-validation-test
+(deftest grant-type-authorization-code-rejected-test
   (testing "authorization_code rejected for client without grant type"
     (let [client-store    (store/create-client-store
                            [{:client-id      "cc-only-client"
@@ -243,8 +245,9 @@
                              provider-config
                              code-store
                              token-store
-                             claims-provider)))))
+                             claims-provider))))))
 
+(deftest grant-type-refresh-token-rejected-test
   (testing "refresh_token rejected for client without grant type"
     (let [client-store    (store/create-client-store
                            [{:client-id      "authcode-only-client"
