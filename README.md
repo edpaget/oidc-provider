@@ -1,0 +1,254 @@
+# OIDC Provider
+
+A flexible, protocol-based OpenID Connect Provider implementation for the JVM using Clojure.
+
+## Features
+
+- **Protocol-based architecture** - Extend authentication, claims, and storage via protocols
+- **Generic credential support** - Accept any credential type (username/password, API keys, certificates, etc.)
+- **Nimbus OAuth SDK foundation** - Built on battle-tested OAuth2/OIDC library
+- **Complete OIDC flows** - Authorization code, refresh token, and client credentials grants
+- **Discovery support** - OpenID Connect Discovery and JWKS endpoints
+- **In-memory stores** - Development-ready stores for clients, codes, and tokens
+
+## Installation
+
+Add to your `deps.edn`:
+
+```clojure
+{:deps {local/oidc-provider {:local/root "oidc-provider"}}}
+```
+
+## Quick Start
+
+```clojure
+(require '[oidc-provider.core :as provider]
+         '[oidc-provider.protocol :as proto])
+
+;; Implement credential validator
+(defrecord SimpleValidator []
+  proto/CredentialValidator
+  (validate-credentials [_ credentials client-id]
+    (when (and (= (:username credentials) "user")
+               (= (:password credentials) "pass"))
+      "user-123")))
+
+;; Implement claims provider
+(defrecord SimpleClaimsProvider []
+  proto/ClaimsProvider
+  (get-claims [_ user-id scope]
+    {:sub user-id
+     :email "user@example.com"
+     :name "Test User"}))
+
+;; Create provider
+(def my-provider
+  (provider/create-provider
+   {:issuer "https://idp.example.com"
+    :authorization-endpoint "https://idp.example.com/authorize"
+    :token-endpoint "https://idp.example.com/token"
+    :jwks-uri "https://idp.example.com/jwks"
+    :credential-validator (->SimpleValidator)
+    :claims-provider (->SimpleClaimsProvider)}))
+
+;; Register a client
+(provider/register-client
+ my-provider
+ {:client-id "my-app"
+  :client-secret "secret123"
+  :redirect-uris ["https://app.example.com/callback"]
+  :grant-types ["authorization_code" "refresh_token"]
+  :response-types ["code"]
+  :scopes ["openid" "profile" "email"]})
+
+;; Get discovery metadata
+(provider/discovery-metadata my-provider)
+
+;; Get JWKS
+(provider/jwks my-provider)
+```
+
+## Authorization Flow
+
+```clojure
+;; 1. Parse authorization request
+(def auth-req
+  (provider/parse-authorization-request
+   my-provider
+   "response_type=code&client_id=my-app&redirect_uri=https://app.example.com/callback&scope=openid+profile"))
+
+;; 2. Authenticate user (your application logic)
+;; Validate credentials using your credential validator
+(def user-id
+  (proto/validate-credentials
+   (:credential-validator my-provider)
+   {:username "user" :password "pass"}
+   "my-app"))
+
+;; 3. Get user consent and authorize
+(def redirect-url
+  (provider/authorize my-provider auth-req user-id))
+;; => "https://app.example.com/callback?code=..."
+
+;; 4. Exchange code for tokens
+(def token-response
+  (provider/token-request
+   my-provider
+   {:grant_type "authorization_code"
+    :code "authorization-code-from-callback"
+    :client_id "my-app"
+    :client_secret "secret123"
+    :redirect_uri "https://app.example.com/callback"}
+   nil))
+;; => {:access_token "..." :id_token "..." :refresh_token "..." ...}
+```
+
+## Protocols
+
+### CredentialValidator
+
+Validates any type of credentials:
+
+```clojure
+(defprotocol CredentialValidator
+  (validate-credentials [this credential-hash client-id]))
+
+;; Example: API key authentication
+(defrecord ApiKeyValidator [valid-keys]
+  proto/CredentialValidator
+  (validate-credentials [_ credentials client-id]
+    (when-let [user-id (get @valid-keys (:api-key credentials))]
+      user-id)))
+
+;; Example: Certificate authentication
+(defrecord CertValidator []
+  proto/CredentialValidator
+  (validate-credentials [_ credentials client-id]
+    (when-let [cert (:certificate credentials)]
+      ;; Validate certificate and extract user-id
+      (extract-subject cert))))
+```
+
+### ClaimsProvider
+
+Provides user claims based on scope:
+
+```clojure
+(defprotocol ClaimsProvider
+  (get-claims [this user-id scope]))
+
+;; Example: Database-backed claims
+(defrecord DbClaimsProvider [db]
+  proto/ClaimsProvider
+  (get-claims [_ user-id scope]
+    (let [user (db/get-user @db user-id)]
+      (cond-> {:sub user-id}
+        (some #{"profile"} scope)
+        (assoc :name (:name user)
+               :given_name (:given-name user)
+               :family_name (:family-name user))
+
+        (some #{"email"} scope)
+        (assoc :email (:email user)
+               :email_verified (:email-verified user))))))
+```
+
+### Storage Protocols
+
+Implement custom storage:
+
+```clojure
+;; ClientStore - manage client registrations
+(defprotocol ClientStore
+  (get-client [this client-id])
+  (register-client [this client-config]))
+
+;; AuthorizationCodeStore - manage authorization codes
+(defprotocol AuthorizationCodeStore
+  (save-authorization-code [this code user-id client-id redirect-uri scope nonce expiry])
+  (get-authorization-code [this code])
+  (delete-authorization-code [this code]))
+
+;; TokenStore - manage access and refresh tokens
+(defprotocol TokenStore
+  (save-access-token [this token user-id client-id scope expiry])
+  (get-access-token [this token])
+  (save-refresh-token [this token user-id client-id scope])
+  (get-refresh-token [this token])
+  (revoke-token [this token]))
+```
+
+## Configuration
+
+Provider configuration options:
+
+```clojure
+{:issuer "https://idp.example.com"                        ;; Required
+ :authorization-endpoint "https://idp.example.com/authorize" ;; Required
+ :token-endpoint "https://idp.example.com/token"         ;; Required
+ :jwks-uri "https://idp.example.com/jwks"                ;; Required
+
+ ;; Optional
+ :signing-key rsa-key                    ;; RSAKey (generated if not provided)
+ :access-token-ttl-seconds 3600          ;; Default: 3600
+ :id-token-ttl-seconds 3600              ;; Default: 3600
+ :authorization-code-ttl-seconds 600     ;; Default: 600
+
+ ;; Custom implementations
+ :credential-validator validator          ;; CredentialValidator instance
+ :claims-provider claims-provider         ;; ClaimsProvider instance
+ :client-store client-store               ;; ClientStore instance (in-memory default)
+ :code-store code-store                   ;; AuthorizationCodeStore instance (in-memory default)
+ :token-store token-store}                ;; TokenStore instance (in-memory default)
+```
+
+## Grant Types
+
+### Authorization Code Grant
+
+```clojure
+(provider/token-request
+ my-provider
+ {:grant_type "authorization_code"
+  :code "..."
+  :client_id "my-app"
+  :client_secret "secret123"
+  :redirect_uri "https://app.example.com/callback"}
+ nil)
+```
+
+### Refresh Token Grant
+
+```clojure
+(provider/token-request
+ my-provider
+ {:grant_type "refresh_token"
+  :refresh_token "..."
+  :client_id "my-app"
+  :client_secret "secret123"}
+ nil)
+```
+
+### Client Credentials Grant
+
+```clojure
+(provider/token-request
+ my-provider
+ {:grant_type "client_credentials"
+  :client_id "my-app"
+  :client_secret "secret123"
+  :scope "api:read api:write"}
+ nil)
+```
+
+## Testing
+
+Run tests:
+
+```bash
+clojure -X:oidc-provider-test
+```
+
+## License
+
+[Apache License, Version 2.0](LICENSE)
