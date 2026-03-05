@@ -4,13 +4,6 @@
    [oidc-provider.core :as core]
    [oidc-provider.protocol :as proto]))
 
-(defrecord TestValidator []
-  proto/CredentialValidator
-  (validate-credentials [_ credentials _client-id]
-    (when (and (= (:username credentials) "test-user")
-               (= (:password credentials) "test-pass"))
-      "user-123")))
-
 (defrecord TestClaimsProvider []
   proto/ClaimsProvider
   (get-claims [_ user-id scope]

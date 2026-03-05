@@ -25,7 +25,6 @@
    [:client-store {:optional true} [:fn #(satisfies? proto/ClientStore %)]]
    [:code-store {:optional true} [:fn #(satisfies? proto/AuthorizationCodeStore %)]]
    [:token-store {:optional true} [:fn #(satisfies? proto/TokenStore %)]]
-   [:credential-validator {:optional true} [:fn #(satisfies? proto/CredentialValidator %)]]
    [:claims-provider {:optional true} [:fn #(satisfies? proto/ClaimsProvider %)]]])
 
 (defrecord Provider [config
@@ -33,7 +32,6 @@
                      client-store
                      code-store
                      token-store
-                     credential-validator
                      claims-provider])
 
 (defn create-provider
@@ -45,8 +43,7 @@
    `:access-token-ttl-seconds` (defaults to 3600), `:id-token-ttl-seconds` (defaults to
    3600), `:authorization-code-ttl-seconds` (defaults to 600), `:client-store`,
    `:code-store`, `:token-store` (all three store implementations created in-memory if
-   not provided), `:credential-validator` (required for authentication), and
-   `:claims-provider` (required for ID token claims).
+   not provided), and `:claims-provider` (required for ID token claims).
 
    Validates the configuration and returns a Provider instance with all stores and
    settings initialized."
@@ -58,7 +55,6 @@
            client-store
            code-store
            token-store
-           credential-validator
            claims-provider] :as config}]
   {:pre [(m/validate ProviderSetup config)]}
   (let [key             (or signing-key (token/generate-rsa-key))
@@ -72,7 +68,6 @@
                 (or client-store (store/create-client-store))
                 (or code-store (store/create-authorization-code-store))
                 (or token-store (store/create-token-store))
-                credential-validator
                 claims-provider)))
 
 (defn discovery-metadata

@@ -1,32 +1,26 @@
 (ns oidc-provider.protocol
-  "Core protocols for OIDC provider extensibility.
+  "Core protocols and schemas for OIDC provider extensibility.
 
-  For authentication protocols ([[authn.protocol/CredentialValidator]] and
-  [[authn.protocol/ClaimsProvider]]), see the authn package."
-  (:require
-   [authn.protocol :as authn]))
+  Defines the [[ClaimsProvider]] protocol for supplying user claims to ID tokens,
+  along with storage protocols ([[ClientStore]], [[AuthorizationCodeStore]],
+  [[TokenStore]]) for pluggable persistence.")
 
 (set! *warn-on-reflection* true)
 
-(def CredentialValidator
-  "Re-exported from [[authn.protocol/CredentialValidator]]."
-  authn/CredentialValidator)
+(defprotocol ClaimsProvider
+  "Provides user claims for ID token generation.
 
-(def ClaimsProvider
-  "Re-exported from [[authn.protocol/ClaimsProvider]]."
-  authn/ClaimsProvider)
+  Implementations supply the claims map included in ID tokens based on the
+  authenticated user and the requested scopes."
+  (get-claims [this user-id scope]
+    "Returns a claims map for the given `user-id` and `scope` vector.
 
-(def get-claims
-  "Re-exported from [[authn.protocol/get-claims]]."
-  authn/get-claims)
-
-(def CredentialHash
-  "Re-exported from [[authn.protocol/CredentialHash]]."
-  authn/CredentialHash)
+    The returned map must include at minimum `:sub`. Additional claims such as
+    `:name`, `:email`, etc. should be included based on the requested scopes."))
 
 (def Claims
-  "Re-exported from [[authn.protocol/Claims]]."
-  authn/Claims)
+  "Malli schema for a claims map."
+  [:map-of :keyword :any])
 
 (def ClientConfig
   "Malli schema for OAuth2/OIDC client configuration."

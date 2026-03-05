@@ -123,7 +123,7 @@ All docstrings should follow the Clojure community style guide and be written in
 ### Formatting
 ```bash
 # Format project
-clojure -X:format :paths '["."]'
+clojure -M:format
 ```
 
 ### Linting
