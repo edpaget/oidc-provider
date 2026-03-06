@@ -22,7 +22,7 @@ Processing:
 - Store via `ClientStore/register-client`
 - Return the full client information response per RFC 7591 Section 3.2
 
-## Phase 2: Registration metadata validation
+## Phase 2: Registration metadata validation ✅
 
 Add validation rules beyond schema conformance:
 - `redirect_uris` must be valid absolute URIs

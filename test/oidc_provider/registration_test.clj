@@ -80,3 +80,54 @@
                            {"redirect_uris" ["https://app.example.com/callback"]
                             "grant_types"   ["implicit"]}
                            (store/create-client-store))))))
+
+(deftest register-http-localhost-redirect-test
+  (testing "http://localhost redirect URI is accepted"
+    (let [response (reg/handle-registration-request
+                    {"redirect_uris" ["http://localhost:3000/callback"]}
+                    (store/create-client-store))]
+      (is (= ["http://localhost:3000/callback"] (get response "redirect_uris"))))))
+
+(deftest register-http-127-redirect-test
+  (testing "http://127.0.0.1 redirect URI is accepted"
+    (let [response (reg/handle-registration-request
+                    {"redirect_uris" ["http://127.0.0.1:8080/callback"]}
+                    (store/create-client-store))]
+      (is (= ["http://127.0.0.1:8080/callback"] (get response "redirect_uris"))))))
+
+(deftest register-https-redirect-test
+  (testing "https redirect URI is accepted"
+    (let [response (reg/handle-registration-request
+                    {"redirect_uris" ["https://app.example.com/callback"]}
+                    (store/create-client-store))]
+      (is (= ["https://app.example.com/callback"] (get response "redirect_uris"))))))
+
+(deftest register-http-non-localhost-test
+  (testing "throws invalid_client_metadata for http URI on non-localhost host"
+    (is (thrown-with-msg? Exception #"invalid_client_metadata"
+                          (reg/handle-registration-request
+                           {"redirect_uris" ["http://evil.example.com/callback"]}
+                           (store/create-client-store))))))
+
+(deftest register-invalid-uri-test
+  (testing "throws invalid_client_metadata for malformed URI"
+    (is (thrown-with-msg? Exception #"invalid_client_metadata"
+                          (reg/handle-registration-request
+                           {"redirect_uris" ["not a uri"]}
+                           (store/create-client-store))))))
+
+(deftest register-relative-uri-test
+  (testing "throws invalid_client_metadata for relative URI"
+    (is (thrown-with-msg? Exception #"invalid_client_metadata"
+                          (reg/handle-registration-request
+                           {"redirect_uris" ["/callback"]}
+                           (store/create-client-store))))))
+
+(deftest register-inconsistent-grant-response-test
+  (testing "throws invalid_client_metadata when grant_types and response_types are inconsistent"
+    (is (thrown-with-msg? Exception #"invalid_client_metadata"
+                          (reg/handle-registration-request
+                           {"redirect_uris"  ["https://app.example.com/callback"]
+                            "grant_types"    ["authorization_code"]
+                            "response_types" ["token"]}
+                           (store/create-client-store))))))

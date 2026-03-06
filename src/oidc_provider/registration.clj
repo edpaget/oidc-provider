@@ -7,10 +7,13 @@
   via [[oidc-provider.protocol/ClientStore]]."
   (:require
    [cheshire.core :as json]
+   [clojure.set :as set]
    [clojure.string :as str]
    [malli.core :as m]
    [oidc-provider.protocol :as proto]
-   [oidc-provider.token :as token]))
+   [oidc-provider.token :as token])
+  (:import
+   (java.net URI URISyntaxException)))
 
 (set! *warn-on-reflection* true)
 
@@ -44,6 +47,53 @@
     (not (get request "grant_types"))                (assoc "grant_types" ["authorization_code"])
     (not (get request "response_types"))             (assoc "response_types" ["code"])
     (not (get request "token_endpoint_auth_method")) (assoc "token_endpoint_auth_method" "none")))
+
+(defn- valid-redirect-uri?
+  "Returns true when `uri-str` is an absolute URI with HTTPS, or HTTP on localhost/127.0.0.1."
+  [uri-str]
+  (try
+    (let [uri    (URI. ^String uri-str)
+          scheme (some-> (.getScheme uri) str/lower-case)
+          host   (some-> (.getHost uri) str/lower-case)]
+      (and (.isAbsolute uri)
+           (some? host)
+           (or (= scheme "https")
+               (and (= scheme "http")
+                    (or (= host "localhost") (= host "127.0.0.1"))))))
+    (catch URISyntaxException _ false)))
+
+(defn- validate-redirect-uris
+  "Validates that all `redirect_uris` are absolute HTTPS URIs (or HTTP on localhost)."
+  [request]
+  (doseq [uri (get request "redirect_uris")]
+    (when-not (valid-redirect-uri? uri)
+      (throw (ex-info "invalid_client_metadata"
+                      {:error_description (str "Invalid redirect URI: " uri)})))))
+
+(defn- validate-grant-response-consistency
+  "Validates that `grant_types` and `response_types` are consistent per RFC 7591."
+  [request]
+  (let [grant-types    (set (get request "grant_types"))
+        response-types (set (get request "response_types"))]
+    (when (and (contains? grant-types "authorization_code")
+               (not (contains? response-types "code")))
+      (throw (ex-info "invalid_client_metadata"
+                      {:error_description "grant_types contains authorization_code but response_types is missing code"})))
+    (when (and (contains? grant-types "implicit")
+               (empty? (set/intersection response-types #{"token" "id_token"})))
+      (throw (ex-info "invalid_client_metadata"
+                      {:error_description "grant_types contains implicit but response_types is missing token or id_token"})))
+    (when (and (contains? response-types "code")
+               (not (contains? grant-types "authorization_code")))
+      (throw (ex-info "invalid_client_metadata"
+                      {:error_description "response_types contains code but grant_types is missing authorization_code"})))))
+
+(defn- validate-request
+  "Runs semantic validations on a defaulted registration request."
+  [request]
+  (validate-redirect-uris request)
+  (validate-grant-response-consistency request)
+  request)
 
 (defn- request->client-config
   "Converts a snake_case registration request to a kebab-case `ClientConfig` map."
@@ -89,6 +139,7 @@
                     {:errors (m/explain RegistrationRequest request)})))
   (-> request
       apply-defaults
+      validate-request
       request->client-config
       (->> (proto/register-client client-store))
       client-config->response))
