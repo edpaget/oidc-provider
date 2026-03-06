@@ -30,7 +30,7 @@ In `handle-authorization-code-grant`, the `redirect_uri` parameter is currently 
 - Add grant type validation at the top of each grant handler
 - Return `unauthorized_client` error when the grant type is not in the client's `grant-types`
 
-## Phase 4: Enforce openid scope for ID tokens
+## Phase 4: Enforce openid scope for ID tokens ✅
 
 ID tokens are currently issued regardless of whether `openid` is in the requested scope. Per OIDC Core Section 3.1.2.1, the `openid` scope is required.
 

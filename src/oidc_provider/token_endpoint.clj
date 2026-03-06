@@ -97,25 +97,24 @@
                                                :actual   redirect_uri})))
     (let [user-id       (:user-id code-data)
           scope         (:scope code-data)
+          openid?       (some #{"openid"} scope)
           access-token  (token/generate-access-token)
           refresh-token (token/generate-refresh-token)
           ttl           (or (:access-token-ttl-seconds provider-config) 3600)
           expiry        (+ (System/currentTimeMillis) (* 1000 ttl))
-          user-claims   (proto/get-claims claims-provider user-id scope)
-          id-token      (token/generate-id-token
-                         provider-config
-                         user-id
-                         (:client-id client)
-                         user-claims
-                         {:nonce (:nonce code-data)})]
+          id-token      (when openid?
+                          (let [user-claims (proto/get-claims claims-provider user-id scope)]
+                            (token/generate-id-token
+                             provider-config user-id (:client-id client)
+                             user-claims {:nonce (:nonce code-data)})))]
       (proto/save-access-token token-store access-token user-id (:client-id client) scope expiry)
       (proto/save-refresh-token token-store refresh-token user-id (:client-id client) scope)
-      {:access_token  access-token
-       :token_type    "Bearer"
-       :expires_in    ttl
-       :id_token      id-token
-       :refresh_token refresh-token
-       :scope         (str/join " " scope)})))
+      (cond-> {:access_token  access-token
+               :token_type    "Bearer"
+               :expires_in    ttl
+               :refresh_token refresh-token
+               :scope         (str/join " " scope)}
+        id-token (assoc :id_token id-token)))))
 
 (defn handle-refresh-token-grant
   "Handles refresh_token grant type.

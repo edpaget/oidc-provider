@@ -106,6 +106,40 @@
         (is (= "user-123" (:sub id-claims)))
         (is (= "nonce123" (:nonce id-claims)))))))
 
+(deftest authorization-code-grant-no-openid-scope-test
+  (testing "omits id_token when openid is not in scope"
+    (let [client-store    (store/create-client-store
+                           [{:client-id      "test-client"
+                             :client-secret  "secret123"
+                             :redirect-uris  ["https://app.example.com/callback"]
+                             :grant-types    ["authorization_code"]
+                             :response-types ["code"]
+                             :scopes         ["profile" "email"]}])
+          code-store      (store/create-authorization-code-store)
+          token-store     (store/create-token-store)
+          claims-provider (->TestClaimsProvider)
+          provider-config {:issuer                   "https://test.example.com"
+                           :signing-key              (token/generate-rsa-key)
+                           :access-token-ttl-seconds 3600}
+          code            (token/generate-authorization-code)
+          expiry          (+ (System/currentTimeMillis) (* 1000 600))]
+      (proto/save-authorization-code code-store code "user-123" "test-client"
+                                     "https://app.example.com/callback"
+                                     ["profile"] nil expiry)
+      (let [response   (token-ep/handle-authorization-code-grant
+                        {:code         code
+                         :redirect_uri "https://app.example.com/callback"}
+                        (proto/get-client client-store "test-client")
+                        provider-config
+                        code-store
+                        token-store
+                        claims-provider)
+            token-data (proto/get-access-token token-store (:access_token response))]
+        (is (= nil (:id_token response)))
+        (is (= "user-123" (:user-id token-data)))
+        (is (= {:token_type "Bearer" :expires_in 3600 :scope "profile"}
+               (select-keys response [:token_type :expires_in :scope])))))))
+
 (deftest handle-authorization-code-grant-expired-test
   (testing "throws on expired authorization code"
     (let [client-store    (store/create-client-store
