@@ -5,6 +5,7 @@
    [oidc-provider.authorization :as authz]
    [oidc-provider.discovery :as disco]
    [oidc-provider.protocol :as proto]
+   [oidc-provider.registration :as reg]
    [oidc-provider.store :as store]
    [oidc-provider.token :as token]
    [oidc-provider.token-endpoint :as token-ep]))
@@ -172,3 +173,13 @@
    or nil if the client doesn't exist."
   [provider client-id]
   (proto/get-client (:client-store provider) client-id))
+
+(defn dynamic-register-client
+  "Dynamically registers a new OAuth2/OIDC client per RFC 7591.
+
+   Takes a Provider instance and a registration request map in snake_case wire
+   format. Validates the request, generates credentials, stores the client, and
+   returns the registration response in snake_case wire format. Throws `ex-info`
+   with `\"invalid_client_metadata\"` on validation errors."
+  [provider request]
+  (reg/handle-registration-request request (:client-store provider)))

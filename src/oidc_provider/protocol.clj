@@ -32,7 +32,9 @@
    [:response-types [:vector [:enum "code" "token" "id_token"]]]
    [:scopes [:vector :string]]
    [:token-endpoint-auth-method {:optional true}
-    [:enum "client_secret_basic" "client_secret_post" "none"]]])
+    [:enum "client_secret_basic" "client_secret_post" "none"]]
+   [:client-name {:optional true} :string]
+   [:registration-access-token {:optional true} :string]])
 
 (defprotocol ClientStore
   "Protocol for managing OAuth2/OIDC client registrations."

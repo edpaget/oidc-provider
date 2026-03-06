@@ -1,0 +1,106 @@
+(ns oidc-provider.registration
+  "Dynamic client registration per RFC 7591.
+
+  Provides [[handle-registration-request]] for processing client registration
+  requests and [[registration-error-response]] for formatting error responses.
+  Accepts snake_case wire format and converts to kebab-case for internal storage
+  via [[oidc-provider.protocol/ClientStore]]."
+  (:require
+   [cheshire.core :as json]
+   [clojure.string :as str]
+   [malli.core :as m]
+   [oidc-provider.protocol :as proto]
+   [oidc-provider.token :as token]))
+
+(set! *warn-on-reflection* true)
+
+(def RegistrationRequest
+  "Malli schema for an RFC 7591 client registration request (snake_case wire format)."
+  [:map
+   ["redirect_uris" [:vector {:min 1} :string]]
+   ["grant_types" {:optional true} [:vector [:enum "authorization_code" "refresh_token" "client_credentials"]]]
+   ["response_types" {:optional true} [:vector [:enum "code" "token" "id_token"]]]
+   ["client_name" {:optional true} :string]
+   ["token_endpoint_auth_method" {:optional true} [:enum "client_secret_basic" "client_secret_post" "none"]]
+   ["scope" {:optional true} :string]])
+
+(def RegistrationResponse
+  "Malli schema for an RFC 7591 client registration response (snake_case wire format)."
+  [:map
+   ["client_id" :string]
+   ["registration_access_token" :string]
+   ["client_secret" {:optional true} :string]
+   ["client_name" {:optional true} :string]
+   ["scope" {:optional true} :string]
+   ["redirect_uris" [:vector :string]]
+   ["grant_types" [:vector :string]]
+   ["response_types" [:vector :string]]
+   ["token_endpoint_auth_method" :string]])
+
+(defn- apply-defaults
+  "Merges RFC 7591 defaults into a registration request."
+  [request]
+  (cond-> request
+    (not (get request "grant_types"))                (assoc "grant_types" ["authorization_code"])
+    (not (get request "response_types"))             (assoc "response_types" ["code"])
+    (not (get request "token_endpoint_auth_method")) (assoc "token_endpoint_auth_method" "none")))
+
+(defn- request->client-config
+  "Converts a snake_case registration request to a kebab-case `ClientConfig` map."
+  [request]
+  (let [auth-method (get request "token_endpoint_auth_method")
+        scope-str   (get request "scope")
+        scopes      (if scope-str (vec (str/split scope-str #" ")) [])]
+    (cond-> {:client-id                  (str (java.util.UUID/randomUUID))
+             :redirect-uris              (get request "redirect_uris")
+             :grant-types                (get request "grant_types")
+             :response-types             (get request "response_types")
+             :scopes                     scopes
+             :token-endpoint-auth-method auth-method
+             :registration-access-token  (token/generate-access-token)}
+      (not= auth-method "none") (assoc :client-secret (str (java.util.UUID/randomUUID)))
+      (get request "client_name") (assoc :client-name (get request "client_name")))))
+
+(defn- client-config->response
+  "Converts a stored kebab-case client config to a snake_case registration response."
+  [client]
+  (cond-> {"client_id"                  (:client-id client)
+           "registration_access_token"  (:registration-access-token client)
+           "redirect_uris"              (:redirect-uris client)
+           "grant_types"                (:grant-types client)
+           "response_types"             (:response-types client)
+           "token_endpoint_auth_method" (:token-endpoint-auth-method client)}
+    (:client-secret client) (assoc "client_secret" (:client-secret client))
+    (:client-name client)   (assoc "client_name" (:client-name client))
+    (seq (:scopes client))  (assoc "scope" (str/join " " (:scopes client)))))
+
+(defn handle-registration-request
+  "Processes a dynamic client registration request per RFC 7591.
+
+  Takes a `request` map in snake_case wire format and a `client-store` implementing
+  [[oidc-provider.protocol/ClientStore]]. Validates the request, applies RFC 7591
+  defaults, generates credentials, registers the client, and returns the registration
+  response in snake_case wire format.
+
+  Throws `ex-info` with `\"invalid_client_metadata\"` message on validation errors."
+  [request client-store]
+  (when-not (m/validate RegistrationRequest request)
+    (throw (ex-info "invalid_client_metadata"
+                    {:errors (m/explain RegistrationRequest request)})))
+  (-> request
+      apply-defaults
+      request->client-config
+      (->> (proto/register-client client-store))
+      client-config->response))
+
+(defn registration-error-response
+  "Creates an RFC 7591 error response.
+
+  Takes an `error` code string and `error-description` string. Returns a Ring
+  response map with JSON body."
+  [error error-description]
+  {:status  400
+   :headers {"Content-Type" "application/json"}
+   :body    (json/generate-string
+             (cond-> {:error error}
+               error-description (assoc :error_description error-description)))})

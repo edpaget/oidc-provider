@@ -2,7 +2,7 @@
 
 Enables tools like Claude Code, Cursor, and LibreChat to register themselves as OAuth clients at runtime. Nimbus provides `com.nimbusds.oauth2.sdk.client.ClientMetadata` and related classes but we only need to handle the server-side endpoint logic.
 
-## Phase 1: Registration endpoint — core handler
+## Phase 1: Registration endpoint — core handler ✅
 
 Create `oidc-provider.registration` namespace with a `handle-registration-request` function.
 
