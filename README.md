@@ -4,10 +4,10 @@ A flexible, protocol-based OpenID Connect Provider implementation for the JVM us
 
 ## Features
 
-- **Protocol-based architecture** - Extend authentication, claims, and storage via protocols
-- **Generic credential support** - Accept any credential type (username/password, API keys, certificates, etc.)
+- **Protocol-based architecture** - Extend claims and storage via protocols
 - **Nimbus OAuth SDK foundation** - Built on battle-tested OAuth2/OIDC library
 - **Complete OIDC flows** - Authorization code, refresh token, and client credentials grants
+- **Dynamic client registration** - RFC 7591 compliant registration endpoint
 - **Discovery support** - OpenID Connect Discovery and JWKS endpoints
 - **In-memory stores** - Development-ready stores for clients, codes, and tokens
 
@@ -25,14 +25,6 @@ Add to your `deps.edn`:
 (require '[oidc-provider.core :as provider]
          '[oidc-provider.protocol :as proto])
 
-;; Implement credential validator
-(defrecord SimpleValidator []
-  proto/CredentialValidator
-  (validate-credentials [_ credentials client-id]
-    (when (and (= (:username credentials) "user")
-               (= (:password credentials) "pass"))
-      "user-123")))
-
 ;; Implement claims provider
 (defrecord SimpleClaimsProvider []
   proto/ClaimsProvider
@@ -48,7 +40,6 @@ Add to your `deps.edn`:
     :authorization-endpoint "https://idp.example.com/authorize"
     :token-endpoint "https://idp.example.com/token"
     :jwks-uri "https://idp.example.com/jwks"
-    :credential-validator (->SimpleValidator)
     :claims-provider (->SimpleClaimsProvider)}))
 
 ;; Register a client
@@ -70,6 +61,8 @@ Add to your `deps.edn`:
 
 ## Authorization Flow
 
+Authentication is the responsibility of your host application. The provider handles everything after the user has been authenticated.
+
 ```clojure
 ;; 1. Parse authorization request
 (def auth-req
@@ -78,12 +71,9 @@ Add to your `deps.edn`:
    "response_type=code&client_id=my-app&redirect_uri=https://app.example.com/callback&scope=openid+profile"))
 
 ;; 2. Authenticate user (your application logic)
-;; Validate credentials using your credential validator
-(def user-id
-  (proto/validate-credentials
-   (:credential-validator my-provider)
-   {:username "user" :password "pass"}
-   "my-app"))
+;; This library does not handle authentication — use whatever mechanism
+;; fits your application (session, form login, SSO, etc.) to identify the user.
+(def user-id "user-123")
 
 ;; 3. Get user consent and authorize
 (def redirect-url
@@ -105,33 +95,9 @@ Add to your `deps.edn`:
 
 ## Protocols
 
-### CredentialValidator
-
-Validates any type of credentials:
-
-```clojure
-(defprotocol CredentialValidator
-  (validate-credentials [this credential-hash client-id]))
-
-;; Example: API key authentication
-(defrecord ApiKeyValidator [valid-keys]
-  proto/CredentialValidator
-  (validate-credentials [_ credentials client-id]
-    (when-let [user-id (get @valid-keys (:api-key credentials))]
-      user-id)))
-
-;; Example: Certificate authentication
-(defrecord CertValidator []
-  proto/CredentialValidator
-  (validate-credentials [_ credentials client-id]
-    (when-let [cert (:certificate credentials)]
-      ;; Validate certificate and extract user-id
-      (extract-subject cert))))
-```
-
 ### ClaimsProvider
 
-Provides user claims based on scope:
+Provides user claims for ID tokens based on the authenticated user and requested scopes:
 
 ```clojure
 (defprotocol ClaimsProvider
@@ -195,7 +161,6 @@ Provider configuration options:
  :authorization-code-ttl-seconds 600     ;; Default: 600
 
  ;; Custom implementations
- :credential-validator validator          ;; CredentialValidator instance
  :claims-provider claims-provider         ;; ClaimsProvider instance
  :client-store client-store               ;; ClientStore instance (in-memory default)
  :code-store code-store                   ;; AuthorizationCodeStore instance (in-memory default)
@@ -241,12 +206,29 @@ Provider configuration options:
  nil)
 ```
 
+## Dynamic Client Registration
+
+RFC 7591 compliant dynamic registration:
+
+```clojure
+(provider/dynamic-register-client
+ my-provider
+ {:redirect_uris ["https://app.example.com/callback"]
+  :grant_types ["authorization_code"]
+  :response_types ["code"]
+  :client_name "My App"
+  :token_endpoint_auth_method "client_secret_basic"})
+;; => {:client_id "..." :client_secret "..." :redirect_uris [...] ...}
+```
+
+The registration endpoint validates metadata per RFC 7591, generates client credentials, and returns the full client configuration in wire format.
+
 ## Testing
 
 Run tests:
 
 ```bash
-clojure -X:oidc-provider-test
+clojure -X:test
 ```
 
 ## License
