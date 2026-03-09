@@ -54,21 +54,23 @@
 
 (defprotocol AuthorizationCodeStore
   "Protocol for storing and retrieving authorization codes."
-  (save-authorization-code [this code user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method]
+  (save-authorization-code [this code user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource]
     "Saves an authorization code with associated metadata.
 
     Takes an authorization code string, user identifier, OAuth2 client identifier,
     the redirect URI from the authorization request, a vector of scope strings, an
     optional nonce for replay protection, an expiration timestamp (milliseconds
-    since epoch), and optional PKCE `code-challenge` and `code-challenge-method`
-    strings. Stores the code and metadata. Returns true if saved successfully.")
+    since epoch), optional PKCE `code-challenge` and `code-challenge-method`
+    strings, and an optional `resource` vector of target resource indicator URIs
+    (per RFC 8707). Stores the code and metadata. Returns true if saved successfully.")
 
   (get-authorization-code [this code]
     "Retrieves authorization code metadata.
 
     Takes an authorization code string and looks up its associated metadata. Returns
-    a map with keys `[:user-id :client-id :redirect-uri :scope :nonce :expiry]` if
-    found, or nil if the code doesn't exist or has been deleted.")
+    a map with keys `[:user-id :client-id :redirect-uri :scope :nonce :expiry]`
+    and optionally `:code-challenge`, `:code-challenge-method`, and `:resource`
+    if found, or nil if the code doesn't exist or has been deleted.")
 
   (delete-authorization-code [this code]
     "Deletes an authorization code.

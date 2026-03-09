@@ -181,3 +181,67 @@
           query-string "response_type=code&client_id=conf-client&redirect_uri=https://app.example.com/callback&scope=openid"
           request      (authz/parse-authorization-request query-string client-store)]
       (is (= "conf-client" (:client_id request))))))
+
+(deftest parse-authorization-request-with-resource-test
+  (testing "single resource param is parsed as vector"
+    (let [client-store (store/create-client-store
+                        [{:client-id      "test-client"
+                          :client-secret  "secret"
+                          :redirect-uris  ["https://app.example.com/callback"]
+                          :response-types ["code"]
+                          :scopes         ["openid"]}])
+          query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&resource=https%3A%2F%2Fapi.example.com"
+          request      (authz/parse-authorization-request query-string client-store)]
+      (is (= ["https://api.example.com"] (:resource request))))))
+
+(deftest parse-authorization-request-with-multiple-resources-test
+  (testing "multiple resource params are all collected"
+    (let [client-store (store/create-client-store
+                        [{:client-id      "test-client"
+                          :client-secret  "secret"
+                          :redirect-uris  ["https://app.example.com/callback"]
+                          :response-types ["code"]
+                          :scopes         ["openid"]}])
+          query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&resource=https%3A%2F%2Fapi.example.com&resource=https%3A%2F%2Fother.example.com"
+          request      (authz/parse-authorization-request query-string client-store)]
+      (is (= ["https://api.example.com" "https://other.example.com"] (:resource request))))))
+
+(deftest parse-authorization-request-rejects-relative-resource-test
+  (testing "relative URI resource is rejected with invalid_target"
+    (let [client-store (store/create-client-store
+                        [{:client-id      "test-client"
+                          :client-secret  "secret"
+                          :redirect-uris  ["https://app.example.com/callback"]
+                          :response-types ["code"]
+                          :scopes         ["openid"]}])
+          query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&resource=%2Frelative%2Fpath"]
+      (is (thrown-with-msg? Exception #"Invalid resource indicator"
+                            (authz/parse-authorization-request query-string client-store))))))
+
+(deftest parse-authorization-request-rejects-fragment-resource-test
+  (testing "URI with fragment resource is rejected with invalid_target"
+    (let [client-store (store/create-client-store
+                        [{:client-id      "test-client"
+                          :client-secret  "secret"
+                          :redirect-uris  ["https://app.example.com/callback"]
+                          :response-types ["code"]
+                          :scopes         ["openid"]}])
+          query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&resource=https%3A%2F%2Fapi.example.com%23frag"]
+      (is (thrown-with-msg? Exception #"Invalid resource indicator"
+                            (authz/parse-authorization-request query-string client-store))))))
+
+(deftest handle-authorization-approval-stores-resource-test
+  (testing "resource indicators round-trip through code store"
+    (let [code-store      (store/create-authorization-code-store)
+          provider-config {:issuer                         "https://test.example.com"
+                           :authorization-code-ttl-seconds 600}
+          request         {:response_type "code"
+                           :client_id     "test-client"
+                           :redirect_uri  "https://app.example.com/callback"
+                           :scope         "openid"
+                           :resource      ["https://api.example.com" "https://other.example.com"]}
+          response        (authz/handle-authorization-approval
+                           request "user-123" provider-config code-store)
+          code            (get-in response [:params :code])
+          code-data       (proto/get-authorization-code code-store code)]
+      (is (= ["https://api.example.com" "https://other.example.com"] (:resource code-data))))))

@@ -23,7 +23,8 @@
    [:max_age {:optional true} [:or :string pos-int?]]
    [:ui_locales {:optional true} :string]
    [:code_challenge {:optional true} :string]
-   [:code_challenge_method {:optional true} [:enum "S256"]]])
+   [:code_challenge_method {:optional true} [:enum "S256"]]
+   [:resource {:optional true} :string]])
 
 (def AuthorizationResponse
   "Malli schema for authorization response."
@@ -76,6 +77,23 @@
 
     :else params))
 
+(defn- extract-resource-params
+  [query-string]
+  (when query-string
+    (->> (str/split query-string #"&")
+         (filter #(str/starts-with? % "resource="))
+         (mapv #(URLDecoder/decode (subs % 9) "UTF-8"))
+         not-empty)))
+
+(defn- validate-resource-indicators
+  [resources]
+  (doseq [r resources]
+    (let [uri (java.net.URI. r)]
+      (when (or (not (.isAbsolute uri))
+                (.getFragment uri))
+        (throw (ex-info "Invalid resource indicator"
+                        {:error "invalid_target" :resource r}))))))
+
 (defn- validate-public-client-pkce
   [client params]
   (when (and (not (:client-secret client))
@@ -106,7 +124,10 @@
       (when (:scope params)
         (validate-scope client (:scope params)))
       (validate-public-client-pkce client params)
-      params)))
+      (let [resources (extract-resource-params query-string)]
+        (when resources (validate-resource-indicators resources))
+        (cond-> params
+          resources (assoc :resource resources))))))
 
 (defn handle-authorization-approval
   "Handles user approval of authorization request.
@@ -119,7 +140,7 @@
    and optional state). Currently supports response_type \"code\"; throws ex-info for
    unsupported response types."
   [{:keys [response_type client_id redirect_uri scope state nonce
-           code_challenge code_challenge_method]}
+           code_challenge code_challenge_method resource]}
    user-id
    provider-config
    code-store]
@@ -131,7 +152,7 @@
           scopes (when scope (vec (str/split scope #" ")))]
       (proto/save-authorization-code code-store code user-id client_id
                                      redirect_uri scopes nonce expiry
-                                     code_challenge code_challenge_method)
+                                     code_challenge code_challenge_method resource)
       {:redirect-uri redirect_uri
        :params       (cond-> {:code code}
                        state (assoc :state state))})

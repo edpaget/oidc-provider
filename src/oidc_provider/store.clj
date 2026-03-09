@@ -33,7 +33,7 @@
 
 (defrecord InMemoryAuthorizationCodeStore [codes]
   proto/AuthorizationCodeStore
-  (save-authorization-code [_ code user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method]
+  (save-authorization-code [_ code user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource]
     (swap! codes assoc code (cond-> {:user-id      user-id
                                      :client-id    client-id
                                      :redirect-uri redirect-uri
@@ -41,7 +41,8 @@
                                      :nonce        nonce
                                      :expiry       expiry}
                               code-challenge        (assoc :code-challenge code-challenge)
-                              code-challenge-method (assoc :code-challenge-method code-challenge-method)))
+                              code-challenge-method (assoc :code-challenge-method code-challenge-method)
+                              resource              (assoc :resource resource)))
     true)
 
   (get-authorization-code [_ code]
