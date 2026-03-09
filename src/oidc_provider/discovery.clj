@@ -21,7 +21,8 @@
    [:id-token-signing-alg-values-supported {:optional true} [:vector :string]]
    [:token-endpoint-auth-methods-supported {:optional true} [:vector :string]]
    [:claims-supported {:optional true} [:vector :string]]
-   [:code-challenge-methods-supported {:optional true} [:vector :string]]])
+   [:code-challenge-methods-supported {:optional true} [:vector :string]]
+   [:resource-indicators-supported {:optional true} :boolean]])
 
 (defn openid-configuration
   "Generates OpenID Connect Discovery metadata.
@@ -43,7 +44,8 @@
            id-token-signing-alg-values-supported
            token-endpoint-auth-methods-supported
            claims-supported
-           code-challenge-methods-supported]     :as config}]
+           code-challenge-methods-supported
+           resource-indicators-supported]        :as config}]
   {:pre [(m/validate DiscoveryConfig config)]}
   (cond-> {:issuer                                issuer
            :authorization_endpoint                authorization-endpoint
@@ -56,7 +58,10 @@
            :grant_types_supported                 (or grant-types-supported ["authorization_code" "refresh_token"])
            :token_endpoint_auth_methods_supported (or token-endpoint-auth-methods-supported
                                                       ["client_secret_basic" "client_secret_post" "none"])
-           :code_challenge_methods_supported      (or code-challenge-methods-supported ["S256"])}
+           :code_challenge_methods_supported      (or code-challenge-methods-supported ["S256"])
+           :resource_indicators_supported         (if (some? resource-indicators-supported)
+                                                    resource-indicators-supported
+                                                    true)}
     userinfo-endpoint (assoc :userinfo_endpoint userinfo-endpoint)
     claims-supported (assoc :claims_supported claims-supported)))
 
