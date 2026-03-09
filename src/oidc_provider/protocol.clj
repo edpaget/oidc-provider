@@ -54,13 +54,14 @@
 
 (defprotocol AuthorizationCodeStore
   "Protocol for storing and retrieving authorization codes."
-  (save-authorization-code [this code user-id client-id redirect-uri scope nonce expiry]
+  (save-authorization-code [this code user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method]
     "Saves an authorization code with associated metadata.
 
     Takes an authorization code string, user identifier, OAuth2 client identifier,
     the redirect URI from the authorization request, a vector of scope strings, an
-    optional nonce for replay protection, and an expiration timestamp (milliseconds
-    since epoch). Stores the code and metadata. Returns true if saved successfully.")
+    optional nonce for replay protection, an expiration timestamp (milliseconds
+    since epoch), and optional PKCE `code-challenge` and `code-challenge-method`
+    strings. Stores the code and metadata. Returns true if saved successfully.")
 
   (get-authorization-code [this code]
     "Retrieves authorization code metadata.

@@ -92,3 +92,55 @@
           url      (authz/build-redirect-url response)]
       (is (str/includes? url "existing=param"))
       (is (str/includes? url "&code=abc123")))))
+
+(deftest parse-authorization-request-with-pkce-test
+  (testing "valid request with code_challenge and code_challenge_method=S256"
+    (let [client-store (store/create-client-store
+                        [{:client-id      "test-client"
+                          :redirect-uris  ["https://app.example.com/callback"]
+                          :response-types ["code"]
+                          :scopes         ["openid"]}])
+          query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256"
+          request      (authz/parse-authorization-request query-string client-store)]
+      (is (= "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM" (:code_challenge request)))
+      (is (= "S256" (:code_challenge_method request))))))
+
+(deftest parse-authorization-request-pkce-defaults-method-test
+  (testing "code_challenge without code_challenge_method defaults to S256"
+    (let [client-store (store/create-client-store
+                        [{:client-id      "test-client"
+                          :redirect-uris  ["https://app.example.com/callback"]
+                          :response-types ["code"]
+                          :scopes         ["openid"]}])
+          query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+          request      (authz/parse-authorization-request query-string client-store)]
+      (is (= "S256" (:code_challenge_method request))))))
+
+(deftest parse-authorization-request-rejects-plain-method-test
+  (testing "code_challenge_method=plain is rejected"
+    (let [client-store (store/create-client-store
+                        [{:client-id      "test-client"
+                          :redirect-uris  ["https://app.example.com/callback"]
+                          :response-types ["code"]
+                          :scopes         ["openid"]}])
+          query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&code_challenge=abc&code_challenge_method=plain"]
+      (is (thrown-with-msg? Exception #"Invalid authorization request"
+                            (authz/parse-authorization-request query-string client-store))))))
+
+(deftest handle-authorization-approval-stores-pkce-test
+  (testing "stores code-challenge and code-challenge-method with authorization code"
+    (let [code-store      (store/create-authorization-code-store)
+          provider-config {:issuer                         "https://test.example.com"
+                           :authorization-code-ttl-seconds 600}
+          request         {:response_type         "code"
+                           :client_id             "test-client"
+                           :redirect_uri          "https://app.example.com/callback"
+                           :scope                 "openid"
+                           :code_challenge        "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+                           :code_challenge_method "S256"}
+          response        (authz/handle-authorization-approval
+                           request "user-123" provider-config code-store)
+          code            (get-in response [:params :code])
+          code-data       (proto/get-authorization-code code-store code)]
+      (is (= "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM" (:code-challenge code-data)))
+      (is (= "S256" (:code-challenge-method code-data))))))

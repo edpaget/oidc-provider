@@ -21,7 +21,9 @@
    [:nonce {:optional true} :string]
    [:prompt {:optional true} :string]
    [:max_age {:optional true} [:or :string pos-int?]]
-   [:ui_locales {:optional true} :string]])
+   [:ui_locales {:optional true} :string]
+   [:code_challenge {:optional true} :string]
+   [:code_challenge_method {:optional true} [:enum "S256"]]])
 
 (def AuthorizationResponse
   "Malli schema for authorization response."
@@ -62,20 +64,33 @@
                       {:requested requested-scopes
                        :allowed   client-scopes})))))
 
+(defn- validate-pkce-params
+  [params]
+  (cond
+    (and (:code_challenge_method params) (not (:code_challenge params)))
+    (throw (ex-info "Invalid request: code_challenge_method requires code_challenge"
+                    {:error "invalid_request"}))
+
+    (and (:code_challenge params) (not (:code_challenge_method params)))
+    (assoc params :code_challenge_method "S256")
+
+    :else params))
+
 (defn parse-authorization-request
   "Parses and validates an authorization request.
 
    Takes a URL query string from the authorization endpoint and a ClientStore
    implementation. Parses the query parameters, validates them against the
    AuthorizationRequest schema, looks up the client, and validates the redirect URI,
-   response type, and scopes. Returns the validated request map. Throws ex-info on
-   validation errors or if the client is unknown."
+   response type, scopes, and PKCE parameters. Returns the validated request map.
+   Throws ex-info on validation errors or if the client is unknown."
   [query-string client-store]
   (let [params (parse-query-string query-string)]
     (when-not (m/validate AuthorizationRequest params)
       (throw (ex-info "Invalid authorization request"
                       {:errors (m/explain AuthorizationRequest params)})))
-    (let [client-id (:client_id params)
+    (let [params    (validate-pkce-params params)
+          client-id (:client_id params)
           client    (proto/get-client client-store client-id)]
       (when-not client
         (throw (ex-info "Unknown client" {:client-id client-id})))
@@ -95,7 +110,8 @@
    response map containing the redirect URI and response parameters (including the code
    and optional state). Currently supports response_type \"code\"; throws ex-info for
    unsupported response types."
-  [{:keys [response_type client_id redirect_uri scope state nonce]}
+  [{:keys [response_type client_id redirect_uri scope state nonce
+           code_challenge code_challenge_method]}
    user-id
    provider-config
    code-store]
@@ -106,7 +122,8 @@
                     (* 1000 (or (:authorization-code-ttl-seconds provider-config) 600)))
           scopes (when scope (vec (str/split scope #" ")))]
       (proto/save-authorization-code code-store code user-id client_id
-                                     redirect_uri scopes nonce expiry)
+                                     redirect_uri scopes nonce expiry
+                                     code_challenge code_challenge_method)
       {:redirect-uri redirect_uri
        :params       (cond-> {:code code}
                        state (assoc :state state))})

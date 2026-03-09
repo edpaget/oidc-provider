@@ -88,7 +88,7 @@
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
-                                     ["openid" "profile"] "nonce123" expiry)
+                                     ["openid" "profile"] "nonce123" expiry nil nil)
       (let [response   (token-ep/handle-authorization-code-grant
                         {:code         code
                          :redirect_uri "https://app.example.com/callback"}
@@ -125,7 +125,7 @@
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
-                                     ["profile"] nil expiry)
+                                     ["profile"] nil expiry nil nil)
       (let [response   (token-ep/handle-authorization-code-grant
                         {:code         code
                          :redirect_uri "https://app.example.com/callback"}
@@ -159,7 +159,7 @@
           expiry          (- (System/currentTimeMillis) 1000)]
       (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
-                                     ["openid"] nil expiry)
+                                     ["openid"] nil expiry nil nil)
       (is (thrown-with-msg? Exception #"expired"
                             (token-ep/handle-authorization-code-grant
                              {:code         code
@@ -189,7 +189,7 @@
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
-                                     ["openid"] nil expiry)
+                                     ["openid"] nil expiry nil nil)
       (is (thrown-with-msg? Exception #"Missing redirect_uri"
                             (token-ep/handle-authorization-code-grant
                              {:code code}
@@ -218,7 +218,7 @@
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
-                                     ["openid"] nil expiry)
+                                     ["openid"] nil expiry nil nil)
       (is (thrown-with-msg? Exception #"Redirect URI mismatch"
                             (token-ep/handle-authorization-code-grant
                              {:code         code
@@ -274,7 +274,7 @@
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "cc-only-client"
                                      "https://app.example.com/callback"
-                                     ["openid"] nil expiry)
+                                     ["openid"] nil expiry nil nil)
       (is (thrown-with-msg? Exception #"Client not authorized for authorization_code"
                             (token-ep/handle-authorization-code-grant
                              {:code         code
