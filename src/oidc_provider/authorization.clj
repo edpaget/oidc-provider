@@ -76,6 +76,13 @@
 
     :else params))
 
+(defn- validate-public-client-pkce
+  [client params]
+  (when (and (not (:client-secret client))
+             (not (:code_challenge params)))
+    (throw (ex-info "Public clients must use PKCE"
+                    {:error "invalid_request"}))))
+
 (defn parse-authorization-request
   "Parses and validates an authorization request.
 
@@ -98,6 +105,7 @@
       (validate-response-type client (:response_type params))
       (when (:scope params)
         (validate-scope client (:scope params)))
+      (validate-public-client-pkce client params)
       params)))
 
 (defn handle-authorization-approval

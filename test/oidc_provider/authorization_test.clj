@@ -10,6 +10,7 @@
   (testing "parses valid authorization request"
     (let [client-store (store/create-client-store
                         [{:client-id      "test-client"
+                          :client-secret  "secret"
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
                           :scopes         ["openid" "profile" "email"]}])
@@ -25,6 +26,7 @@
   (testing "throws on invalid redirect_uri"
     (let [client-store (store/create-client-store
                         [{:client-id      "test-client"
+                          :client-secret  "secret"
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
                           :scopes         ["openid"]}])
@@ -144,3 +146,38 @@
           code-data       (proto/get-authorization-code code-store code)]
       (is (= "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM" (:code-challenge code-data)))
       (is (= "S256" (:code-challenge-method code-data))))))
+
+(deftest public-client-requires-pkce-test
+  (testing "public client without code_challenge is rejected"
+    (let [client-store (store/create-client-store
+                        [{:client-id      "public-client"
+                          :redirect-uris  ["https://app.example.com/callback"]
+                          :response-types ["code"]
+                          :scopes         ["openid"]}])
+          query-string "response_type=code&client_id=public-client&redirect_uri=https://app.example.com/callback&scope=openid"]
+      (is (thrown-with-msg? Exception #"Public clients must use PKCE"
+                            (authz/parse-authorization-request query-string client-store))))))
+
+(deftest public-client-with-pkce-succeeds-test
+  (testing "public client with code_challenge succeeds"
+    (let [client-store (store/create-client-store
+                        [{:client-id      "public-client"
+                          :redirect-uris  ["https://app.example.com/callback"]
+                          :response-types ["code"]
+                          :scopes         ["openid"]}])
+          query-string "response_type=code&client_id=public-client&redirect_uri=https://app.example.com/callback&scope=openid&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256"
+          request      (authz/parse-authorization-request query-string client-store)]
+      (is (= "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM" (:code_challenge request)))
+      (is (= "S256" (:code_challenge_method request))))))
+
+(deftest confidential-client-without-pkce-succeeds-test
+  (testing "confidential client without code_challenge succeeds"
+    (let [client-store (store/create-client-store
+                        [{:client-id      "conf-client"
+                          :client-secret  "secret123"
+                          :redirect-uris  ["https://app.example.com/callback"]
+                          :response-types ["code"]
+                          :scopes         ["openid"]}])
+          query-string "response_type=code&client_id=conf-client&redirect_uri=https://app.example.com/callback&scope=openid"
+          request      (authz/parse-authorization-request query-string client-store)]
+      (is (= "conf-client" (:client_id request))))))
