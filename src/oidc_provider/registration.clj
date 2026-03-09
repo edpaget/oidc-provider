@@ -11,7 +11,8 @@
    [clojure.string :as str]
    [malli.core :as m]
    [oidc-provider.protocol :as proto]
-   [oidc-provider.token :as token])
+   [oidc-provider.token :as token]
+   [oidc-provider.util :as util])
   (:import
    (java.net URI URISyntaxException)))
 
@@ -143,6 +144,20 @@
       request->client-config
       (->> (proto/register-client client-store))
       client-config->response))
+
+(defn handle-client-read
+  "Handles RFC 7592 client read requests.
+
+  Takes the `store` implementing [[oidc-provider.protocol/ClientStore]],
+  `client-id`, and the bearer `access-token` presented by the caller.
+  Returns the client configuration if the token is valid, or a 401 error
+  response otherwise."
+  [store client-id access-token]
+  (let [client (proto/get-client store client-id)]
+    (if (and client
+             (util/constant-time-eq? access-token (:registration-access-token client)))
+      {:status 200 :body (client-config->response client)}
+      {:status 401 :body {"error" "invalid_token"}})))
 
 (defn registration-error-response
   "Creates an RFC 7591 error response.

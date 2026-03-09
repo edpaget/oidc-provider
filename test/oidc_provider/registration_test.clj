@@ -131,3 +131,35 @@
                             "grant_types"    ["authorization_code"]
                             "response_types" ["token"]}
                            (store/create-client-store))))))
+
+(deftest client-read-success-test
+  (testing "reads back client configuration with valid token"
+    (let [client-store (store/create-client-store)
+          reg-response (reg/handle-registration-request
+                        {"redirect_uris" ["https://app.example.com/callback"]
+                         "client_name"   "My App"
+                         "scope"         "openid profile"}
+                        client-store)
+          client-id    (get reg-response "client_id")
+          token        (get reg-response "registration_access_token")
+          read-result  (reg/handle-client-read client-store client-id token)]
+      (is (= 200 (:status read-result)))
+      (is (= reg-response (:body read-result))))))
+
+(deftest client-read-invalid-token-test
+  (testing "returns 401 when token does not match"
+    (let [client-store (store/create-client-store)
+          reg-response (reg/handle-registration-request
+                        {"redirect_uris" ["https://app.example.com/callback"]}
+                        client-store)
+          client-id    (get reg-response "client_id")
+          read-result  (reg/handle-client-read client-store client-id "wrong-token")]
+      (is (= 401 (:status read-result)))
+      (is (= {"error" "invalid_token"} (:body read-result))))))
+
+(deftest client-read-unknown-client-test
+  (testing "returns 401 for nonexistent client_id"
+    (let [client-store (store/create-client-store)
+          read-result  (reg/handle-client-read client-store "nonexistent-id" "any-token")]
+      (is (= 401 (:status read-result)))
+      (is (= {"error" "invalid_token"} (:body read-result))))))
