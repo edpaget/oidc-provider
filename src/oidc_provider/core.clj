@@ -26,7 +26,8 @@
    [:client-store {:optional true} [:fn #(satisfies? proto/ClientStore %)]]
    [:code-store {:optional true} [:fn #(satisfies? proto/AuthorizationCodeStore %)]]
    [:token-store {:optional true} [:fn #(satisfies? proto/TokenStore %)]]
-   [:claims-provider {:optional true} [:fn #(satisfies? proto/ClaimsProvider %)]]])
+   [:claims-provider {:optional true} [:fn #(satisfies? proto/ClaimsProvider %)]]
+   [:registration-endpoint {:optional true} :string]])
 
 (defrecord Provider [config
                      provider-config
@@ -91,7 +92,8 @@
                  :subject-types-supported
                  :id-token-signing-alg-values-supported
                  :token-endpoint-auth-methods-supported
-                 :claims-supported])))
+                 :claims-supported
+                 :registration-endpoint])))
 
 (defn jwks
   "Returns JWKS for the provider.

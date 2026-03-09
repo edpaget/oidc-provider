@@ -78,6 +78,27 @@
       (is (= "https://test.example.com/jwks" (:jwks_uri metadata)))
       (is (= ["code"] (:response_types_supported metadata))))))
 
+(deftest discovery-includes-registration-endpoint-test
+  (testing "includes registration_endpoint when configured"
+    (let [provider (core/create-provider
+                    {:issuer                 "https://test.example.com"
+                     :authorization-endpoint "https://test.example.com/authorize"
+                     :token-endpoint         "https://test.example.com/token"
+                     :jwks-uri               "https://test.example.com/jwks"
+                     :registration-endpoint  "https://test.example.com/register"})
+          metadata (core/discovery-metadata provider)]
+      (is (= "https://test.example.com/register" (:registration_endpoint metadata))))))
+
+(deftest discovery-omits-registration-endpoint-test
+  (testing "omits registration_endpoint when not configured"
+    (let [provider (core/create-provider
+                    {:issuer                 "https://test.example.com"
+                     :authorization-endpoint "https://test.example.com/authorize"
+                     :token-endpoint         "https://test.example.com/token"
+                     :jwks-uri               "https://test.example.com/jwks"})
+          metadata (core/discovery-metadata provider)]
+      (is (nil? (:registration_endpoint metadata))))))
+
 (deftest jwks-test
   (testing "returns JWKS with single RSA key"
     (let [provider (core/create-provider

@@ -22,7 +22,8 @@
    [:token-endpoint-auth-methods-supported {:optional true} [:vector :string]]
    [:claims-supported {:optional true} [:vector :string]]
    [:code-challenge-methods-supported {:optional true} [:vector :string]]
-   [:resource-indicators-supported {:optional true} :boolean]])
+   [:resource-indicators-supported {:optional true} :boolean]
+   [:registration-endpoint {:optional true} :string]])
 
 (defn openid-configuration
   "Generates OpenID Connect Discovery metadata.
@@ -37,6 +38,7 @@
            token-endpoint
            jwks-uri
            userinfo-endpoint
+           registration-endpoint
            scopes-supported
            response-types-supported
            grant-types-supported
@@ -63,7 +65,8 @@
                                                     resource-indicators-supported
                                                     true)}
     userinfo-endpoint (assoc :userinfo_endpoint userinfo-endpoint)
-    claims-supported (assoc :claims_supported claims-supported)))
+    claims-supported (assoc :claims_supported claims-supported)
+    registration-endpoint (assoc :registration_endpoint registration-endpoint)))
 
 (defn jwks-endpoint
   "Generates JWKS endpoint response.
