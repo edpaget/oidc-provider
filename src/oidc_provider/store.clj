@@ -15,7 +15,15 @@
                         (str (java.util.UUID/randomUUID)))
           client    (assoc client-config :client-id client-id)]
       (swap! clients assoc client-id client)
-      client)))
+      client))
+
+  (update-client [_ client-id updated-config]
+    (let [existing (get @clients client-id)]
+      (when existing
+        (let [merged (-> (merge existing updated-config)
+                         (assoc :client-id client-id))]
+          (swap! clients assoc client-id merged)
+          merged)))))
 
 (defn create-client-store
   "Creates an in-memory client store.

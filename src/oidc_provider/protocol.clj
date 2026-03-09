@@ -34,6 +34,9 @@
    [:token-endpoint-auth-method {:optional true}
     [:enum "client_secret_basic" "client_secret_post" "none"]]
    [:client-name {:optional true} :string]
+   [:client-uri {:optional true} :string]
+   [:logo-uri {:optional true} :string]
+   [:contacts {:optional true} [:vector :string]]
    [:registration-access-token {:optional true} :string]])
 
 (defprotocol ClientStore
@@ -50,7 +53,14 @@
 
     Takes a client configuration map matching the ClientConfig schema. Stores the client
     and generates a client-id if one isn't provided. Returns the registered client
-    configuration including the client-id."))
+    configuration including the client-id.")
+
+  (update-client [this client-id updated-config]
+    "Updates an existing client's configuration.
+
+    Merges `updated-config` into the existing client config for `client-id`, preserving
+    fields not present in `updated-config`. Returns the updated client config, or nil
+    if the client does not exist."))
 
 (defprotocol AuthorizationCodeStore
   "Protocol for storing and retrieving authorization codes."

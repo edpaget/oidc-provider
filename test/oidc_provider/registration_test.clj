@@ -132,6 +132,35 @@
                             "response_types" ["token"]}
                            (store/create-client-store))))))
 
+(deftest register-with-extended-metadata-test
+  (testing "client_uri, logo_uri, and contacts are preserved in response"
+    (let [client-store (store/create-client-store)
+          response     (reg/handle-registration-request
+                        {"redirect_uris" ["https://app.example.com/callback"]
+                         "client_uri"    "https://example.com"
+                         "logo_uri"      "https://example.com/logo.png"
+                         "contacts"      ["admin@example.com"]}
+                        client-store)]
+      (is (= "https://example.com" (get response "client_uri")))
+      (is (= "https://example.com/logo.png" (get response "logo_uri")))
+      (is (= ["admin@example.com"] (get response "contacts"))))))
+
+(deftest register-validates-client-uri-test
+  (testing "throws invalid_client_metadata for non-HTTPS client_uri"
+    (is (thrown-with-msg? Exception #"invalid_client_metadata"
+                          (reg/handle-registration-request
+                           {"redirect_uris" ["https://app.example.com/callback"]
+                            "client_uri"    "http://example.com"}
+                           (store/create-client-store))))))
+
+(deftest register-validates-logo-uri-test
+  (testing "throws invalid_client_metadata for non-HTTPS logo_uri"
+    (is (thrown-with-msg? Exception #"invalid_client_metadata"
+                          (reg/handle-registration-request
+                           {"redirect_uris" ["https://app.example.com/callback"]
+                            "logo_uri"      "not-a-uri"}
+                           (store/create-client-store))))))
+
 (deftest client-read-success-test
   (testing "reads back client configuration with valid token"
     (let [client-store (store/create-client-store)

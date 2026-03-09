@@ -26,7 +26,10 @@
    ["response_types" {:optional true} [:vector [:enum "code" "token" "id_token"]]]
    ["client_name" {:optional true} :string]
    ["token_endpoint_auth_method" {:optional true} [:enum "client_secret_basic" "client_secret_post" "none"]]
-   ["scope" {:optional true} :string]])
+   ["scope" {:optional true} :string]
+   ["client_uri" {:optional true} :string]
+   ["logo_uri" {:optional true} :string]
+   ["contacts" {:optional true} [:vector :string]]])
 
 (def RegistrationResponse
   "Malli schema for an RFC 7591 client registration response (snake_case wire format)."
@@ -39,7 +42,10 @@
    ["redirect_uris" [:vector :string]]
    ["grant_types" [:vector :string]]
    ["response_types" [:vector :string]]
-   ["token_endpoint_auth_method" :string]])
+   ["token_endpoint_auth_method" :string]
+   ["client_uri" {:optional true} :string]
+   ["logo_uri" {:optional true} :string]
+   ["contacts" {:optional true} [:vector :string]]])
 
 (defn- apply-defaults
   "Merges RFC 7591 defaults into a registration request."
@@ -62,6 +68,28 @@
                (and (= scheme "http")
                     (or (= host "localhost") (= host "127.0.0.1"))))))
     (catch URISyntaxException _ false)))
+
+(defn- valid-https-uri?
+  "Returns true when `uri-str` is an absolute HTTPS URI."
+  [uri-str]
+  (try
+    (let [uri (URI. ^String uri-str)]
+      (and (.isAbsolute uri)
+           (some? (.getHost uri))
+           (= "https" (some-> (.getScheme uri) str/lower-case))))
+    (catch URISyntaxException _ false)))
+
+(defn- validate-metadata-uris
+  "Validates that `client_uri` and `logo_uri`, when present, are absolute HTTPS URIs."
+  [request]
+  (when-let [client-uri (get request "client_uri")]
+    (when-not (valid-https-uri? client-uri)
+      (throw (ex-info "invalid_client_metadata"
+                      {:error_description (str "Invalid client_uri: " client-uri)}))))
+  (when-let [logo-uri (get request "logo_uri")]
+    (when-not (valid-https-uri? logo-uri)
+      (throw (ex-info "invalid_client_metadata"
+                      {:error_description (str "Invalid logo_uri: " logo-uri)})))))
 
 (defn- validate-redirect-uris
   "Validates that all `redirect_uris` are absolute HTTPS URIs (or HTTP on localhost)."
@@ -93,6 +121,7 @@
   "Runs semantic validations on a defaulted registration request."
   [request]
   (validate-redirect-uris request)
+  (validate-metadata-uris request)
   (validate-grant-response-consistency request)
   request)
 
@@ -110,7 +139,10 @@
              :token-endpoint-auth-method auth-method
              :registration-access-token  (token/generate-access-token)}
       (not= auth-method "none") (assoc :client-secret (str (java.util.UUID/randomUUID)))
-      (get request "client_name") (assoc :client-name (get request "client_name")))))
+      (get request "client_name") (assoc :client-name (get request "client_name"))
+      (get request "client_uri") (assoc :client-uri (get request "client_uri"))
+      (get request "logo_uri") (assoc :logo-uri (get request "logo_uri"))
+      (get request "contacts") (assoc :contacts (get request "contacts")))))
 
 (defn- client-config->response
   "Converts a stored kebab-case client config to a snake_case registration response."
@@ -123,7 +155,10 @@
            "token_endpoint_auth_method" (:token-endpoint-auth-method client)}
     (:client-secret client) (assoc "client_secret" (:client-secret client))
     (:client-name client)   (assoc "client_name" (:client-name client))
-    (seq (:scopes client))  (assoc "scope" (str/join " " (:scopes client)))))
+    (seq (:scopes client))  (assoc "scope" (str/join " " (:scopes client)))
+    (:client-uri client)    (assoc "client_uri" (:client-uri client))
+    (:logo-uri client)      (assoc "logo_uri" (:logo-uri client))
+    (:contacts client)      (assoc "contacts" (:contacts client))))
 
 (defn handle-registration-request
   "Processes a dynamic client registration request per RFC 7591.
