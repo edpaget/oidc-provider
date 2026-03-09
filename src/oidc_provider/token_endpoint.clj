@@ -7,6 +7,7 @@
    [oidc-provider.protocol :as proto]
    [oidc-provider.token :as token])
   (:import
+   [com.nimbusds.oauth2.sdk.pkce CodeChallenge CodeChallengeMethod CodeVerifier]
    [java.security MessageDigest]
    [java.util Base64]))
 
@@ -21,7 +22,8 @@
    [:refresh_token {:optional true} :string]
    [:client_id {:optional true} :string]
    [:client_secret {:optional true} :string]
-   [:scope {:optional true} :string]])
+   [:scope {:optional true} :string]
+   [:code_verifier {:optional true} :string]])
 
 (def TokenResponse
   "Malli schema for token response."
@@ -62,6 +64,27 @@
         (throw (ex-info "Invalid client credentials" {:client-id client-id})))
       client)))
 
+(defn- verify-pkce
+  "Verifies the PKCE `code_verifier` against the stored `code_challenge` per RFC 7636 §4.6.
+
+  Throws `ex-info` with `{:error \"invalid_grant\"}` when the verifier is missing,
+  unexpected, or does not match the stored challenge."
+  [code-data code-verifier]
+  (let [stored-challenge (:code-challenge code-data)]
+    (cond
+      (and stored-challenge (not code-verifier))
+      (throw (ex-info "Missing code_verifier for PKCE" {:error "invalid_grant"}))
+
+      (and code-verifier (not stored-challenge))
+      (throw (ex-info "Unexpected code_verifier" {:error "invalid_grant"}))
+
+      (and stored-challenge code-verifier)
+      (let [verifier (CodeVerifier. ^String code-verifier)
+            method   (CodeChallengeMethod/parse (or (:code-challenge-method code-data) "S256"))
+            computed (.getValue (CodeChallenge/compute method verifier))]
+        (when (not= computed stored-challenge)
+          (throw (ex-info "PKCE verification failed" {:error "invalid_grant"})))))))
+
 (defn handle-authorization-code-grant
   "Handles authorization_code grant type.
 
@@ -75,7 +98,7 @@
 
   Returns:
     Token response map"
-  [{:keys [code redirect_uri]} client provider-config code-store token-store claims-provider]
+  [{:keys [code redirect_uri code_verifier]} client provider-config code-store token-store claims-provider]
   (when-not (some #{"authorization_code"} (:grant-types client))
     (throw (ex-info "Client not authorized for authorization_code grant"
                     {:client-id (:client-id client)})))
@@ -95,6 +118,7 @@
     (when (and redirect_uri (not= (:redirect-uri code-data) redirect_uri))
       (throw (ex-info "Redirect URI mismatch" {:expected (:redirect-uri code-data)
                                                :actual   redirect_uri})))
+    (verify-pkce code-data code_verifier)
     (let [user-id       (:user-id code-data)
           scope         (:scope code-data)
           openid?       (some #{"openid"} scope)
