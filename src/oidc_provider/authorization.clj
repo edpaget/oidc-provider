@@ -85,15 +85,6 @@
          (mapv #(URLDecoder/decode (subs % 9) "UTF-8"))
          not-empty)))
 
-(defn- validate-resource-indicators
-  [resources]
-  (doseq [r resources]
-    (let [uri (java.net.URI. r)]
-      (when (or (not (.isAbsolute uri))
-                (.getFragment uri))
-        (throw (ex-info "Invalid resource indicator"
-                        {:error "invalid_target" :resource r}))))))
-
 (defn- validate-public-client-pkce
   [client params]
   (when (and (not (:client-secret client))
@@ -125,7 +116,7 @@
         (validate-scope client (:scope params)))
       (validate-public-client-pkce client params)
       (let [resources (extract-resource-params query-string)]
-        (when resources (validate-resource-indicators resources))
+        (when resources (proto/validate-resource-indicators resources))
         (cond-> params
           resources (assoc :resource resources))))))
 

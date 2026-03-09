@@ -81,12 +81,13 @@
 
 (defprotocol TokenStore
   "Protocol for managing access and refresh tokens."
-  (save-access-token [this token user-id client-id scope expiry]
+  (save-access-token [this token user-id client-id scope expiry resource]
     "Saves an access token.
 
     Takes an access token string, user identifier, OAuth2 client identifier, a vector
-    of scope strings, and an expiration timestamp (milliseconds since epoch). Stores
-    the token and its metadata. Returns true if saved successfully.")
+    of scope strings, an expiration timestamp (milliseconds since epoch), and an optional
+    `resource` vector of target resource indicator URIs (per RFC 8707). Stores the token
+    and its metadata. Returns true if saved successfully.")
 
   (get-access-token [this token]
     "Retrieves access token metadata.
@@ -95,12 +96,13 @@
     with keys `[:user-id :client-id :scope :expiry]` if found, or nil if the token
     doesn't exist or has been revoked.")
 
-  (save-refresh-token [this token user-id client-id scope]
+  (save-refresh-token [this token user-id client-id scope resource]
     "Saves a refresh token.
 
-    Takes a refresh token string, user identifier, OAuth2 client identifier, and a
-    vector of scope strings. Stores the token and its metadata. Refresh tokens don't
-    expire automatically. Returns true if saved successfully.")
+    Takes a refresh token string, user identifier, OAuth2 client identifier, a vector
+    of scope strings, and an optional `resource` vector of target resource indicator URIs
+    (per RFC 8707). Stores the token and its metadata. Refresh tokens don't expire
+    automatically. Returns true if saved successfully.")
 
   (get-refresh-token [this token]
     "Retrieves refresh token metadata.
@@ -114,3 +116,16 @@
 
     Takes a token string (either access or refresh token) and revokes it, preventing
     it from being used in future requests. Returns true if revoked successfully."))
+
+(defn validate-resource-indicators
+  "Validates that each resource indicator is an absolute URI without a fragment component per RFC 8707.
+
+  Takes a vector of resource URI strings. Throws `ex-info` with `{:error \"invalid_target\"}`
+  if any URI is not absolute or contains a fragment."
+  [resources]
+  (doseq [r resources]
+    (let [uri (java.net.URI. r)]
+      (when (or (not (.isAbsolute uri))
+                (.getFragment uri))
+        (throw (ex-info "Invalid resource indicator"
+                        {:error "invalid_target" :resource r}))))))

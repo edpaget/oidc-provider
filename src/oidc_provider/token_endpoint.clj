@@ -23,7 +23,8 @@
    [:client_id {:optional true} :string]
    [:client_secret {:optional true} :string]
    [:scope {:optional true} :string]
-   [:code_verifier {:optional true} :string]])
+   [:code_verifier {:optional true} :string]
+   [:resource {:optional true} :string]])
 
 (def TokenResponse
   "Malli schema for token response."
@@ -33,7 +34,16 @@
    [:expires_in pos-int?]
    [:id_token {:optional true} :string]
    [:refresh_token {:optional true} :string]
-   [:scope {:optional true} :string]])
+   [:scope {:optional true} :string]
+   [:resource {:optional true} [:vector :string]]])
+
+(defn- extract-resource-params
+  [raw-body]
+  (when raw-body
+    (->> (str/split raw-body #"&")
+         (filter #(str/starts-with? % "resource="))
+         (mapv #(java.net.URLDecoder/decode (subs % 9) "UTF-8"))
+         not-empty)))
 
 (defn- parse-basic-auth
   [authorization-header]
@@ -121,6 +131,7 @@
     (verify-pkce code-data code_verifier)
     (let [user-id       (:user-id code-data)
           scope         (:scope code-data)
+          resource      (:resource code-data)
           openid?       (some #{"openid"} scope)
           access-token  (token/generate-access-token)
           refresh-token (token/generate-refresh-token)
@@ -131,14 +142,15 @@
                             (token/generate-id-token
                              provider-config user-id (:client-id client)
                              user-claims {:nonce (:nonce code-data)})))]
-      (proto/save-access-token token-store access-token user-id (:client-id client) scope expiry)
-      (proto/save-refresh-token token-store refresh-token user-id (:client-id client) scope)
+      (proto/save-access-token token-store access-token user-id (:client-id client) scope expiry resource)
+      (proto/save-refresh-token token-store refresh-token user-id (:client-id client) scope resource)
       (cond-> {:access_token  access-token
                :token_type    "Bearer"
                :expires_in    ttl
                :refresh_token refresh-token
                :scope         (str/join " " scope)}
-        id-token (assoc :id_token id-token)))))
+        id-token (assoc :id_token id-token)
+        resource (assoc :resource resource)))))
 
 (defn handle-refresh-token-grant
   "Handles refresh_token grant type.
@@ -151,7 +163,7 @@
 
   Returns:
     Token response map"
-  [{:keys [refresh_token scope]} client provider-config token-store]
+  [{:keys [refresh_token scope resource]} client provider-config token-store]
   (when-not (some #{"refresh_token"} (:grant-types client))
     (throw (ex-info "Client not authorized for refresh_token grant"
                     {:client-id (:client-id client)})))
@@ -163,23 +175,32 @@
     (when (not= (:client-id token-data) (:client-id client))
       (throw (ex-info "Client mismatch" {:expected (:client-id token-data)
                                          :actual   (:client-id client)})))
-    (let [requested-scope (when scope (vec (str/split scope #" ")))
-          token-scope     (:scope token-data)
-          final-scope     (or requested-scope token-scope)]
+    (let [requested-scope   (when scope (vec (str/split scope #" ")))
+          token-scope       (:scope token-data)
+          final-scope       (or requested-scope token-scope)
+          original-resource (:resource token-data)
+          final-resource    (or resource original-resource)]
       (when (and requested-scope
                  (not (every? (set token-scope) requested-scope)))
         (throw (ex-info "Requested scope exceeds original scope"
                         {:original  token-scope
                          :requested requested-scope})))
+      (when (and resource original-resource
+                 (not (every? (set original-resource) resource)))
+        (throw (ex-info "Requested resource exceeds original grant"
+                        {:error     "invalid_target"
+                         :original  original-resource
+                         :requested resource})))
       (let [access-token (token/generate-access-token)
             ttl          (or (:access-token-ttl-seconds provider-config) 3600)
             expiry       (+ (System/currentTimeMillis) (* 1000 ttl))]
         (proto/save-access-token token-store access-token (:user-id token-data)
-                                 (:client-id client) final-scope expiry)
-        {:access_token access-token
-         :token_type   "Bearer"
-         :expires_in   ttl
-         :scope        (str/join " " final-scope)}))))
+                                 (:client-id client) final-scope expiry final-resource)
+        (cond-> {:access_token access-token
+                 :token_type   "Bearer"
+                 :expires_in   ttl
+                 :scope        (str/join " " final-scope)}
+          final-resource (assoc :resource final-resource))))))
 
 (defn handle-client-credentials-grant
   "Handles client_credentials grant type.
@@ -192,7 +213,7 @@
 
   Returns:
     Token response map"
-  [{:keys [scope]} client provider-config token-store]
+  [{:keys [scope resource]} client provider-config token-store]
   (when-not (some #{"client_credentials"} (:grant-types client))
     (throw (ex-info "Client not authorized for client_credentials grant"
                     {:client-id (:client-id client)})))
@@ -209,47 +230,42 @@
           ttl          (or (:access-token-ttl-seconds provider-config) 3600)
           expiry       (+ (System/currentTimeMillis) (* 1000 ttl))]
       (proto/save-access-token token-store access-token (:client-id client)
-                               (:client-id client) final-scope expiry)
-      {:access_token access-token
-       :token_type   "Bearer"
-       :expires_in   ttl
-       :scope        (str/join " " final-scope)})))
+                               (:client-id client) final-scope expiry resource)
+      (cond-> {:access_token access-token
+               :token_type   "Bearer"
+               :expires_in   ttl
+               :scope        (str/join " " final-scope)}
+        resource (assoc :resource resource)))))
 
 (defn handle-token-request
   "Handles token endpoint requests.
 
-  Args:
-    params: Token request parameters (from form body)
-    authorization-header: Authorization header value (for client authentication)
-    provider-config: Provider configuration map
-    client-store: ClientStore implementation
-    code-store: AuthorizationCodeStore implementation
-    token-store: TokenStore implementation
-    claims-provider: ClaimsProvider implementation
-
-  Returns:
-    Token response map
-
-  Throws:
-    ex-info on validation or processing errors"
-  [params authorization-header provider-config client-store code-store token-store claims-provider]
+  Takes the parsed `params` map, the `raw-body` string from the POST body (used to
+  extract multi-value `resource` parameters per RFC 8707), the `authorization-header`
+  for client authentication, and the usual provider stores. Validates the request,
+  authenticates the client, and dispatches to the appropriate grant handler. Returns
+  a token response map. Throws `ex-info` on validation or processing errors."
+  [params raw-body authorization-header provider-config client-store code-store token-store claims-provider]
   (when-not (m/validate TokenRequest params)
     (throw (ex-info "Invalid token request"
                     {:errors (m/explain TokenRequest params)})))
-  (let [client   (authenticate-client params authorization-header client-store)
-        response (case (:grant_type params)
-                   "authorization_code"
-                   (handle-authorization-code-grant params client provider-config
-                                                    code-store token-store claims-provider)
+  (let [resources (extract-resource-params raw-body)
+        _         (when resources (proto/validate-resource-indicators resources))
+        params    (cond-> params resources (assoc :resource resources))
+        client    (authenticate-client params authorization-header client-store)
+        response  (case (:grant_type params)
+                    "authorization_code"
+                    (handle-authorization-code-grant params client provider-config
+                                                     code-store token-store claims-provider)
 
-                   "refresh_token"
-                   (handle-refresh-token-grant params client provider-config token-store)
+                    "refresh_token"
+                    (handle-refresh-token-grant params client provider-config token-store)
 
-                   "client_credentials"
-                   (handle-client-credentials-grant params client provider-config token-store)
+                    "client_credentials"
+                    (handle-client-credentials-grant params client provider-config token-store)
 
-                   (throw (ex-info "Unsupported grant_type"
-                                   {:grant-type (:grant_type params)})))]
+                    (throw (ex-info "Unsupported grant_type"
+                                    {:grant-type (:grant_type params)})))]
     (when-not (m/validate TokenResponse response)
       (throw (ex-info "Invalid token response generated"
                       {:errors (m/explain TokenResponse response)})))

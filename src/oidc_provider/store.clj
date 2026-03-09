@@ -62,20 +62,22 @@
 
 (defrecord InMemoryTokenStore [access-tokens refresh-tokens]
   proto/TokenStore
-  (save-access-token [_ token user-id client-id scope expiry]
-    (swap! access-tokens assoc token {:user-id   user-id
-                                      :client-id client-id
-                                      :scope     scope
-                                      :expiry    expiry})
+  (save-access-token [_ token user-id client-id scope expiry resource]
+    (swap! access-tokens assoc token (cond-> {:user-id   user-id
+                                              :client-id client-id
+                                              :scope     scope
+                                              :expiry    expiry}
+                                       resource (assoc :resource resource)))
     true)
 
   (get-access-token [_ token]
     (get @access-tokens token))
 
-  (save-refresh-token [_ token user-id client-id scope]
-    (swap! refresh-tokens assoc token {:user-id   user-id
-                                       :client-id client-id
-                                       :scope     scope})
+  (save-refresh-token [_ token user-id client-id scope resource]
+    (swap! refresh-tokens assoc token (cond-> {:user-id   user-id
+                                               :client-id client-id
+                                               :scope     scope}
+                                        resource (assoc :resource resource)))
     true)
 
   (get-refresh-token [_ token]

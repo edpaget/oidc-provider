@@ -36,7 +36,7 @@
                               :client_id     "test-client"
                               :client_secret "wrong-secret"
                               :code          "some-code"}
-                             nil
+                             nil nil
                              provider-config
                              client-store
                              code-store
@@ -63,7 +63,7 @@
                              {:grant_type "authorization_code"
                               :client_id  "test-client"
                               :code       "some-code"}
-                             nil
+                             nil nil
                              provider-config
                              client-store
                              code-store
@@ -245,7 +245,7 @@
                            :signing-key              (token/generate-rsa-key)
                            :access-token-ttl-seconds 3600}
           refresh-token   (token/generate-refresh-token)]
-      (proto/save-refresh-token token-store refresh-token "user-123" "test-client" ["openid" "profile"])
+      (proto/save-refresh-token token-store refresh-token "user-123" "test-client" ["openid" "profile"] nil)
       (let [response   (token-ep/handle-refresh-token-grant
                         {:refresh_token refresh-token}
                         (proto/get-client client-store "test-client")
@@ -301,7 +301,7 @@
                            :signing-key              (token/generate-rsa-key)
                            :access-token-ttl-seconds 3600}
           refresh-token   (token/generate-refresh-token)]
-      (proto/save-refresh-token token-store refresh-token "user-123" "authcode-only-client" ["openid"])
+      (proto/save-refresh-token token-store refresh-token "user-123" "authcode-only-client" ["openid"] nil)
       (is (thrown-with-msg? Exception #"Client not authorized for refresh_token"
                             (token-ep/handle-refresh-token-grant
                              {:refresh_token refresh-token}
@@ -467,3 +467,204 @@
                              code-store
                              token-store
                              claims-provider))))))
+
+(deftest authorization-code-grant-passes-resource-to-tokens-test
+  (testing "resource from auth code round-trips to tokens and response"
+    (let [client-store    (store/create-client-store
+                           [{:client-id      "test-client"
+                             :client-secret  "secret123"
+                             :redirect-uris  ["https://app.example.com/callback"]
+                             :grant-types    ["authorization_code"]
+                             :response-types ["code"]
+                             :scopes         ["openid" "profile"]}])
+          code-store      (store/create-authorization-code-store)
+          token-store     (store/create-token-store)
+          claims-provider (->TestClaimsProvider)
+          provider-config {:issuer                   "https://test.example.com"
+                           :signing-key              (token/generate-rsa-key)
+                           :access-token-ttl-seconds 3600
+                           :id-token-ttl-seconds     3600}
+          code            (token/generate-authorization-code)
+          expiry          (+ (System/currentTimeMillis) (* 1000 600))
+          resources       ["https://api.example.com" "https://data.example.com"]]
+      (proto/save-authorization-code code-store code "user-123" "test-client"
+                                     "https://app.example.com/callback"
+                                     ["openid" "profile"] "nonce123" expiry nil nil resources)
+      (let [response     (token-ep/handle-authorization-code-grant
+                          {:code         code
+                           :redirect_uri "https://app.example.com/callback"}
+                          (proto/get-client client-store "test-client")
+                          provider-config
+                          code-store
+                          token-store
+                          claims-provider)
+            access-data  (proto/get-access-token token-store (:access_token response))
+            refresh-data (proto/get-refresh-token token-store (:refresh_token response))]
+        (is (= resources (:resource response)))
+        (is (= resources (:resource access-data)))
+        (is (= resources (:resource refresh-data)))))))
+
+(deftest authorization-code-grant-no-resource-test
+  (testing "no resource in auth code means no resource in tokens or response"
+    (let [client-store    (store/create-client-store
+                           [{:client-id      "test-client"
+                             :client-secret  "secret123"
+                             :redirect-uris  ["https://app.example.com/callback"]
+                             :grant-types    ["authorization_code"]
+                             :response-types ["code"]
+                             :scopes         ["profile"]}])
+          code-store      (store/create-authorization-code-store)
+          token-store     (store/create-token-store)
+          claims-provider (->TestClaimsProvider)
+          provider-config {:issuer                   "https://test.example.com"
+                           :signing-key              (token/generate-rsa-key)
+                           :access-token-ttl-seconds 3600}
+          code            (token/generate-authorization-code)
+          expiry          (+ (System/currentTimeMillis) (* 1000 600))]
+      (proto/save-authorization-code code-store code "user-123" "test-client"
+                                     "https://app.example.com/callback"
+                                     ["profile"] nil expiry nil nil nil)
+      (let [response    (token-ep/handle-authorization-code-grant
+                         {:code         code
+                          :redirect_uri "https://app.example.com/callback"}
+                         (proto/get-client client-store "test-client")
+                         provider-config
+                         code-store
+                         token-store
+                         claims-provider)
+            access-data (proto/get-access-token token-store (:access_token response))]
+        (is (nil? (:resource response)))
+        (is (nil? (:resource access-data)))))))
+
+(deftest refresh-token-grant-narrows-resource-test
+  (testing "requesting a subset of original resources succeeds"
+    (let [client-store    (store/create-client-store
+                           [{:client-id      "test-client"
+                             :client-secret  "secret123"
+                             :redirect-uris  ["https://app.example.com/callback"]
+                             :grant-types    ["refresh_token"]
+                             :response-types ["code"]
+                             :scopes         ["openid" "profile"]}])
+          token-store     (store/create-token-store)
+          provider-config {:issuer                   "https://test.example.com"
+                           :signing-key              (token/generate-rsa-key)
+                           :access-token-ttl-seconds 3600}
+          refresh-token   (token/generate-refresh-token)]
+      (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
+                                ["openid" "profile"]
+                                ["https://api.example.com" "https://data.example.com"])
+      (let [response    (token-ep/handle-refresh-token-grant
+                         {:refresh_token refresh-token
+                          :resource      ["https://api.example.com"]}
+                         (proto/get-client client-store "test-client")
+                         provider-config
+                         token-store)
+            access-data (proto/get-access-token token-store (:access_token response))]
+        (is (= ["https://api.example.com"] (:resource response)))
+        (is (= ["https://api.example.com"] (:resource access-data)))))))
+
+(deftest refresh-token-grant-rejects-expanded-resource-test
+  (testing "requesting a resource not in original set throws invalid_target"
+    (let [client-store    (store/create-client-store
+                           [{:client-id      "test-client"
+                             :client-secret  "secret123"
+                             :redirect-uris  ["https://app.example.com/callback"]
+                             :grant-types    ["refresh_token"]
+                             :response-types ["code"]
+                             :scopes         ["openid"]}])
+          token-store     (store/create-token-store)
+          provider-config {:issuer                   "https://test.example.com"
+                           :signing-key              (token/generate-rsa-key)
+                           :access-token-ttl-seconds 3600}
+          refresh-token   (token/generate-refresh-token)]
+      (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
+                                ["openid"]
+                                ["https://api.example.com"])
+      (is (thrown-with-msg? Exception #"Requested resource exceeds original grant"
+                            (token-ep/handle-refresh-token-grant
+                             {:refresh_token refresh-token
+                              :resource      ["https://evil.example.com"]}
+                             (proto/get-client client-store "test-client")
+                             provider-config
+                             token-store))))))
+
+(deftest refresh-token-grant-preserves-resource-test
+  (testing "no resource param on refresh preserves original resources"
+    (let [client-store    (store/create-client-store
+                           [{:client-id      "test-client"
+                             :client-secret  "secret123"
+                             :redirect-uris  ["https://app.example.com/callback"]
+                             :grant-types    ["refresh_token"]
+                             :response-types ["code"]
+                             :scopes         ["openid"]}])
+          token-store     (store/create-token-store)
+          provider-config {:issuer                   "https://test.example.com"
+                           :signing-key              (token/generate-rsa-key)
+                           :access-token-ttl-seconds 3600}
+          refresh-token   (token/generate-refresh-token)]
+      (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
+                                ["openid"]
+                                ["https://api.example.com"])
+      (let [response    (token-ep/handle-refresh-token-grant
+                         {:refresh_token refresh-token}
+                         (proto/get-client client-store "test-client")
+                         provider-config
+                         token-store)
+            access-data (proto/get-access-token token-store (:access_token response))]
+        (is (= ["https://api.example.com"] (:resource response)))
+        (is (= ["https://api.example.com"] (:resource access-data)))))))
+
+(deftest client-credentials-grant-with-resource-test
+  (testing "resource is stored and returned in response"
+    (let [client-store    (store/create-client-store
+                           [{:client-id      "test-client"
+                             :client-secret  "secret123"
+                             :redirect-uris  []
+                             :grant-types    ["client_credentials"]
+                             :response-types []
+                             :scopes         ["api:read"]}])
+          token-store     (store/create-token-store)
+          provider-config {:issuer                   "https://test.example.com"
+                           :signing-key              (token/generate-rsa-key)
+                           :access-token-ttl-seconds 3600}
+          response        (token-ep/handle-client-credentials-grant
+                           {:scope    "api:read"
+                            :resource ["https://api.example.com"]}
+                           (proto/get-client client-store "test-client")
+                           provider-config
+                           token-store)
+          access-data     (proto/get-access-token token-store (:access_token response))]
+      (is (= ["https://api.example.com"] (:resource response)))
+      (is (= ["https://api.example.com"] (:resource access-data))))))
+
+(deftest handle-token-request-extracts-multi-value-resource-test
+  (testing "raw body with multiple resource= params produces a vector"
+    (let [client-store    (store/create-client-store
+                           [{:client-id      "test-client"
+                             :client-secret  "secret123"
+                             :redirect-uris  []
+                             :grant-types    ["client_credentials"]
+                             :response-types []
+                             :scopes         ["api:read"]}])
+          code-store      (store/create-authorization-code-store)
+          token-store     (store/create-token-store)
+          claims-provider (->TestClaimsProvider)
+          provider-config {:issuer                   "https://test.example.com"
+                           :signing-key              (token/generate-rsa-key)
+                           :access-token-ttl-seconds 3600}
+          raw-body        "grant_type=client_credentials&scope=api%3Aread&resource=https%3A%2F%2Fapi.example.com&resource=https%3A%2F%2Fdata.example.com"
+          response        (token-ep/handle-token-request
+                           {:grant_type    "client_credentials"
+                            :client_id     "test-client"
+                            :client_secret "secret123"
+                            :scope         "api:read"}
+                           raw-body
+                           nil
+                           provider-config
+                           client-store
+                           code-store
+                           token-store
+                           claims-provider)
+          access-data     (proto/get-access-token token-store (:access_token response))]
+      (is (= ["https://api.example.com" "https://data.example.com"] (:resource response)))
+      (is (= ["https://api.example.com" "https://data.example.com"] (:resource access-data))))))
