@@ -9,7 +9,6 @@
    [oidc-provider.util :as util])
   (:import
    [com.nimbusds.oauth2.sdk.pkce CodeChallenge CodeChallengeMethod CodeVerifier]
-   [java.security MessageDigest]
    [java.util Base64]))
 
 (set! *warn-on-reflection* true)

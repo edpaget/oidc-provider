@@ -6,6 +6,7 @@
    [oidc-provider.discovery :as disco]
    [oidc-provider.protocol :as proto]
    [oidc-provider.registration :as reg]
+   [oidc-provider.ring :as ring-handlers]
    [oidc-provider.store :as store]
    [oidc-provider.token :as token]
    [oidc-provider.token-endpoint :as token-ep]))
@@ -187,3 +188,21 @@
    with `\"invalid_client_metadata\"` on validation errors."
   [provider request]
   (reg/handle-registration-request request (:client-store provider)))
+
+(defn dynamic-read-client
+  "Reads a dynamically registered client's configuration per RFC 7592.
+
+   Takes a Provider instance, a `client-id`, and the bearer `access-token`
+   presented by the caller. Returns the client configuration if the token is
+   valid, or a 401 error response otherwise."
+  [provider client-id access-token]
+  (reg/handle-client-read (:client-store provider) client-id access-token))
+
+(defn registration-handler
+  "Creates a Ring handler for dynamic client registration.
+
+   Takes a Provider instance and optional keyword arguments forwarded to
+   [[oidc-provider.ring/registration-handler]]. When `:initial-access-token` is
+   provided, POST requests require a matching Bearer token."
+  [provider & opts]
+  (apply ring-handlers/registration-handler (:client-store provider) opts))
