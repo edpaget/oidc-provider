@@ -28,7 +28,7 @@ jobs:
         with:
           cli: latest
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.m2/repository
@@ -48,7 +48,7 @@ jobs:
         with:
           cli: latest
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.m2/repository
@@ -69,7 +69,7 @@ jobs:
         with:
           cli: latest
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.m2/repository
