@@ -4,7 +4,8 @@
    [oidc-provider.protocol :as proto]
    [oidc-provider.store :as store]
    [oidc-provider.token :as token]
-   [oidc-provider.token-endpoint :as token-ep])
+   [oidc-provider.token-endpoint :as token-ep]
+   [oidc-provider.util :as util])
   (:import
    [com.nimbusds.oauth2.sdk.pkce CodeChallenge CodeChallengeMethod CodeVerifier]))
 
@@ -668,3 +669,55 @@
           access-data     (proto/get-access-token token-store (:access_token response))]
       (is (= ["https://api.example.com" "https://data.example.com"] (:resource response)))
       (is (= ["https://api.example.com" "https://data.example.com"] (:resource access-data))))))
+
+(deftest authenticate-client-hashed-secret-test
+  (testing "authenticates with correct secret against hashed store"
+    (let [secret          "my-secret"
+          hashed          (util/hash-client-secret secret)
+          client-store    (store/create-client-store
+                           [{:client-id          "hashed-client"
+                             :client-secret-hash hashed
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["client_credentials"]
+                             :response-types     []
+                             :scopes             ["api:read"]}])
+          token-store     (store/create-token-store)
+          code-store      (store/create-authorization-code-store)
+          claims-provider (->TestClaimsProvider)
+          provider-config {:issuer                   "https://test.example.com"
+                           :signing-key              (token/generate-rsa-key)
+                           :access-token-ttl-seconds 3600}
+          response        (token-ep/handle-token-request
+                           {:grant_type    "client_credentials"
+                            :client_id     "hashed-client"
+                            :client_secret secret
+                            :scope         "api:read"}
+                           nil nil
+                           provider-config client-store code-store token-store claims-provider)]
+      (is (= "Bearer" (:token_type response)))
+      (is (= "api:read" (:scope response))))))
+
+(deftest authenticate-client-hashed-secret-wrong-test
+  (testing "rejects wrong secret against hashed store"
+    (let [hashed          (util/hash-client-secret "correct-secret")
+          client-store    (store/create-client-store
+                           [{:client-id          "hashed-client"
+                             :client-secret-hash hashed
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["client_credentials"]
+                             :response-types     []
+                             :scopes             ["api:read"]}])
+          token-store     (store/create-token-store)
+          code-store      (store/create-authorization-code-store)
+          claims-provider (->TestClaimsProvider)
+          provider-config {:issuer                   "https://test.example.com"
+                           :signing-key              (token/generate-rsa-key)
+                           :access-token-ttl-seconds 3600}]
+      (is (thrown-with-msg? Exception #"Invalid client credentials"
+                            (token-ep/handle-token-request
+                             {:grant_type    "client_credentials"
+                              :client_id     "hashed-client"
+                              :client_secret "wrong-secret"
+                              :scope         "api:read"}
+                             nil nil
+                             provider-config client-store code-store token-store claims-provider))))))
