@@ -1,0 +1,4 @@
+[tools]
+"java" = "temurin-21"
+"clojure" = "latest"
+"clj-kondo" = "latest"
