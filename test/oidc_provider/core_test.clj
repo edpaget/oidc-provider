@@ -110,4 +110,5 @@
           key      (first (:keys jwks))]
       (is (= 1 (count (:keys jwks))))
       (is (= "RSA" (:kty key)))
-      (is (= "AQAB" (:e key))))))
+      (is (= "AQAB" (:e key)))
+      (is (= "sig" (:use key))))))

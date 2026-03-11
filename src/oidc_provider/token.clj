@@ -6,7 +6,7 @@
   (:import
    [com.nimbusds.jose JWSAlgorithm JWSHeader$Builder]
    [com.nimbusds.jose.crypto RSASSASigner RSASSAVerifier]
-   [com.nimbusds.jose.jwk RSAKey RSAKey$Builder]
+   [com.nimbusds.jose.jwk KeyUse RSAKey RSAKey$Builder]
    [com.nimbusds.jwt JWTClaimsSet JWTClaimsSet$Builder SignedJWT]
    [com.nimbusds.oauth2.sdk.token BearerAccessToken]
    [java.security KeyPairGenerator SecureRandom]
@@ -42,7 +42,8 @@
            ^RSAKey$Builder builder                        (RSAKey$Builder. pub-key)]
        (doto builder
          (.privateKey (.getPrivate key-pair))
-         (.keyID (str (UUID/randomUUID))))
+         (.keyID (str (UUID/randomUUID)))
+         (.keyUse KeyUse/SIGNATURE))
        (.build builder)))))
 
 (defn- add-seconds
