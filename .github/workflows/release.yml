@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Validate version
+        run: |
+          VERSION="${{ inputs.version }}"
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Invalid semver: $VERSION"
+            exit 1
+          fi
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "::error::Tag v$VERSION already exists"
+            exit 1
+          fi
+
+      - name: Update VERSION
+        run: echo "${{ inputs.version }}" > VERSION
+
+      - name: Update CHANGELOG.md
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          sed -i "s/^## \[Unreleased\]/## [Unreleased]\n\n## [${{ inputs.version }}] - $DATE/" CHANGELOG.md
+
+      - name: Commit and tag release
+        run: |
+          git add VERSION CHANGELOG.md
+          git commit -m "release: v${{ inputs.version }}"
+          git tag "v${{ inputs.version }}"
+
+      - name: Push release commit and tag
+        run: git push origin HEAD "v${{ inputs.version }}"
+
+      - name: Compute next snapshot version
+        id: next
+        run: |
+          VERSION="${{ inputs.version }}"
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+          NEXT_PATCH=$((PATCH + 1))
+          echo "snapshot=${MAJOR}.${MINOR}.${NEXT_PATCH}-SNAPSHOT" >> "$GITHUB_OUTPUT"
+
+      - name: Update VERSION to next snapshot
+        run: echo "${{ steps.next.outputs.snapshot }}" > VERSION
+
+      - name: Commit snapshot version
+        run: |
+          git add VERSION
+          git commit -m "chore: prepare ${{ steps.next.outputs.snapshot }} for next development cycle"
+
+      - name: Push snapshot commit
+        run: git push origin HEAD
