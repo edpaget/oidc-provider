@@ -145,6 +145,13 @@ clj-kondo --lint src test
 - Keep the subject line under 72 characters
 - Use the body for additional context when needed
 
+## Changelog
+- Keep `CHANGELOG.md` updated when making user-facing changes (`feat`, `fix`, `refactor` that changes behavior)
+- Follow [Keep a Changelog](https://keepachangelog.com/) format
+- Add entries under `## [Unreleased]` in the appropriate section: `Added`, `Fixed`, `Changed`, `Deprecated`, `Removed`, `Security`
+- Write entries as concise, human-readable descriptions of what changed (not commit messages)
+- Do not update the changelog for internal-only changes like `test`, `docs`, `ci`, `style`, or `chore`
+
 ## Context Maintenance
 - Use `clojure_eval` with `:reload` to ensure you're working with the latest code
 - always switch into `(in-ns ...)` the namespace that you are working on
