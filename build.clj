@@ -2,7 +2,7 @@
   (:require [clojure.tools.build.api :as b]
             [clojure.string :as str]))
 
-(def lib 'io.github.edwardpaget/oidc-provider)
+(def lib 'net.carcdr/oidc-provider)
 (def version (str/trim (slurp "VERSION")))
 (def class-dir "target/classes")
 (def jar-file (format "target/%s-%s.jar" (name lib) version))

@@ -4,7 +4,7 @@
 ![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/edpaget/25d1d04ed600f8ba8b2191866be2cc63/raw/coverage-badge.json)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Docs](https://github.com/edpaget/oidc-provider/actions/workflows/docs.yml/badge.svg)](https://carcdr.net/oidc-provider/)
-[![cljdoc](https://cljdoc.org/badge/io.github.edwardpaget/oidc-provider)](https://cljdoc.org/d/io.github.edwardpaget/oidc-provider)
+[![cljdoc](https://cljdoc.org/badge/net.carcdr/oidc-provider)](https://cljdoc.org/d/net.carcdr/oidc-provider)
 
 A flexible, protocol-based OpenID Connect Provider implementation for the JVM using Clojure.
 
