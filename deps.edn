@@ -3,9 +3,6 @@
  :deps
  {org.clojure/clojure    {:mvn/version "1.12.4"}
   metosin/malli          {:mvn/version "0.20.0"}
-  buddy/buddy-sign       {:mvn/version "3.6.1-359"}
-  buddy/buddy-core       {:mvn/version "1.12.0-430"}
-  ring/ring-core         {:mvn/version "1.15.3"}
   cheshire/cheshire      {:mvn/version "6.1.0"}
   com.nimbusds/nimbus-jose-jwt {:mvn/version "10.6"}
   com.nimbusds/oauth2-oidc-sdk {:mvn/version "11.30.1"}}
