@@ -1,6 +1,6 @@
-# Roadmap 05: Test Coverage
+# Roadmap 05: Test Coverage (Remaining)
 
-Fills gaps in the existing test suite and ensures new features from other roadmaps are well-tested. Each phase is independently committable.
+Phases 3-4 are covered by existing tests. Three phases remain.
 
 ## Phase 1: token.clj unit tests
 
@@ -16,41 +16,12 @@ Create `oidc-provider.token-test` covering:
 
 ## Phase 2: store.clj unit tests
 
-Create `oidc-provider.store-test` covering each in-memory store:
+Expand `oidc-provider.store-test` to cover:
 
-- `InMemoryClientStore` — register and retrieve, unknown client returns nil
 - `InMemoryAuthorizationCodeStore` — save/get/delete cycle, delete makes subsequent get return nil
 - `InMemoryTokenStore` — save/get access tokens, save/get refresh tokens, revoke removes from both maps
 
-## Phase 3: Token endpoint — error paths and client auth
-
-Extend `token-endpoint-test` with:
-
-- `authenticate-client` via Basic auth header (valid and invalid)
-- `authenticate-client` via POST body params
-- Wrong `client_secret` returns error
-- Unknown `client_id` returns error
-- Unknown `grant_type` returns error
-- `handle-token-request` top-level dispatcher (not just individual handlers)
-- `token-error-response` produces correct Ring response shape
-
-## Phase 4: Authorization — edge cases
-
-Extend `authorization-test` with:
-
-- Missing required params (no `client_id`, no `redirect_uri`)
-- Invalid `response_type` rejected
-- Scope validation (requested scope not in client's registered scopes)
-- Query string edge cases (URL-encoded keys, repeated params)
-
-## Phase 5: Core facade tests
-
-Extend `core-test` with:
-
-- `authorize` and `deny-authorization` through the public API
-- `token-request` through the public API (full flow: register client, authorize, exchange code)
-- `create-provider` with custom stores
-- `create-provider` with invalid config (schema rejection)
+(Client store register/retrieve already tested.)
 
 ## Phase 6: Integration test — full OIDC flow
 
@@ -63,5 +34,3 @@ Create `oidc-provider.integration-test` that exercises the complete authorizatio
 5. Exchange code for tokens
 6. Validate ID token
 7. Refresh access token
-
-This serves as a smoke test that all components work together correctly.
