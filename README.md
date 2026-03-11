@@ -1,5 +1,8 @@
 # OIDC Provider
 
+[![CI](https://github.com/edpaget/oidc-provider/actions/workflows/ci.yml/badge.svg)](https://github.com/edpaget/oidc-provider/actions/workflows/ci.yml)
+![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/edpaget/25d1d04ed600f8ba8b2191866be2cc63/raw/coverage-badge.json)
+
 A flexible, protocol-based OpenID Connect Provider implementation for the JVM using Clojure.
 
 ## Features

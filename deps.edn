@@ -15,6 +15,13 @@
    :exec-args   {:dirs ["test"]}
    :extra-deps  {io.github.cognitect-labs/test-runner {:git/tag "v0.5.1" :git/sha "dfb30dd"}}}
 
+  :cloverage
+  {:extra-paths ["test"]
+   :extra-deps  {cloverage/cloverage {:mvn/version "1.2.4"}}
+   :main-opts   ["-m" "cloverage.coverage"
+                 "-p" "src"
+                 "-s" "test"]}
+
   :format
   {:extra-deps {dev.weavejester/cljfmt {:mvn/version "0.16.1"}}
    :main-opts  ["-m" "cljfmt.main" "fix" "src" "test"]}
