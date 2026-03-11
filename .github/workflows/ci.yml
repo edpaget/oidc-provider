@@ -85,7 +85,7 @@ jobs:
       - name: Extract coverage percentage
         id: coverage
         run: |
-          COVERAGE=$(grep 'ALL FILES' coverage-output.txt | awk -F'|' '{gsub(/ /, "", $4); print $4}')
+          COVERAGE=$(sed 's/\x1b\[[0-9;]*m//g' coverage-output.txt | grep 'ALL FILES' | awk -F'|' '{gsub(/ /, "", $4); print $4}')
           echo "percentage=$COVERAGE" >> "$GITHUB_OUTPUT"
 
       - name: Update coverage badge
