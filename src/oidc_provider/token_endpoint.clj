@@ -126,7 +126,7 @@
     (when-not code-data
       (throw (ex-info "Invalid or expired authorization code" {:code code})))
     (proto/delete-authorization-code code-store code)
-    (when (> (System/currentTimeMillis) (:expiry code-data))
+    (when (> (.millis ^java.time.Clock (:clock provider-config)) (:expiry code-data))
       (throw (ex-info "Authorization code expired" {:code code})))
     (when (not= (:client-id code-data) (:client-id client))
       (throw (ex-info "Client mismatch" {:expected (:client-id code-data)
@@ -137,21 +137,24 @@
       (throw (ex-info "Redirect URI mismatch" {:expected (:redirect-uri code-data)
                                                :actual   redirect_uri})))
     (verify-pkce code-data code_verifier)
-    (let [user-id       (:user-id code-data)
-          scope         (:scope code-data)
-          resource      (:resource code-data)
-          openid?       (some #{"openid"} scope)
-          access-token  (token/generate-access-token)
-          refresh-token (token/generate-refresh-token)
-          ttl           (or (:access-token-ttl-seconds provider-config) 3600)
-          expiry        (+ (System/currentTimeMillis) (* 1000 ttl))
-          id-token      (when openid?
-                          (let [user-claims (proto/get-claims claims-provider user-id scope)]
-                            (token/generate-id-token
-                             provider-config user-id (:client-id client)
-                             user-claims {:nonce (:nonce code-data)})))]
+    (let [user-id        (:user-id code-data)
+          scope          (:scope code-data)
+          resource       (:resource code-data)
+          openid?        (some #{"openid"} scope)
+          access-token   (token/generate-access-token)
+          refresh-token  (token/generate-refresh-token)
+          ttl            (or (:access-token-ttl-seconds provider-config) 3600)
+          now            (.millis ^java.time.Clock (:clock provider-config))
+          expiry         (+ now (* 1000 ttl))
+          refresh-ttl    (:refresh-token-ttl-seconds provider-config)
+          refresh-expiry (when refresh-ttl (+ now (* 1000 refresh-ttl)))
+          id-token       (when openid?
+                           (let [user-claims (proto/get-claims claims-provider user-id scope)]
+                             (token/generate-id-token
+                              provider-config user-id (:client-id client)
+                              user-claims {:nonce (:nonce code-data)})))]
       (proto/save-access-token token-store access-token user-id (:client-id client) scope expiry resource)
-      (proto/save-refresh-token token-store refresh-token user-id (:client-id client) scope resource)
+      (proto/save-refresh-token token-store refresh-token user-id (:client-id client) scope refresh-expiry resource)
       (cond-> {:access_token  access-token
                :token_type    "Bearer"
                :expires_in    ttl
@@ -180,6 +183,9 @@
   (let [token-data (proto/get-refresh-token token-store refresh_token)]
     (when-not token-data
       (throw (ex-info "Invalid refresh token" {:refresh-token refresh_token})))
+    (when-let [expiry (:expiry token-data)]
+      (when (> (.millis ^java.time.Clock (:clock provider-config)) expiry)
+        (throw (ex-info "Refresh token expired" {:error "invalid_grant"}))))
     (when (not= (:client-id token-data) (:client-id client))
       (throw (ex-info "Client mismatch" {:expected (:client-id token-data)
                                          :actual   (:client-id client)})))
@@ -201,7 +207,8 @@
                          :requested resource})))
       (let [access-token (token/generate-access-token)
             ttl          (or (:access-token-ttl-seconds provider-config) 3600)
-            expiry       (+ (System/currentTimeMillis) (* 1000 ttl))]
+            now          (.millis ^java.time.Clock (:clock provider-config))
+            expiry       (+ now (* 1000 ttl))]
         (proto/save-access-token token-store access-token (:user-id token-data)
                                  (:client-id client) final-scope expiry final-resource)
         (cond-> {:access_token access-token
@@ -236,7 +243,7 @@
                        :allowed   client-scope})))
     (let [access-token (token/generate-access-token)
           ttl          (or (:access-token-ttl-seconds provider-config) 3600)
-          expiry       (+ (System/currentTimeMillis) (* 1000 ttl))]
+          expiry       (+ (.millis ^java.time.Clock (:clock provider-config)) (* 1000 ttl))]
       (proto/save-access-token token-store access-token (:client-id client)
                                (:client-id client) final-scope expiry resource)
       (cond-> {:access_token access-token

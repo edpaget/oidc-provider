@@ -108,13 +108,14 @@
     with keys `[:user-id :client-id :scope :expiry]` if found, or nil if the token
     doesn't exist or has been revoked.")
 
-  (save-refresh-token [this token user-id client-id scope resource]
+  (save-refresh-token [this token user-id client-id scope expiry resource]
     "Saves a refresh token.
 
     Takes a refresh token string, user identifier, OAuth2 client identifier, a vector
-    of scope strings, and an optional `resource` vector of target resource indicator URIs
-    (per RFC 8707). Stores the token and its metadata. Refresh tokens don't expire
-    automatically. Returns true if saved successfully.")
+    of scope strings, an optional expiration timestamp (milliseconds since epoch, or
+    `nil` for no expiry), and an optional `resource` vector of target resource indicator
+    URIs (per RFC 8707). Stores the token and its metadata. Returns true if saved
+    successfully.")
 
   (get-refresh-token [this token]
     "Retrieves refresh token metadata.

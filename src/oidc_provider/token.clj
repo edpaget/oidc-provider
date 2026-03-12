@@ -11,7 +11,7 @@
    [com.nimbusds.oauth2.sdk AuthorizationCode]
    [com.nimbusds.oauth2.sdk.token BearerAccessToken RefreshToken]
    [java.security KeyPairGenerator SecureRandom]
-   [java.time Instant]
+   [java.time Clock Instant]
    [java.util Date UUID]))
 
 (set! *warn-on-reflection* true)
@@ -23,7 +23,9 @@
    [:signing-key [:fn (fn [k] (instance? RSAKey k))]]
    [:access-token-ttl-seconds {:optional true} pos-int?]
    [:id-token-ttl-seconds {:optional true} pos-int?]
-   [:authorization-code-ttl-seconds {:optional true} pos-int?]])
+   [:authorization-code-ttl-seconds {:optional true} pos-int?]
+   [:refresh-token-ttl-seconds {:optional true} pos-int?]
+   [:clock [:fn (fn [c] (instance? Clock c))]]])
 
 (defn generate-rsa-key
   "Generates an RSA key pair for signing tokens.
@@ -48,8 +50,8 @@
        (.build builder)))))
 
 (defn- add-seconds
-  [seconds]
-  (Date/from (.plusSeconds (Instant/now) seconds)))
+  [^Clock clock seconds]
+  (Date/from (.plusSeconds (Instant/now clock) seconds)))
 
 (defn generate-id-token
   "Generates a signed OIDC ID token.
@@ -65,7 +67,7 @@
 
   Returns:
     Signed JWT string"
-  [{:keys [issuer signing-key id-token-ttl-seconds] :as config}
+  [{:keys [issuer signing-key id-token-ttl-seconds clock] :as config}
    user-id client-id claims
    {:keys [nonce auth-time]}]
   {:pre [(m/validate ProviderConfig config)]}
@@ -75,8 +77,8 @@
       (.issuer issuer)
       (.subject user-id)
       (.audience (java.util.Arrays/asList (into-array String [client-id])))
-      (.expirationTime ^Date (add-seconds ttl))
-      (.issueTime ^Date (Date/from (Instant/now))))
+      (.expirationTime ^Date (add-seconds clock ttl))
+      (.issueTime ^Date (Date/from (Instant/now clock))))
     (when nonce
       (.claim builder "nonce" nonce))
     (when auth-time

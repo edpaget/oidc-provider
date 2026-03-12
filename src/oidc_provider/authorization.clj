@@ -138,7 +138,7 @@
   (cond
     (= response_type "code")
     (let [code   (token/generate-authorization-code)
-          expiry (+ (System/currentTimeMillis)
+          expiry (+ (.millis ^java.time.Clock (:clock provider-config))
                     (* 1000 (or (:authorization-code-ttl-seconds provider-config) 600)))
           scopes (when scope (vec (str/split scope #" ")))]
       (proto/save-authorization-code code-store code user-id client_id

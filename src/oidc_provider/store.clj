@@ -85,10 +85,11 @@
   (get-access-token [_ token]
     (get @access-tokens token))
 
-  (save-refresh-token [_ token user-id client-id scope resource]
+  (save-refresh-token [_ token user-id client-id scope expiry resource]
     (swap! refresh-tokens assoc token (cond-> {:user-id   user-id
                                                :client-id client-id
                                                :scope     scope}
+                                        expiry   (assoc :expiry expiry)
                                         resource (assoc :resource resource)))
     true)
 

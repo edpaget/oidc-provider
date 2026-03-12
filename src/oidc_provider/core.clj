@@ -9,7 +9,9 @@
    [oidc-provider.ring :as ring-handlers]
    [oidc-provider.store :as store]
    [oidc-provider.token :as token]
-   [oidc-provider.token-endpoint :as token-ep]))
+   [oidc-provider.token-endpoint :as token-ep])
+  (:import
+   [java.time Clock]))
 
 (set! *warn-on-reflection* true)
 
@@ -28,7 +30,9 @@
    [:code-store {:optional true} [:fn #(satisfies? proto/AuthorizationCodeStore %)]]
    [:token-store {:optional true} [:fn #(satisfies? proto/TokenStore %)]]
    [:claims-provider {:optional true} [:fn #(satisfies? proto/ClaimsProvider %)]]
-   [:registration-endpoint {:optional true} :string]])
+   [:registration-endpoint {:optional true} :string]
+   [:refresh-token-ttl-seconds {:optional true} pos-int?]
+   [:clock {:optional true} [:fn (fn [c] (instance? java.time.Clock c))]]])
 
 (defrecord Provider [config
                      provider-config
@@ -55,17 +59,21 @@
            access-token-ttl-seconds
            id-token-ttl-seconds
            authorization-code-ttl-seconds
+           refresh-token-ttl-seconds
+           clock
            client-store
            code-store
            token-store
            claims-provider]               :as config}]
   {:pre [(m/validate ProviderSetup config)]}
   (let [key             (or signing-key (token/generate-rsa-key))
-        provider-config {:issuer                         issuer
-                         :signing-key                    key
-                         :access-token-ttl-seconds       (or access-token-ttl-seconds 3600)
-                         :id-token-ttl-seconds           (or id-token-ttl-seconds 3600)
-                         :authorization-code-ttl-seconds (or authorization-code-ttl-seconds 600)}]
+        provider-config (cond-> {:issuer                         issuer
+                                 :signing-key                    key
+                                 :access-token-ttl-seconds       (or access-token-ttl-seconds 3600)
+                                 :id-token-ttl-seconds           (or id-token-ttl-seconds 3600)
+                                 :authorization-code-ttl-seconds (or authorization-code-ttl-seconds 600)
+                                 :clock                          (or clock (Clock/systemUTC))}
+                          refresh-token-ttl-seconds (assoc :refresh-token-ttl-seconds refresh-token-ttl-seconds))]
     (->Provider config
                 provider-config
                 (or client-store (store/create-client-store))

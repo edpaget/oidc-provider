@@ -4,7 +4,9 @@
    [clojure.test :refer [deftest is testing]]
    [oidc-provider.authorization :as authz]
    [oidc-provider.protocol :as proto]
-   [oidc-provider.store :as store]))
+   [oidc-provider.store :as store])
+  (:import
+   [java.time Clock]))
 
 (deftest parse-valid-authorization-request-test
   (testing "parses valid authorization request"
@@ -47,7 +49,8 @@
   (testing "generates authorization code stored with correct metadata"
     (let [code-store      (store/create-authorization-code-store)
           provider-config {:issuer                         "https://test.example.com"
-                           :authorization-code-ttl-seconds 600}
+                           :authorization-code-ttl-seconds 600
+                           :clock                          (Clock/systemUTC)}
           request         {:response_type "code"
                            :client_id     "test-client"
                            :redirect_uri  "https://app.example.com/callback"
@@ -138,7 +141,8 @@
   (testing "stores code-challenge and code-challenge-method with authorization code"
     (let [code-store      (store/create-authorization-code-store)
           provider-config {:issuer                         "https://test.example.com"
-                           :authorization-code-ttl-seconds 600}
+                           :authorization-code-ttl-seconds 600
+                           :clock                          (Clock/systemUTC)}
           request         {:response_type         "code"
                            :client_id             "test-client"
                            :redirect_uri          "https://app.example.com/callback"
@@ -259,7 +263,8 @@
   (testing "resource indicators round-trip through code store"
     (let [code-store      (store/create-authorization-code-store)
           provider-config {:issuer                         "https://test.example.com"
-                           :authorization-code-ttl-seconds 600}
+                           :authorization-code-ttl-seconds 600
+                           :clock                          (Clock/systemUTC)}
           request         {:response_type "code"
                            :client_id     "test-client"
                            :redirect_uri  "https://app.example.com/callback"
