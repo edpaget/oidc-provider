@@ -131,14 +131,14 @@
   (let [auth-method (get request "token_endpoint_auth_method")
         scope-str   (get request "scope")
         scopes      (if scope-str (vec (str/split scope-str #" ")) [])]
-    (cond-> {:client-id                  (str (java.util.UUID/randomUUID))
+    (cond-> {:client-id                  (util/generate-client-id)
              :redirect-uris              (get request "redirect_uris")
              :grant-types                (get request "grant_types")
              :response-types             (get request "response_types")
              :scopes                     scopes
              :token-endpoint-auth-method auth-method
              :registration-access-token  (token/generate-access-token)}
-      (not= auth-method "none") (assoc :client-secret (str (java.util.UUID/randomUUID)))
+      (not= auth-method "none") (assoc :client-secret (util/generate-client-secret))
       (get request "client_name") (assoc :client-name (get request "client_name"))
       (get request "client_uri") (assoc :client-uri (get request "client_uri"))
       (get request "logo_uri") (assoc :logo-uri (get request "logo_uri"))

@@ -8,7 +8,7 @@
    [malli.core :as m])
   (:import
    (java.security MessageDigest SecureRandom)
-   (java.util Base64)
+   (java.util Base64 UUID)
    (javax.crypto SecretKeyFactory)
    (javax.crypto.spec PBEKeySpec)))
 
@@ -19,6 +19,26 @@
   to prevent timing side-channel attacks."
   [^String a ^String b]
   (MessageDigest/isEqual (.getBytes a "UTF-8") (.getBytes b "UTF-8")))
+
+(m/=> generate-client-secret [:=> [:cat] :string])
+
+(defn generate-client-secret
+  "Generates a cryptographically random client secret suitable for OAuth2 confidential clients.
+
+  Uses `java.security.SecureRandom` to produce a 32-byte (256-bit) base64url-encoded
+  string. Integrators building admin APIs can use this to create client secrets that
+  are consistent with those issued by [[oidc-provider.registration/handle-registration-request]]."
+  []
+  (let [bytes (byte-array 32)
+        _     (.nextBytes (SecureRandom.) bytes)]
+    (.encodeToString (Base64/getUrlEncoder) bytes)))
+
+(m/=> generate-client-id [:=> [:cat] :string])
+
+(defn generate-client-id
+  "Generates a unique client identifier as a random UUID string."
+  []
+  (str (UUID/randomUUID)))
 
 (def ^:private pbkdf2-algorithm "PBKDF2WithHmacSHA256")
 (def ^:private pbkdf2-iterations 310000)
