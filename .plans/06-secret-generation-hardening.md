@@ -4,20 +4,28 @@
 
 Security review identified five deficiencies in secret generation and token lifecycle management. This plan addresses them in priority order, with each step independently shippable.
 
-## Step 1: Replace UUID-based secrets with SecureRandom + base64url
+## Step 1: Replace UUID-based secrets with Nimbus SDK token classes
 
 **Problem:** Client secrets, refresh tokens, and authorization codes use `UUID/randomUUID` (122 bits, predictable structure with version/variant bits). Secrets should use high-entropy random bytes.
 
+**Approach:** The Nimbus OAuth SDK (already a dependency) provides purpose-built classes that generate 256-bit `SecureRandom` base64url-encoded values. Use these instead of writing custom generation code.
+
 **Changes:**
-- `src/oidc_provider/util.clj` — add `generate-secure-token` function: 32 bytes from `SecureRandom`, base64url-encoded (256 bits entropy, no padding)
-- `src/oidc_provider/token.clj` — change `generate-refresh-token` and `generate-authorization-code` to call `util/generate-secure-token` instead of `UUID/randomUUID`
-- `src/oidc_provider/registration.clj` — change `request->client-config` to use `util/generate-secure-token` for `:client-secret` generation
-- `test/oidc_provider/util_test.clj` — add tests for `generate-secure-token` (length, uniqueness, url-safe characters)
+- `src/oidc_provider/token.clj`:
+  - Add imports for `com.nimbusds.oauth2.sdk.AuthorizationCode` and `com.nimbusds.oauth2.sdk.token.RefreshToken`
+  - Change `generate-authorization-code` to use `(.getValue (AuthorizationCode.))`
+  - Change `generate-refresh-token` to use `(.getValue (RefreshToken.))`
+  - Remove `java.util.UUID` import if no longer needed
+- `src/oidc_provider/registration.clj`:
+  - Add import for `com.nimbusds.oauth2.sdk.auth.Secret`
+  - Change `request->client-config` to use `(.getValue (Secret.))` for `:client-secret` generation
 - Update existing tests if they assert on UUID format
 
 **Notes:**
 - Client IDs and key IDs remain UUIDs — they are identifiers, not secrets
 - `registration-access-token` already uses `BearerAccessToken` (Nimbus), which is fine
+- `Secret` also provides `.erase()` for zeroing memory — useful in step 4 after hashing
+- Keep existing PBKDF2 hashing in `util.clj` for secret storage (stronger than `Secret.getSHA256()`)
 
 ## Step 2: Add configurable refresh token TTL
 
@@ -66,14 +74,18 @@ Security review identified five deficiencies in secret generation and token life
 
 **Problem:** Single signing key means no graceful rotation — old JWTs can't be verified during transition.
 
+**Approach:** Nimbus provides `JWKSet` for multi-key management and `DefaultJWTProcessor` with `JWSVerificationKeySelector` for automatic kid-based key selection during verification. Use these instead of hand-rolling key selection logic.
+
 **Changes:**
 - `src/oidc_provider/token.clj`:
-  - Change `:signing-key` in `ProviderConfig` to accept either a single `RSAKey` or a vector of `RSAKey`s
-  - Add `:active-signing-key-id` config option (defaults to first key)
-  - `generate-id-token` uses the active key for signing
-  - `validate-id-token` tries all keys matching the `kid` header
-  - `jwks` returns all public keys
-- Add tests for multi-key JWKS, signing with active key, validating with any key
+  - Add imports for `com.nimbusds.jose.jwk.JWKSet`, `com.nimbusds.jose.jwk.source.ImmutableJWKSet`, `com.nimbusds.jose.proc.JWSVerificationKeySelector`, `com.nimbusds.jwt.proc.DefaultJWTProcessor`
+  - Change `:signing-key` in `ProviderConfig` to accept either a single `RSAKey` or a `JWKSet`
+  - Add `:active-signing-key-id` config option (defaults to first key in set)
+  - `generate-id-token` — select the active key from the `JWKSet` by kid for signing
+  - `validate-id-token` — replace direct `RSASSAVerifier` with `DefaultJWTProcessor` backed by `JWSVerificationKeySelector` + `ImmutableJWKSet`, which automatically matches the JWT header's `kid` to the correct key
+  - `jwks` — use `(.toPublicJWKSet jwk-set)` to return all public keys
+- Backward compat: when `:signing-key` is a single `RSAKey`, wrap it in a `JWKSet` internally
+- Add tests for multi-key JWKS, signing with active key, validating with any key, and verifying old tokens after rotation
 
 ## Sequencing
 
