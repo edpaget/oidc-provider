@@ -7,6 +7,7 @@
   (:require
    [malli.core :as m])
   (:import
+   (com.nimbusds.oauth2.sdk.auth Secret)
    (java.security MessageDigest SecureRandom)
    (java.util Base64 UUID)
    (javax.crypto SecretKeyFactory)
@@ -25,13 +26,12 @@
 (defn generate-client-secret
   "Generates a cryptographically random client secret suitable for OAuth2 confidential clients.
 
-  Uses `java.security.SecureRandom` to produce a 32-byte (256-bit) base64url-encoded
-  string. Integrators building admin APIs can use this to create client secrets that
-  are consistent with those issued by [[oidc-provider.registration/handle-registration-request]]."
+  Delegates to the Nimbus SDK `Secret` class, which produces a 256-bit `SecureRandom`
+  base64url-encoded value. Integrators building admin APIs can use this to create client
+  secrets that are consistent with those issued by
+  [[oidc-provider.registration/handle-registration-request]]."
   []
-  (let [bytes (byte-array 32)
-        _     (.nextBytes (SecureRandom.) bytes)]
-    (.encodeToString (Base64/getUrlEncoder) bytes)))
+  (.getValue (Secret.)))
 
 (m/=> generate-client-id [:=> [:cat] :string])
 

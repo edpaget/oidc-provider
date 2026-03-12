@@ -8,7 +8,8 @@
    [com.nimbusds.jose.crypto RSASSASigner RSASSAVerifier]
    [com.nimbusds.jose.jwk KeyUse RSAKey RSAKey$Builder]
    [com.nimbusds.jwt JWTClaimsSet JWTClaimsSet$Builder SignedJWT]
-   [com.nimbusds.oauth2.sdk.token BearerAccessToken]
+   [com.nimbusds.oauth2.sdk AuthorizationCode]
+   [com.nimbusds.oauth2.sdk.token BearerAccessToken RefreshToken]
    [java.security KeyPairGenerator SecureRandom]
    [java.time Instant]
    [java.util Date UUID]))
@@ -101,20 +102,16 @@
   (.getValue (BearerAccessToken.)))
 
 (defn generate-refresh-token
-  "Generates a refresh token.
-
-  Returns:
-    String token value"
+  "Generates a cryptographically random refresh token using the Nimbus SDK
+  `RefreshToken` class, which produces a 256-bit `SecureRandom` base64url value."
   []
-  (str (UUID/randomUUID)))
+  (.getValue (RefreshToken.)))
 
 (defn generate-authorization-code
-  "Generates an authorization code.
-
-  Returns:
-    String code value"
+  "Generates a cryptographically random authorization code using the Nimbus SDK
+  `AuthorizationCode` class, which produces a 256-bit `SecureRandom` base64url value."
   []
-  (str (UUID/randomUUID)))
+  (.getValue (AuthorizationCode.)))
 
 (defn validate-id-token
   "Validates an ID token signature and claims.
