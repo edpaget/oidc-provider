@@ -20,6 +20,7 @@
   (testing "rejects wrong client secret"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["authorization_code"]
@@ -48,6 +49,7 @@
   (testing "rejects missing client secret when required"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["authorization_code"]
@@ -75,6 +77,7 @@
   (testing "exchanges authorization code for tokens stored with correct metadata"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["authorization_code"]
@@ -113,6 +116,7 @@
   (testing "omits id_token when openid is not in scope"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["authorization_code"]
@@ -147,6 +151,7 @@
   (testing "throws on expired authorization code"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["authorization_code"]
@@ -177,6 +182,7 @@
   (testing "throws when redirect_uri is missing but was in authorization request"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["authorization_code"]
@@ -206,6 +212,7 @@
   (testing "throws when redirect_uri does not match"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["authorization_code"]
@@ -236,6 +243,7 @@
   (testing "refreshes access token with correct stored metadata"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["refresh_token"]
@@ -262,6 +270,7 @@
   (testing "authorization_code rejected for client without grant type"
     (let [client-store    (store/create-client-store
                            [{:client-id      "cc-only-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  []
                              :grant-types    ["client_credentials"]
@@ -292,6 +301,7 @@
   (testing "refresh_token rejected for client without grant type"
     (let [client-store    (store/create-client-store
                            [{:client-id      "authcode-only-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["authorization_code"]
@@ -314,6 +324,7 @@
   (testing "issues token with correct stored metadata"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  []
                              :grant-types    ["client_credentials"]
@@ -341,6 +352,7 @@
           verifier-str    (.getValue verifier)
           client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["authorization_code"]
@@ -379,6 +391,7 @@
           wrong-verifier  (.getValue (CodeVerifier.))
           client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["authorization_code"]
@@ -412,6 +425,7 @@
           challenge       (.getValue (CodeChallenge/compute CodeChallengeMethod/S256 verifier))
           client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["authorization_code"]
@@ -442,6 +456,7 @@
   (testing "rejects verifier when no challenge was stored"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["authorization_code"]
@@ -473,6 +488,7 @@
   (testing "resource from auth code round-trips to tokens and response"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["authorization_code"]
@@ -509,6 +525,7 @@
   (testing "no resource in auth code means no resource in tokens or response"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["authorization_code"]
@@ -541,6 +558,7 @@
   (testing "requesting a subset of original resources succeeds"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["refresh_token"]
@@ -568,6 +586,7 @@
   (testing "requesting a resource not in original set throws invalid_target"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["refresh_token"]
@@ -593,6 +612,7 @@
   (testing "no resource param on refresh preserves original resources"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  ["https://app.example.com/callback"]
                              :grant-types    ["refresh_token"]
@@ -619,6 +639,7 @@
   (testing "resource is stored and returned in response"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  []
                              :grant-types    ["client_credentials"]
@@ -642,6 +663,7 @@
   (testing "raw body with multiple resource= params produces a vector"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
+                             :client-type    "confidential"
                              :client-secret  "secret123"
                              :redirect-uris  []
                              :grant-types    ["client_credentials"]
@@ -676,6 +698,7 @@
           hashed          (util/hash-client-secret secret)
           client-store    (store/create-client-store
                            [{:client-id          "hashed-client"
+                             :client-type        "confidential"
                              :client-secret-hash hashed
                              :redirect-uris      ["https://app.example.com/callback"]
                              :grant-types        ["client_credentials"]
@@ -702,6 +725,7 @@
     (let [hashed          (util/hash-client-secret "correct-secret")
           client-store    (store/create-client-store
                            [{:client-id          "hashed-client"
+                             :client-type        "confidential"
                              :client-secret-hash hashed
                              :redirect-uris      ["https://app.example.com/callback"]
                              :grant-types        ["client_credentials"]
@@ -718,6 +742,30 @@
                              {:grant_type    "client_credentials"
                               :client_id     "hashed-client"
                               :client_secret "wrong-secret"
+                              :scope         "api:read"}
+                             nil nil
+                             provider-config client-store code-store token-store claims-provider))))))
+
+(deftest confidential-client-no-credentials-test
+  (testing "rejects confidential client with no stored secret or hash"
+    (let [client-store    (store/create-client-store
+                           [{:client-id      "misconfigured"
+                             :client-type    "confidential"
+                             :redirect-uris  []
+                             :grant-types    ["client_credentials"]
+                             :response-types []
+                             :scopes         ["api:read"]}])
+          code-store      (store/create-authorization-code-store)
+          token-store     (store/create-token-store)
+          claims-provider (->TestClaimsProvider)
+          provider-config {:issuer                   "https://test.example.com"
+                           :signing-key              (token/generate-rsa-key)
+                           :access-token-ttl-seconds 3600}]
+      (is (thrown-with-msg? Exception #"Confidential client has no stored credentials"
+                            (token-ep/handle-token-request
+                             {:grant_type    "client_credentials"
+                              :client_id     "misconfigured"
+                              :client_secret "any-secret"
                               :scope         "api:read"}
                              nil nil
                              provider-config client-store code-store token-store claims-provider))))))

@@ -132,6 +132,7 @@
         scope-str   (get request "scope")
         scopes      (if scope-str (vec (str/split scope-str #" ")) [])]
     (cond-> {:client-id                  (util/generate-client-id)
+             :client-type                (if (= auth-method "none") "public" "confidential")
              :redirect-uris              (get request "redirect_uris")
              :grant-types                (get request "grant_types")
              :response-types             (get request "response_types")

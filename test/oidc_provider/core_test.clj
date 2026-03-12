@@ -37,6 +37,7 @@
           client   (core/register-client
                     provider
                     {:client-id      "test-client"
+                     :client-type    "confidential"
                      :client-secret  "secret123"
                      :redirect-uris  ["https://app.example.com/callback"]
                      :grant-types    ["authorization_code" "refresh_token"]
@@ -56,6 +57,7 @@
           _        (core/register-client
                     provider
                     {:client-id      "test-client"
+                     :client-type    "confidential"
                      :client-secret  "secret123"
                      :redirect-uris  ["https://app.example.com/callback"]
                      :grant-types    ["authorization_code"]

@@ -8,7 +8,8 @@
   (testing "updates an existing client with new metadata"
     (let [client-store (store/create-client-store)
           registered   (proto/register-client client-store
-                                              {:redirect-uris              ["https://app.example.com/cb"]
+                                              {:client-type                "public"
+                                               :redirect-uris              ["https://app.example.com/cb"]
                                                :grant-types                ["authorization_code"]
                                                :response-types             ["code"]
                                                :scopes                     ["openid"]
@@ -30,7 +31,8 @@
   (testing "preserves fields not included in the update"
     (let [client-store (store/create-client-store)
           registered   (proto/register-client client-store
-                                              {:redirect-uris              ["https://app.example.com/cb"]
+                                              {:client-type                "public"
+                                               :redirect-uris              ["https://app.example.com/cb"]
                                                :grant-types                ["authorization_code"]
                                                :response-types             ["code"]
                                                :scopes                     ["openid"]

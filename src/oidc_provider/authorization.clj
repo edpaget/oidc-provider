@@ -87,7 +87,7 @@
 
 (defn- validate-public-client-pkce
   [client params]
-  (when (and (not (:client-secret client))
+  (when (and (= (:client-type client) "public")
              (not (:code_challenge params)))
     (throw (ex-info "Public clients must use PKCE"
                     {:error "invalid_request"}))))

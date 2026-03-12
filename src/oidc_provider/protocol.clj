@@ -26,6 +26,7 @@
   "Malli schema for OAuth2/OIDC client configuration."
   [:map
    [:client-id :string]
+   [:client-type [:enum "confidential" "public"]]
    [:client-secret {:optional true} :string]
    [:client-secret-hash {:optional true} :string]
    [:redirect-uris [:vector :string]]

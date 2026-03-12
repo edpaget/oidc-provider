@@ -8,11 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Explicit `:client-type` field (`"confidential"` / `"public"`) on client model, derived from `token_endpoint_auth_method` during registration
 - PKCE support (RFC 7636): code challenge parsing, verifier verification, discovery metadata, and public client enforcement
 - Resource indicator support (RFC 8707): authorization parameter handling, token binding, and discovery metadata
 - Dynamic client registration (RFC 7591/7592): metadata validation, client read endpoint, client update, Ring handler, and discovery advertisement
 - Protected resource metadata endpoint (RFC 9728)
 - PBKDF2 client secret hashing
+
+### Changed
+- PKCE enforcement now checks `:client-type` instead of probing for `:client-secret`, fixing false-positive public detection when secrets are hashed
+- Token endpoint rejects confidential clients with no stored credentials
 
 ### Fixed
 - Only issue `id_token` when `openid` scope is present

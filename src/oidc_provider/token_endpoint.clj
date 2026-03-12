@@ -64,6 +64,10 @@
     (let [client (proto/get-client client-store client-id)]
       (when-not client
         (throw (ex-info "Unknown client" {:client-id client-id})))
+      (when (and (= (:client-type client) "confidential")
+                 (not (:client-secret-hash client))
+                 (not (:client-secret client)))
+        (throw (ex-info "Confidential client has no stored credentials" {:client-id client-id})))
       (cond
         (:client-secret-hash client)
         (when-not (util/verify-client-secret (or client-secret "") (:client-secret-hash client))

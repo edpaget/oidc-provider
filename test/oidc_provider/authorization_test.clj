@@ -10,6 +10,7 @@
   (testing "parses valid authorization request"
     (let [client-store (store/create-client-store
                         [{:client-id      "test-client"
+                          :client-type    "confidential"
                           :client-secret  "secret"
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
@@ -26,6 +27,7 @@
   (testing "throws on invalid redirect_uri"
     (let [client-store (store/create-client-store
                         [{:client-id      "test-client"
+                          :client-type    "confidential"
                           :client-secret  "secret"
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
@@ -99,6 +101,7 @@
   (testing "valid request with code_challenge and code_challenge_method=S256"
     (let [client-store (store/create-client-store
                         [{:client-id      "test-client"
+                          :client-type    "public"
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
                           :scopes         ["openid"]}])
@@ -111,6 +114,7 @@
   (testing "code_challenge without code_challenge_method defaults to S256"
     (let [client-store (store/create-client-store
                         [{:client-id      "test-client"
+                          :client-type    "public"
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
                           :scopes         ["openid"]}])
@@ -122,6 +126,7 @@
   (testing "code_challenge_method=plain is rejected"
     (let [client-store (store/create-client-store
                         [{:client-id      "test-client"
+                          :client-type    "public"
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
                           :scopes         ["openid"]}])
@@ -151,6 +156,7 @@
   (testing "public client without code_challenge is rejected"
     (let [client-store (store/create-client-store
                         [{:client-id      "public-client"
+                          :client-type    "public"
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
                           :scopes         ["openid"]}])
@@ -162,6 +168,7 @@
   (testing "public client with code_challenge succeeds"
     (let [client-store (store/create-client-store
                         [{:client-id      "public-client"
+                          :client-type    "public"
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
                           :scopes         ["openid"]}])
@@ -174,6 +181,7 @@
   (testing "confidential client without code_challenge succeeds"
     (let [client-store (store/create-client-store
                         [{:client-id      "conf-client"
+                          :client-type    "confidential"
                           :client-secret  "secret123"
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
@@ -182,10 +190,24 @@
           request      (authz/parse-authorization-request query-string client-store)]
       (is (= "conf-client" (:client_id request))))))
 
+(deftest confidential-client-hashed-secret-no-pkce-test
+  (testing "confidential client with hashed secret (no plaintext) does not require PKCE"
+    (let [client-store (store/create-client-store
+                        [{:client-id          "hashed-conf"
+                          :client-type        "confidential"
+                          :client-secret-hash "pbkdf2:sha256:some-hash"
+                          :redirect-uris      ["https://app.example.com/callback"]
+                          :response-types     ["code"]
+                          :scopes             ["openid"]}])
+          query-string "response_type=code&client_id=hashed-conf&redirect_uri=https://app.example.com/callback&scope=openid"
+          request      (authz/parse-authorization-request query-string client-store)]
+      (is (= "hashed-conf" (:client_id request))))))
+
 (deftest parse-authorization-request-with-resource-test
   (testing "single resource param is parsed as vector"
     (let [client-store (store/create-client-store
                         [{:client-id      "test-client"
+                          :client-type    "confidential"
                           :client-secret  "secret"
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
@@ -198,6 +220,7 @@
   (testing "multiple resource params are all collected"
     (let [client-store (store/create-client-store
                         [{:client-id      "test-client"
+                          :client-type    "confidential"
                           :client-secret  "secret"
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
@@ -210,6 +233,7 @@
   (testing "relative URI resource is rejected with invalid_target"
     (let [client-store (store/create-client-store
                         [{:client-id      "test-client"
+                          :client-type    "confidential"
                           :client-secret  "secret"
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
@@ -222,6 +246,7 @@
   (testing "URI with fragment resource is rejected with invalid_target"
     (let [client-store (store/create-client-store
                         [{:client-id      "test-client"
+                          :client-type    "confidential"
                           :client-secret  "secret"
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]

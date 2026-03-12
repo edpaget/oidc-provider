@@ -161,6 +161,38 @@
                             "logo_uri"      "not-a-uri"}
                            (store/create-client-store))))))
 
+(deftest register-public-client-type-test
+  (testing "auth method none sets client-type to public in store"
+    (let [client-store (store/create-client-store)
+          response     (reg/handle-registration-request
+                        {"redirect_uris" ["https://app.example.com/callback"]}
+                        client-store)
+          client-id    (get response "client_id")
+          stored       (proto/get-client client-store client-id)]
+      (is (= "public" (:client-type stored))))))
+
+(deftest register-confidential-client-type-test
+  (testing "auth method client_secret_basic sets client-type to confidential in store"
+    (let [client-store (store/create-client-store)
+          response     (reg/handle-registration-request
+                        {"redirect_uris"              ["https://app.example.com/callback"]
+                         "token_endpoint_auth_method" "client_secret_basic"}
+                        client-store)
+          client-id    (get response "client_id")
+          stored       (proto/get-client client-store client-id)]
+      (is (= "confidential" (:client-type stored))))))
+
+(deftest register-confidential-client-type-post-test
+  (testing "auth method client_secret_post sets client-type to confidential in store"
+    (let [client-store (store/create-client-store)
+          response     (reg/handle-registration-request
+                        {"redirect_uris"              ["https://app.example.com/callback"]
+                         "token_endpoint_auth_method" "client_secret_post"}
+                        client-store)
+          client-id    (get response "client_id")
+          stored       (proto/get-client client-store client-id)]
+      (is (= "confidential" (:client-type stored))))))
+
 (deftest client-read-success-test
   (testing "reads back client configuration with valid token"
     (let [client-store (store/create-client-store)
