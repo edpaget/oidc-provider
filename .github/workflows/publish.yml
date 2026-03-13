@@ -5,13 +5,10 @@ on:
     workflows: [CI]
     branches: [main]
     types: [completed]
-  push:
-    tags:
-      - 'v*'
 
 jobs:
   publish-snapshot:
-    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -57,37 +54,3 @@ jobs:
           CLOJARS_URL: https://maven.pkg.github.com/${{ github.repository }}
           CLOJARS_USERNAME: ${{ github.actor }}
           CLOJARS_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-
-  publish-release:
-    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: DeLaGuardo/setup-clojure@13.5
-        with:
-          cli: latest
-
-      - uses: actions/cache@v5
-        with:
-          path: |
-            ~/.m2/repository
-            ~/.gitlibs
-            ~/.deps.clj
-          key: deps-${{ hashFiles('deps.edn') }}
-          restore-keys: deps-
-
-      - name: Read version
-        id: version
-        run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
-
-      - name: Build JAR
-        run: clojure -T:build jar
-
-      - name: Deploy to Clojars
-        run: clojure -X:deploy :artifact '"target/oidc-provider-${{ steps.version.outputs.version }}.jar"' :pom-file '"target/classes/META-INF/maven/net.carcdr/oidc-provider/pom.xml"'
-        env:
-          CLOJARS_USERNAME: ${{ secrets.CLOJARS_USERNAME }}
-          CLOJARS_PASSWORD: ${{ secrets.CLOJARS_PASSWORD }}
