@@ -32,6 +32,7 @@
    [:claims-provider {:optional true} [:fn #(satisfies? proto/ClaimsProvider %)]]
    [:registration-endpoint {:optional true} :string]
    [:refresh-token-ttl-seconds {:optional true} pos-int?]
+   [:rotate-refresh-tokens {:optional true} :boolean]
    [:clock {:optional true} [:fn (fn [c] (instance? java.time.Clock c))]]])
 
 (defrecord Provider [config
@@ -60,6 +61,7 @@
            id-token-ttl-seconds
            authorization-code-ttl-seconds
            refresh-token-ttl-seconds
+           rotate-refresh-tokens
            clock
            client-store
            code-store
@@ -72,6 +74,7 @@
                                  :access-token-ttl-seconds       (or access-token-ttl-seconds 3600)
                                  :id-token-ttl-seconds           (or id-token-ttl-seconds 3600)
                                  :authorization-code-ttl-seconds (or authorization-code-ttl-seconds 600)
+                                 :rotate-refresh-tokens          (if (some? rotate-refresh-tokens) rotate-refresh-tokens true)
                                  :clock                          (or clock (Clock/systemUTC))}
                           refresh-token-ttl-seconds (assoc :refresh-token-ttl-seconds refresh-token-ttl-seconds))]
     (->Provider config

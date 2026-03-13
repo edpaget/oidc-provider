@@ -25,6 +25,7 @@
    [:id-token-ttl-seconds {:optional true} pos-int?]
    [:authorization-code-ttl-seconds {:optional true} pos-int?]
    [:refresh-token-ttl-seconds {:optional true} pos-int?]
+   [:rotate-refresh-tokens {:optional true} :boolean]
    [:clock [:fn (fn [c] (instance? Clock c))]]])
 
 (defn generate-rsa-key

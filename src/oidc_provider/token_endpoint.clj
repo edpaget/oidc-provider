@@ -205,16 +205,25 @@
                         {:error     "invalid_target"
                          :original  original-resource
                          :requested resource})))
-      (let [access-token (token/generate-access-token)
-            ttl          (or (:access-token-ttl-seconds provider-config) 3600)
-            now          (.millis ^java.time.Clock (:clock provider-config))
-            expiry       (+ now (* 1000 ttl))]
+      (let [access-token   (token/generate-access-token)
+            ttl            (or (:access-token-ttl-seconds provider-config) 3600)
+            now            (.millis ^java.time.Clock (:clock provider-config))
+            expiry         (+ now (* 1000 ttl))
+            rotate?        (:rotate-refresh-tokens provider-config)
+            new-refresh    (when rotate? (token/generate-refresh-token))
+            refresh-ttl    (:refresh-token-ttl-seconds provider-config)
+            refresh-expiry (when refresh-ttl (+ now (* 1000 refresh-ttl)))]
         (proto/save-access-token token-store access-token (:user-id token-data)
                                  (:client-id client) final-scope expiry final-resource)
+        (when rotate?
+          (proto/revoke-token token-store refresh_token)
+          (proto/save-refresh-token token-store new-refresh (:user-id token-data)
+                                    (:client-id client) final-scope refresh-expiry final-resource))
         (cond-> {:access_token access-token
                  :token_type   "Bearer"
                  :expires_in   ttl
                  :scope        (str/join " " final-scope)}
+          new-refresh    (assoc :refresh_token new-refresh)
           final-resource (assoc :resource final-resource))))))
 
 (defn handle-client-credentials-grant

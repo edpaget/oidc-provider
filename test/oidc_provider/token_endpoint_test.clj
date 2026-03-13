@@ -248,7 +248,7 @@
                              claims-provider))))))
 
 (deftest handle-refresh-token-grant-test
-  (testing "refreshes access token with correct stored metadata"
+  (testing "refreshes access token with correct stored metadata and rotates refresh token"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
                              :client-type    "confidential"
@@ -261,6 +261,7 @@
           provider-config {:issuer                   "https://test.example.com"
                            :signing-key              (token/generate-rsa-key)
                            :access-token-ttl-seconds 3600
+                           :rotate-refresh-tokens    true
                            :clock                    (Clock/systemUTC)}
           refresh-token   (token/generate-refresh-token)]
       (proto/save-refresh-token token-store refresh-token "user-123" "test-client" ["openid" "profile"] nil nil)
@@ -272,6 +273,7 @@
             token-data (proto/get-access-token token-store (:access_token response))]
         (is (= {:token_type "Bearer" :expires_in 3600 :scope "openid profile"}
                (select-keys response [:token_type :expires_in :scope])))
+        (is (string? (:refresh_token response)))
         (is (= "user-123" (:user-id token-data)))
         (is (= "test-client" (:client-id token-data)))))))
 
@@ -586,6 +588,7 @@
           provider-config {:issuer                   "https://test.example.com"
                            :signing-key              (token/generate-rsa-key)
                            :access-token-ttl-seconds 3600
+                           :rotate-refresh-tokens    true
                            :clock                    (Clock/systemUTC)}
           refresh-token   (token/generate-refresh-token)]
       (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
@@ -599,7 +602,8 @@
                          token-store)
             access-data (proto/get-access-token token-store (:access_token response))]
         (is (= ["https://api.example.com"] (:resource response)))
-        (is (= ["https://api.example.com"] (:resource access-data)))))))
+        (is (= ["https://api.example.com"] (:resource access-data)))
+        (is (string? (:refresh_token response)))))))
 
 (deftest refresh-token-grant-rejects-expanded-resource-test
   (testing "requesting a resource not in original set throws invalid_target"
@@ -642,6 +646,7 @@
           provider-config {:issuer                   "https://test.example.com"
                            :signing-key              (token/generate-rsa-key)
                            :access-token-ttl-seconds 3600
+                           :rotate-refresh-tokens    true
                            :clock                    (Clock/systemUTC)}
           refresh-token   (token/generate-refresh-token)]
       (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
@@ -654,7 +659,8 @@
                          token-store)
             access-data (proto/get-access-token token-store (:access_token response))]
         (is (= ["https://api.example.com"] (:resource response)))
-        (is (= ["https://api.example.com"] (:resource access-data)))))))
+        (is (= ["https://api.example.com"] (:resource access-data)))
+        (is (string? (:refresh_token response)))))))
 
 (deftest client-credentials-grant-with-resource-test
   (testing "resource is stored and returned in response"
@@ -836,6 +842,7 @@
           provider-config {:issuer                   "https://test.example.com"
                            :signing-key              (token/generate-rsa-key)
                            :access-token-ttl-seconds 3600
+                           :rotate-refresh-tokens    true
                            :clock                    (Clock/systemUTC)}
           refresh-token   (token/generate-refresh-token)
           future-expiry   (.millis future-clock)]
@@ -847,4 +854,94 @@
                       provider-config
                       token-store)]
         (is (= "Bearer" (:token_type response)))
-        (is (= "openid profile" (:scope response)))))))
+        (is (= "openid profile" (:scope response)))
+        (is (string? (:refresh_token response)))))))
+
+(deftest refresh-token-rotation-revokes-old-token-test
+  (testing "old refresh token is revoked and new one has correct metadata"
+    (let [client-store    (store/create-client-store
+                           [{:client-id      "test-client"
+                             :client-secret  "secret123"
+                             :redirect-uris  ["https://app.example.com/callback"]
+                             :grant-types    ["refresh_token"]
+                             :response-types ["code"]
+                             :scopes         ["openid" "profile"]}])
+          token-store     (store/create-token-store)
+          provider-config {:issuer                   "https://test.example.com"
+                           :signing-key              (token/generate-rsa-key)
+                           :access-token-ttl-seconds 3600
+                           :rotate-refresh-tokens    true
+                           :clock                    (Clock/systemUTC)}
+          old-refresh     (token/generate-refresh-token)]
+      (proto/save-refresh-token token-store old-refresh "user-123" "test-client"
+                                ["openid" "profile"] nil nil)
+      (let [response    (token-ep/handle-refresh-token-grant
+                         {:refresh_token old-refresh}
+                         (proto/get-client client-store "test-client")
+                         provider-config
+                         token-store)
+            new-refresh (:refresh_token response)
+            old-data    (proto/get-refresh-token token-store old-refresh)
+            new-data    (proto/get-refresh-token token-store new-refresh)]
+        (is (nil? old-data))
+        (is (= "user-123" (:user-id new-data)))
+        (is (= "test-client" (:client-id new-data)))
+        (is (= ["openid" "profile"] (:scope new-data)))))))
+
+(deftest refresh-token-rotation-disabled-test
+  (testing "with rotation disabled, no new refresh token is issued and old remains valid"
+    (let [client-store    (store/create-client-store
+                           [{:client-id      "test-client"
+                             :client-secret  "secret123"
+                             :redirect-uris  ["https://app.example.com/callback"]
+                             :grant-types    ["refresh_token"]
+                             :response-types ["code"]
+                             :scopes         ["openid"]}])
+          token-store     (store/create-token-store)
+          provider-config {:issuer                   "https://test.example.com"
+                           :signing-key              (token/generate-rsa-key)
+                           :access-token-ttl-seconds 3600
+                           :rotate-refresh-tokens    false
+                           :clock                    (Clock/systemUTC)}
+          refresh-token   (token/generate-refresh-token)]
+      (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
+                                ["openid"] nil nil)
+      (let [response (token-ep/handle-refresh-token-grant
+                      {:refresh_token refresh-token}
+                      (proto/get-client client-store "test-client")
+                      provider-config
+                      token-store)
+            old-data (proto/get-refresh-token token-store refresh-token)]
+        (is (nil? (:refresh_token response)))
+        (is (= "user-123" (:user-id old-data)))))))
+
+(deftest refresh-token-rotation-preserves-expiry-test
+  (testing "rotated token gets a fresh expiry based on TTL, not the old expiry"
+    (let [now-instant     (Instant/parse "2026-01-01T00:00:00Z")
+          fixed-clock     (Clock/fixed now-instant ZoneOffset/UTC)
+          client-store    (store/create-client-store
+                           [{:client-id      "test-client"
+                             :client-secret  "secret123"
+                             :redirect-uris  ["https://app.example.com/callback"]
+                             :grant-types    ["refresh_token"]
+                             :response-types ["code"]
+                             :scopes         ["openid"]}])
+          token-store     (store/create-token-store)
+          provider-config {:issuer                    "https://test.example.com"
+                           :signing-key               (token/generate-rsa-key)
+                           :access-token-ttl-seconds  3600
+                           :refresh-token-ttl-seconds 86400
+                           :rotate-refresh-tokens     true
+                           :clock                     fixed-clock}
+          old-refresh     (token/generate-refresh-token)
+          old-expiry      (+ (.millis fixed-clock) (* 1000 1800))]
+      (proto/save-refresh-token token-store old-refresh "user-123" "test-client"
+                                ["openid"] old-expiry nil)
+      (let [response (token-ep/handle-refresh-token-grant
+                      {:refresh_token old-refresh}
+                      (proto/get-client client-store "test-client")
+                      provider-config
+                      token-store)
+            new-data (proto/get-refresh-token token-store (:refresh_token response))
+            expected (+ (.millis fixed-clock) (* 1000 86400))]
+        (is (= expected (:expiry new-data)))))))
