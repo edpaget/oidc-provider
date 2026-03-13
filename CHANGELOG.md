@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Protected resource metadata endpoint (RFC 9728)
 - PBKDF2 client secret hashing
 
+### Security
+- Client secrets generated during dynamic registration are now stored as PBKDF2 hashes; plaintext is returned only in the registration response
+
 ### Changed
 - Token endpoint no longer accepts a raw POST body string; `resource` parameters (RFC 8707) should be passed in the params map as a string or vector, as produced by Ring's `wrap-params` middleware
 - PKCE enforcement now checks `:client-type` instead of probing for `:client-secret`, fixing false-positive public detection when secrets are hashed

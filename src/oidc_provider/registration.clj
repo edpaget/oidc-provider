@@ -139,7 +139,7 @@
              :scopes                     scopes
              :token-endpoint-auth-method auth-method
              :registration-access-token  (token/generate-access-token)}
-      (not= auth-method "none") (assoc :client-secret (util/generate-client-secret))
+
       (get request "client_name") (assoc :client-name (get request "client_name"))
       (get request "client_uri") (assoc :client-uri (get request "client_uri"))
       (get request "logo_uri") (assoc :logo-uri (get request "logo_uri"))
@@ -154,7 +154,6 @@
            "grant_types"                (:grant-types client)
            "response_types"             (:response-types client)
            "token_endpoint_auth_method" (:token-endpoint-auth-method client)}
-    (:client-secret client) (assoc "client_secret" (:client-secret client))
     (:client-name client)   (assoc "client_name" (:client-name client))
     (seq (:scopes client))  (assoc "scope" (str/join " " (:scopes client)))
     (:client-uri client)    (assoc "client_uri" (:client-uri client))
@@ -174,12 +173,14 @@
   (when-not (m/validate RegistrationRequest request)
     (throw (ex-info "invalid_client_metadata"
                     {:errors (m/explain RegistrationRequest request)})))
-  (-> request
-      apply-defaults
-      validate-request
-      request->client-config
-      (->> (proto/register-client client-store))
-      client-config->response))
+  (let [config   (-> request apply-defaults validate-request request->client-config)
+        secret   (when (not= (:token-endpoint-auth-method config) "none")
+                   (util/generate-client-secret))
+        to-store (cond-> config
+                   secret (assoc :client-secret-hash (util/hash-client-secret secret)))
+        stored   (proto/register-client client-store to-store)]
+    (cond-> (client-config->response stored)
+      secret (assoc "client_secret" secret))))
 
 (defn handle-client-read
   "Handles RFC 7592 client read requests.

@@ -3,7 +3,8 @@
    [clojure.test :refer [deftest is testing]]
    [oidc-provider.protocol :as proto]
    [oidc-provider.registration :as reg]
-   [oidc-provider.store :as store]))
+   [oidc-provider.store :as store]
+   [oidc-provider.util :as util]))
 
 (deftest register-minimal-client-test
   (testing "applies RFC 7591 defaults for a minimal registration request"
@@ -27,7 +28,7 @@
       (is (= client-id (:client-id stored))))))
 
 (deftest register-confidential-client-test
-  (testing "client_secret_basic auth method generates a secret"
+  (testing "client_secret_basic auth method generates a secret and stores its hash"
     (let [client-store (store/create-client-store)
           response     (reg/handle-registration-request
                         {"redirect_uris"              ["https://app.example.com/callback"]
@@ -35,7 +36,9 @@
                         client-store)
           client-id    (get response "client_id")
           stored       (proto/get-client client-store client-id)]
-      (is (= (get response "client_secret") (:client-secret stored))))))
+      (is (string? (get response "client_secret")))
+      (is (nil? (:client-secret stored)))
+      (is (util/verify-client-secret (get response "client_secret") (:client-secret-hash stored))))))
 
 (deftest registration-access-token-test
   (testing "response includes registration_access_token matching stored value"
@@ -205,7 +208,7 @@
           token        (get reg-response "registration_access_token")
           read-result  (reg/handle-client-read client-store client-id token)]
       (is (= 200 (:status read-result)))
-      (is (= reg-response (:body read-result))))))
+      (is (= (dissoc reg-response "client_secret") (:body read-result))))))
 
 (deftest client-read-invalid-token-test
   (testing "returns 401 when token does not match"
