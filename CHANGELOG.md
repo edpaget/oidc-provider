@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-03-13
+
 ### Added
 - Multiple signing key support via `:signing-keys` configuration for graceful JWKS key rotation
 - Refresh token rotation on every refresh grant (configurable via `:rotate-refresh-tokens`, defaults to `true`)
