@@ -40,7 +40,7 @@ jobs:
         run: clojure -T:build jar
 
       - name: Deploy to GitHub Packages
-        run: clojure -X:deploy :artifact '"target/oidc-provider-${{ steps.version.outputs.version }}.jar"' :repository '{"id" "github" "url" "https://maven.pkg.github.com/${{ github.repository }}"}'
+        run: clojure -X:deploy :artifact '"target/oidc-provider-${{ steps.version.outputs.version }}.jar"' :pom-file '"target/classes/META-INF/maven/net.carcdr/oidc-provider/pom.xml"' :repository '{"id" "github" "url" "https://maven.pkg.github.com/${{ github.repository }}"}'
         env:
           CLOJARS_USERNAME: ${{ github.actor }}
           CLOJARS_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
@@ -74,7 +74,7 @@ jobs:
         run: clojure -T:build jar
 
       - name: Deploy to Clojars
-        run: clojure -X:deploy :artifact '"target/oidc-provider-${{ steps.version.outputs.version }}.jar"'
+        run: clojure -X:deploy :artifact '"target/oidc-provider-${{ steps.version.outputs.version }}.jar"' :pom-file '"target/classes/META-INF/maven/net.carcdr/oidc-provider/pom.xml"'
         env:
           CLOJARS_USERNAME: ${{ secrets.CLOJARS_USERNAME }}
           CLOJARS_PASSWORD: ${{ secrets.CLOJARS_PASSWORD }}
