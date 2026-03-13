@@ -43,16 +43,23 @@ jobs:
           DATE=$(date +%Y-%m-%d)
           sed -i "s/^## \[Unreleased\]/## [Unreleased]\n\n## [${{ inputs.version }}] - $DATE/" CHANGELOG.md
 
-      - name: Create release branch and PR
+      - name: Create release branch
         run: |
           BRANCH="release/v${{ inputs.version }}"
           git checkout -b "$BRANCH"
           git add VERSION CHANGELOG.md
           git commit -m "release: v${{ inputs.version }}"
           git push origin "$BRANCH"
+
+      - name: Create PR
+        run: |
           gh pr create \
             --title "release: v${{ inputs.version }}" \
             --body "Automated release PR for v${{ inputs.version }}." \
             --label "release"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clean up branch on failure
+        if: failure()
+        run: git push origin --delete "release/v${{ inputs.version }}" || true
