@@ -24,7 +24,7 @@
    [:client_secret {:optional true} :string]
    [:scope {:optional true} :string]
    [:code_verifier {:optional true} :string]
-   [:resource {:optional true} :string]])
+   [:resource {:optional true} [:or :string [:vector :string]]]])
 
 (def TokenResponse
   "Malli schema for token response."
@@ -37,13 +37,17 @@
    [:scope {:optional true} :string]
    [:resource {:optional true} [:vector :string]]])
 
-(defn- extract-resource-params
-  [raw-body]
-  (when raw-body
-    (->> (str/split raw-body #"&")
-         (filter #(str/starts-with? % "resource="))
-         (mapv #(java.net.URLDecoder/decode (subs % 9) "UTF-8"))
-         not-empty)))
+(defn- normalize-resource
+  "Normalizes the `resource` parameter to a vector of strings.
+
+  Ring's `wrap-params` middleware yields a single string for one value and a
+  vector for repeated values. This function coerces either form into a
+  consistent vector, returning `nil` when no resource is present."
+  [resource]
+  (cond
+    (vector? resource) (not-empty resource)
+    (string? resource) [resource]
+    :else              nil))
 
 (defn- parse-basic-auth
   [authorization-header]
@@ -244,16 +248,19 @@
 (defn handle-token-request
   "Handles token endpoint requests.
 
-  Takes the parsed `params` map, the `raw-body` string from the POST body (used to
-  extract multi-value `resource` parameters per RFC 8707), the `authorization-header`
-  for client authentication, and the usual provider stores. Validates the request,
-  authenticates the client, and dispatches to the appropriate grant handler. Returns
-  a token response map. Throws `ex-info` on validation or processing errors."
-  [params raw-body authorization-header provider-config client-store code-store token-store claims-provider]
+  Takes the parsed `params` map (as produced by Ring's `wrap-params` and
+  `wrap-keyword-params` middleware), the `authorization-header` for client
+  authentication, and the usual provider stores. Multi-value `resource`
+  parameters (RFC 8707) should already be present in `params` as a string or
+  vector — Ring's `wrap-params` handles this automatically for repeated form
+  fields. Validates the request, authenticates the client, and dispatches to
+  the appropriate grant handler. Returns a token response map. Throws `ex-info`
+  on validation or processing errors."
+  [params authorization-header provider-config client-store code-store token-store claims-provider]
   (when-not (m/validate TokenRequest params)
     (throw (ex-info "Invalid token request"
                     {:errors (m/explain TokenRequest params)})))
-  (let [resources (extract-resource-params raw-body)
+  (let [resources (normalize-resource (:resource params))
         _         (when resources (proto/validate-resource-indicators resources))
         params    (cond-> params resources (assoc :resource resources))
         client    (authenticate-client params authorization-header client-store)

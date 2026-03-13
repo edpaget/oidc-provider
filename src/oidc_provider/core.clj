@@ -144,16 +144,18 @@
 (defn token-request
   "Handles token endpoint request.
 
-   Takes a Provider instance, token request parameters from the form body, an optional
-   raw POST body string (for multi-value `resource` extraction per RFC 8707), and an
-   optional Authorization header value for client authentication. Validates the
-   request, exchanges the authorization code for tokens, and generates access tokens
-   and ID tokens. Returns the token response map containing tokens and metadata.
-   Throws ex-info on validation or processing errors."
-  [provider params raw-body authorization-header]
+   Takes a Provider instance, token request parameters from the form body (as
+   produced by Ring's `wrap-params` / `wrap-keyword-params` middleware), and an
+   optional Authorization header value for client authentication. Multi-value
+   `resource` parameters (RFC 8707) should already be present in `params` —
+   Ring's `wrap-params` automatically yields a vector for repeated form fields.
+   Validates the request, exchanges the authorization code for tokens, and
+   generates access tokens and ID tokens. Returns the token response map
+   containing tokens and metadata. Throws ex-info on validation or processing
+   errors."
+  [provider params authorization-header]
   (token-ep/handle-token-request
    params
-   raw-body
    authorization-header
    (:provider-config provider)
    (:client-store provider)

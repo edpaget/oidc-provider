@@ -38,7 +38,7 @@
                               :client_id     "test-client"
                               :client_secret "wrong-secret"
                               :code          "some-code"}
-                             nil nil
+                             nil
                              provider-config
                              client-store
                              code-store
@@ -66,7 +66,7 @@
                              {:grant_type "authorization_code"
                               :client_id  "test-client"
                               :code       "some-code"}
-                             nil nil
+                             nil
                              provider-config
                              client-store
                              code-store
@@ -659,8 +659,8 @@
       (is (= ["https://api.example.com"] (:resource response)))
       (is (= ["https://api.example.com"] (:resource access-data))))))
 
-(deftest handle-token-request-extracts-multi-value-resource-test
-  (testing "raw body with multiple resource= params produces a vector"
+(deftest handle-token-request-multi-value-resource-test
+  (testing "vector resource param produces a vector in the response"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
                              :client-type    "confidential"
@@ -675,13 +675,12 @@
           provider-config {:issuer                   "https://test.example.com"
                            :signing-key              (token/generate-rsa-key)
                            :access-token-ttl-seconds 3600}
-          raw-body        "grant_type=client_credentials&scope=api%3Aread&resource=https%3A%2F%2Fapi.example.com&resource=https%3A%2F%2Fdata.example.com"
           response        (token-ep/handle-token-request
                            {:grant_type    "client_credentials"
                             :client_id     "test-client"
                             :client_secret "secret123"
-                            :scope         "api:read"}
-                           raw-body
+                            :scope         "api:read"
+                            :resource      ["https://api.example.com" "https://data.example.com"]}
                            nil
                            provider-config
                            client-store
@@ -715,7 +714,7 @@
                             :client_id     "hashed-client"
                             :client_secret secret
                             :scope         "api:read"}
-                           nil nil
+                           nil
                            provider-config client-store code-store token-store claims-provider)]
       (is (= "Bearer" (:token_type response)))
       (is (= "api:read" (:scope response))))))
@@ -743,7 +742,7 @@
                               :client_id     "hashed-client"
                               :client_secret "wrong-secret"
                               :scope         "api:read"}
-                             nil nil
+                             nil
                              provider-config client-store code-store token-store claims-provider))))))
 
 (deftest confidential-client-no-credentials-test
@@ -767,5 +766,5 @@
                               :client_id     "misconfigured"
                               :client_secret "any-secret"
                               :scope         "api:read"}
-                             nil nil
+                             nil
                              provider-config client-store code-store token-store claims-provider))))))
