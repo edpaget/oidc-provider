@@ -1,0 +1,68 @@
+name: Tag Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  tag:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Read version
+        id: version
+        run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Push tag
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          git tag "$TAG"
+          git push origin "$TAG"
+
+  snapshot:
+    needs: tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Compute next snapshot version
+        id: next
+        run: |
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+          NEXT_PATCH=$((PATCH + 1))
+          echo "snapshot=${MAJOR}.${MINOR}.${NEXT_PATCH}-SNAPSHOT" >> "$GITHUB_OUTPUT"
+
+      - name: Create snapshot PR
+        run: |
+          BRANCH="chore/snapshot-${{ steps.next.outputs.snapshot }}"
+          git checkout -b "$BRANCH"
+          echo "${{ steps.next.outputs.snapshot }}" > VERSION
+          git add VERSION
+          git commit -m "chore: prepare ${{ steps.next.outputs.snapshot }} for next development cycle"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "chore: prepare ${{ steps.next.outputs.snapshot }}" \
+            --body "Automated snapshot version bump after release." \
+            --label "chore"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

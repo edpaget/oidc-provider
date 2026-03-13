@@ -10,14 +10,13 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure git
         run: |
@@ -44,32 +43,16 @@ jobs:
           DATE=$(date +%Y-%m-%d)
           sed -i "s/^## \[Unreleased\]/## [Unreleased]\n\n## [${{ inputs.version }}] - $DATE/" CHANGELOG.md
 
-      - name: Commit and tag release
+      - name: Create release branch and PR
         run: |
+          BRANCH="release/v${{ inputs.version }}"
+          git checkout -b "$BRANCH"
           git add VERSION CHANGELOG.md
           git commit -m "release: v${{ inputs.version }}"
-          git tag "v${{ inputs.version }}"
-
-      - name: Push release commit and tag
-        run: git push origin HEAD "v${{ inputs.version }}"
-
-      - name: Compute next snapshot version
-        id: next
-        run: |
-          VERSION="${{ inputs.version }}"
-          MAJOR=$(echo "$VERSION" | cut -d. -f1)
-          MINOR=$(echo "$VERSION" | cut -d. -f2)
-          PATCH=$(echo "$VERSION" | cut -d. -f3)
-          NEXT_PATCH=$((PATCH + 1))
-          echo "snapshot=${MAJOR}.${MINOR}.${NEXT_PATCH}-SNAPSHOT" >> "$GITHUB_OUTPUT"
-
-      - name: Update VERSION to next snapshot
-        run: echo "${{ steps.next.outputs.snapshot }}" > VERSION
-
-      - name: Commit snapshot version
-        run: |
-          git add VERSION
-          git commit -m "chore: prepare ${{ steps.next.outputs.snapshot }} for next development cycle"
-
-      - name: Push snapshot commit
-        run: git push origin HEAD
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "release: v${{ inputs.version }}" \
+            --body "Automated release PR for v${{ inputs.version }}." \
+            --label "release"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
