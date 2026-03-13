@@ -31,8 +31,40 @@ jobs:
           git tag "$TAG"
           git push origin "$TAG"
 
-  snapshot:
+  publish-release:
     needs: tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeLaGuardo/setup-clojure@13.5
+        with:
+          cli: latest
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+            ~/.deps.clj
+          key: deps-${{ hashFiles('deps.edn') }}
+          restore-keys: deps-
+
+      - name: Read version
+        id: version
+        run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Build JAR
+        run: clojure -T:build jar
+
+      - name: Deploy to Clojars
+        run: clojure -X:deploy :artifact '"target/oidc-provider-${{ steps.version.outputs.version }}.jar"' :pom-file '"target/classes/META-INF/maven/net.carcdr/oidc-provider/pom.xml"'
+        env:
+          CLOJARS_USERNAME: ${{ secrets.CLOJARS_USERNAME }}
+          CLOJARS_PASSWORD: ${{ secrets.CLOJARS_PASSWORD }}
+
+  snapshot:
+    needs: publish-release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
