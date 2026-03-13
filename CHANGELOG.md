@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Multiple signing key support via `:signing-keys` configuration for graceful JWKS key rotation
 - Refresh token rotation on every refresh grant (configurable via `:rotate-refresh-tokens`, defaults to `true`)
 - Explicit `:client-type` field (`"confidential"` / `"public"`) on client model, derived from `token_endpoint_auth_method` during registration
 - Configurable refresh token TTL via `:refresh-token-ttl-seconds` provider config option

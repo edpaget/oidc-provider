@@ -7,8 +7,18 @@
    [oidc-provider.token-endpoint :as token-ep]
    [oidc-provider.util :as util])
   (:import
+   [com.nimbusds.jose.jwk RSAKey]
    [com.nimbusds.oauth2.sdk.pkce CodeChallenge CodeChallengeMethod CodeVerifier]
    [java.time Clock Instant ZoneOffset]))
+
+(defn- make-provider-config [overrides]
+  (let [key (token/generate-rsa-key)]
+    (merge {:issuer                   "https://test.example.com"
+            :key-set                  (token/normalize-to-jwk-set key)
+            :active-signing-key-id    (.getKeyID ^RSAKey key)
+            :access-token-ttl-seconds 3600
+            :clock                    (Clock/systemUTC)}
+           overrides)))
 
 (defrecord TestClaimsProvider []
   proto/ClaimsProvider
@@ -30,10 +40,7 @@
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}]
+          provider-config (make-provider-config {})]
       (is (thrown-with-msg? Exception #"Invalid client credentials"
                             (token-ep/handle-token-request
                              {:grant_type    "authorization_code"
@@ -60,10 +67,7 @@
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}]
+          provider-config (make-provider-config {})]
       (is (thrown-with-msg? Exception #"Invalid client credentials"
                             (token-ep/handle-token-request
                              {:grant_type "authorization_code"
@@ -89,11 +93,7 @@
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :id-token-ttl-seconds     3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {:id-token-ttl-seconds 3600})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "test-client"
@@ -129,10 +129,7 @@
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "test-client"
@@ -165,10 +162,7 @@
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (- (System/currentTimeMillis) 1000)]
       (proto/save-authorization-code code-store code "user-123" "test-client"
@@ -197,10 +191,7 @@
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "test-client"
@@ -228,10 +219,7 @@
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "test-client"
@@ -258,11 +246,7 @@
                              :response-types ["code"]
                              :scopes         ["openid" "profile"]}])
           token-store     (store/create-token-store)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :rotate-refresh-tokens    true
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {:rotate-refresh-tokens true})
           refresh-token   (token/generate-refresh-token)]
       (proto/save-refresh-token token-store refresh-token "user-123" "test-client" ["openid" "profile"] nil nil)
       (let [response   (token-ep/handle-refresh-token-grant
@@ -290,10 +274,7 @@
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "cc-only-client"
@@ -320,10 +301,7 @@
                              :response-types ["code"]
                              :scopes         ["openid"]}])
           token-store     (store/create-token-store)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {})
           refresh-token   (token/generate-refresh-token)]
       (proto/save-refresh-token token-store refresh-token "user-123" "authcode-only-client" ["openid"] nil nil)
       (is (thrown-with-msg? Exception #"Client not authorized for refresh_token"
@@ -344,10 +322,7 @@
                              :response-types []
                              :scopes         ["api:read" "api:write"]}])
           token-store     (store/create-token-store)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {})
           response        (token-ep/handle-client-credentials-grant
                            {:scope "api:read"}
                            (proto/get-client client-store "test-client")
@@ -375,11 +350,7 @@
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :id-token-ttl-seconds     3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {:id-token-ttl-seconds 3600})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "test-client"
@@ -415,10 +386,7 @@
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "test-client"
@@ -450,10 +418,7 @@
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "test-client"
@@ -482,10 +447,7 @@
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "test-client"
@@ -515,11 +477,7 @@
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :id-token-ttl-seconds     3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {:id-token-ttl-seconds 3600})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))
           resources       ["https://api.example.com" "https://data.example.com"]]
@@ -553,10 +511,7 @@
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "test-client"
@@ -585,11 +540,7 @@
                              :response-types ["code"]
                              :scopes         ["openid" "profile"]}])
           token-store     (store/create-token-store)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :rotate-refresh-tokens    true
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {:rotate-refresh-tokens true})
           refresh-token   (token/generate-refresh-token)]
       (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
                                 ["openid" "profile"] nil
@@ -616,10 +567,7 @@
                              :response-types ["code"]
                              :scopes         ["openid"]}])
           token-store     (store/create-token-store)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {})
           refresh-token   (token/generate-refresh-token)]
       (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
                                 ["openid"] nil
@@ -643,11 +591,7 @@
                              :response-types ["code"]
                              :scopes         ["openid"]}])
           token-store     (store/create-token-store)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :rotate-refresh-tokens    true
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {:rotate-refresh-tokens true})
           refresh-token   (token/generate-refresh-token)]
       (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
                                 ["openid"] nil
@@ -673,10 +617,7 @@
                              :response-types []
                              :scopes         ["api:read"]}])
           token-store     (store/create-token-store)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {})
           response        (token-ep/handle-client-credentials-grant
                            {:scope    "api:read"
                             :resource ["https://api.example.com"]}
@@ -700,10 +641,7 @@
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {})
           response        (token-ep/handle-token-request
                            {:grant_type    "client_credentials"
                             :client_id     "test-client"
@@ -735,10 +673,7 @@
           token-store     (store/create-token-store)
           code-store      (store/create-authorization-code-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {})
           response        (token-ep/handle-token-request
                            {:grant_type    "client_credentials"
                             :client_id     "hashed-client"
@@ -763,10 +698,7 @@
           token-store     (store/create-token-store)
           code-store      (store/create-authorization-code-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}]
+          provider-config (make-provider-config {})]
       (is (thrown-with-msg? Exception #"Invalid client credentials"
                             (token-ep/handle-token-request
                              {:grant_type    "client_credentials"
@@ -788,9 +720,7 @@
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600}]
+          provider-config (make-provider-config {})]
       (is (thrown-with-msg? Exception #"Confidential client has no stored credentials"
                             (token-ep/handle-token-request
                              {:grant_type    "client_credentials"
@@ -812,10 +742,7 @@
                              :response-types ["code"]
                              :scopes         ["openid"]}])
           token-store     (store/create-token-store)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {})
           refresh-token   (token/generate-refresh-token)
           past-expiry     (.millis fixed-clock)]
       (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
@@ -839,11 +766,7 @@
                              :response-types ["code"]
                              :scopes         ["openid" "profile"]}])
           token-store     (store/create-token-store)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :rotate-refresh-tokens    true
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {:rotate-refresh-tokens true})
           refresh-token   (token/generate-refresh-token)
           future-expiry   (.millis future-clock)]
       (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
@@ -867,11 +790,7 @@
                              :response-types ["code"]
                              :scopes         ["openid" "profile"]}])
           token-store     (store/create-token-store)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :rotate-refresh-tokens    true
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {:rotate-refresh-tokens true})
           old-refresh     (token/generate-refresh-token)]
       (proto/save-refresh-token token-store old-refresh "user-123" "test-client"
                                 ["openid" "profile"] nil nil)
@@ -898,11 +817,7 @@
                              :response-types ["code"]
                              :scopes         ["openid"]}])
           token-store     (store/create-token-store)
-          provider-config {:issuer                   "https://test.example.com"
-                           :signing-key              (token/generate-rsa-key)
-                           :access-token-ttl-seconds 3600
-                           :rotate-refresh-tokens    false
-                           :clock                    (Clock/systemUTC)}
+          provider-config (make-provider-config {:rotate-refresh-tokens false})
           refresh-token   (token/generate-refresh-token)]
       (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
                                 ["openid"] nil nil)
@@ -927,12 +842,9 @@
                              :response-types ["code"]
                              :scopes         ["openid"]}])
           token-store     (store/create-token-store)
-          provider-config {:issuer                    "https://test.example.com"
-                           :signing-key               (token/generate-rsa-key)
-                           :access-token-ttl-seconds  3600
-                           :refresh-token-ttl-seconds 86400
-                           :rotate-refresh-tokens     true
-                           :clock                     fixed-clock}
+          provider-config (make-provider-config {:refresh-token-ttl-seconds 86400
+                                                 :rotate-refresh-tokens     true
+                                                 :clock                     fixed-clock})
           old-refresh     (token/generate-refresh-token)
           old-expiry      (+ (.millis fixed-clock) (* 1000 1800))]
       (proto/save-refresh-token token-store old-refresh "user-123" "test-client"

@@ -2,7 +2,10 @@
   (:require
    [clojure.test :refer [deftest is testing]]
    [oidc-provider.core :as core]
-   [oidc-provider.protocol :as proto]))
+   [oidc-provider.protocol :as proto]
+   [oidc-provider.token :as token])
+  (:import
+   [com.nimbusds.jose.jwk JWKSet RSAKey]))
 
 (defrecord TestClaimsProvider []
   proto/ClaimsProvider
@@ -114,3 +117,32 @@
       (is (= "RSA" (:kty key)))
       (is (= "AQAB" (:e key)))
       (is (= "sig" (:use key))))))
+
+(deftest create-provider-with-multiple-keys-test
+  (testing ":signing-keys + :active-signing-key-id produces correct JWKSet"
+    (let [k1       (token/generate-rsa-key)
+          k2       (token/generate-rsa-key)
+          provider (core/create-provider
+                    {:issuer                 "https://test.example.com"
+                     :authorization-endpoint "https://test.example.com/authorize"
+                     :token-endpoint         "https://test.example.com/token"
+                     :jwks-uri               "https://test.example.com/jwks"
+                     :signing-keys           [k1 k2]
+                     :active-signing-key-id  (.getKeyID ^RSAKey k2)})
+          pc       (:provider-config provider)
+          key-set  (:key-set pc)]
+      (is (= 2 (count (.getKeys ^JWKSet key-set))))
+      (is (= (.getKeyID ^RSAKey k2) (:active-signing-key-id pc))))))
+
+(deftest create-provider-active-key-defaults-to-first-test
+  (testing "omitted :active-signing-key-id defaults to first key"
+    (let [k1       (token/generate-rsa-key)
+          k2       (token/generate-rsa-key)
+          provider (core/create-provider
+                    {:issuer                 "https://test.example.com"
+                     :authorization-endpoint "https://test.example.com/authorize"
+                     :token-endpoint         "https://test.example.com/token"
+                     :jwks-uri               "https://test.example.com/jwks"
+                     :signing-keys           [k1 k2]})
+          pc       (:provider-config provider)]
+      (is (= (.getKeyID ^RSAKey k1) (:active-signing-key-id pc))))))

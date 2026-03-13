@@ -5,9 +5,12 @@
    [malli.core :as m])
   (:import
    [com.nimbusds.jose JWSAlgorithm JWSHeader$Builder]
-   [com.nimbusds.jose.crypto RSASSASigner RSASSAVerifier]
-   [com.nimbusds.jose.jwk KeyUse RSAKey RSAKey$Builder]
+   [com.nimbusds.jose.crypto RSASSASigner]
+   [com.nimbusds.jose.jwk JWKSet KeyUse RSAKey RSAKey$Builder]
+   [com.nimbusds.jose.jwk.source ImmutableJWKSet]
+   [com.nimbusds.jose.proc BadJOSEException JWSVerificationKeySelector]
    [com.nimbusds.jwt JWTClaimsSet JWTClaimsSet$Builder SignedJWT]
+   [com.nimbusds.jwt.proc DefaultJWTProcessor]
    [com.nimbusds.oauth2.sdk AuthorizationCode]
    [com.nimbusds.oauth2.sdk.token BearerAccessToken RefreshToken]
    [java.security KeyPairGenerator SecureRandom]
@@ -20,7 +23,8 @@
   "Malli schema for OIDC provider configuration."
   [:map
    [:issuer :string]
-   [:signing-key [:fn (fn [k] (instance? RSAKey k))]]
+   [:key-set [:fn (fn [ks] (instance? JWKSet ks))]]
+   [:active-signing-key-id :string]
    [:access-token-ttl-seconds {:optional true} pos-int?]
    [:id-token-ttl-seconds {:optional true} pos-int?]
    [:authorization-code-ttl-seconds {:optional true} pos-int?]
@@ -50,6 +54,22 @@
          (.keyUse KeyUse/SIGNATURE))
        (.build builder)))))
 
+(defn normalize-to-jwk-set
+  "Normalizes a key input to a `JWKSet`. If the input is already a `JWKSet`, it
+  passes through unchanged. If it is a single `RSAKey`, it wraps it in a
+  one-element `JWKSet`."
+  [key-or-set]
+  (if (instance? JWKSet key-or-set)
+    key-or-set
+    (JWKSet. ^com.nimbusds.jose.jwk.JWK key-or-set)))
+
+(defn- active-signing-key
+  [^JWKSet key-set ^String kid]
+  (let [^RSAKey k (.getKeyByKeyId key-set kid)]
+    (when-not k
+      (throw (ex-info "Active signing key not found in key set" {:kid kid})))
+    k))
+
 (defn- add-seconds
   [^Clock clock seconds]
   (Date/from (.plusSeconds (Instant/now clock) seconds)))
@@ -68,7 +88,7 @@
 
   Returns:
     Signed JWT string"
-  [{:keys [issuer signing-key id-token-ttl-seconds clock] :as config}
+  [{:keys [issuer key-set active-signing-key-id id-token-ttl-seconds clock] :as config}
    user-id client-id claims
    {:keys [nonce auth-time]}]
   {:pre [(m/validate ProviderConfig config)]}
@@ -87,12 +107,12 @@
     (doseq [[k v] claims]
       (.claim builder (name k) v))
     (let [claims-set            (.build builder)
-          ^RSAKey signing-key'  signing-key
+          ^RSAKey signing-key   (active-signing-key key-set active-signing-key-id)
           header                (-> (JWSHeader$Builder. JWSAlgorithm/RS256)
-                                    (.keyID (.getKeyID signing-key'))
+                                    (.keyID (.getKeyID signing-key))
                                     (.build))
           ^SignedJWT signed-jwt (SignedJWT. header claims-set)
-          signer                (RSASSASigner. signing-key')]
+          signer                (RSASSASigner. signing-key)]
       (.sign signed-jwt signer)
       (.serialize signed-jwt))))
 
@@ -129,14 +149,18 @@
 
   Throws:
     ex-info on validation failure"
-  [{:keys [issuer signing-key] :as config} token expected-client-id]
+  [{:keys [issuer key-set] :as config} token expected-client-id]
   {:pre [(m/validate ProviderConfig config)]}
-  (let [^SignedJWT signed-jwt (SignedJWT/parse ^String token)
-        ^RSAKey signing-key'  signing-key
-        verifier              (RSASSAVerifier. (.toPublicJWK signing-key'))]
-    (when-not (.verify signed-jwt verifier)
-      (throw (ex-info "Invalid token signature" {:token token})))
-    (let [^JWTClaimsSet claims (.getJWTClaimsSet signed-jwt)
+  (let [^DefaultJWTProcessor processor (DefaultJWTProcessor.)
+        key-selector                   (JWSVerificationKeySelector.
+                                        JWSAlgorithm/RS256
+                                        (ImmutableJWKSet. ^JWKSet key-set))]
+    (.setJWSKeySelector processor key-selector)
+    (let [^JWTClaimsSet claims (try
+                                 (.process processor ^String token nil)
+                                 (catch BadJOSEException e
+                                   (throw (ex-info "Invalid token signature"
+                                                   {:token token} e))))
           issuer-val           (.getIssuer claims)
           audience             (.getAudience claims)
           ^Date expiry         (.getExpirationTime claims)
@@ -164,9 +188,9 @@
 
   Returns:
     Map with :keys vector containing public key in JWK format"
-  [{:keys [signing-key] :as config}]
+  [{:keys [key-set] :as config}]
   {:pre [(m/validate ProviderConfig config)]}
-  (let [^RSAKey signing-key' signing-key]
-    {:keys [(json/parse-string
-             (.toJSONString (.toPublicJWK signing-key'))
-             true)]}))
+  {:keys (->> (.getKeys ^JWKSet key-set)
+              (mapv (fn [k] (json/parse-string
+                             (.toJSONString (.toPublicJWK ^RSAKey k))
+                             true))))})

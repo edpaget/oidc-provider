@@ -11,6 +11,7 @@
    [oidc-provider.token :as token]
    [oidc-provider.token-endpoint :as token-ep])
   (:import
+   [com.nimbusds.jose.jwk RSAKey]
    [java.time Clock]))
 
 (set! *warn-on-reflection* true)
@@ -23,6 +24,8 @@
    [:token-endpoint :string]
    [:jwks-uri :string]
    [:signing-key {:optional true} [:fn (fn [k] (instance? com.nimbusds.jose.jwk.RSAKey k))]]
+   [:signing-keys {:optional true} [:vector [:fn (fn [k] (instance? com.nimbusds.jose.jwk.RSAKey k))]]]
+   [:active-signing-key-id {:optional true} :string]
    [:access-token-ttl-seconds {:optional true} pos-int?]
    [:id-token-ttl-seconds {:optional true} pos-int?]
    [:authorization-code-ttl-seconds {:optional true} pos-int?]
@@ -57,6 +60,8 @@
    settings initialized."
   [{:keys [issuer
            signing-key
+           signing-keys
+           active-signing-key-id
            access-token-ttl-seconds
            id-token-ttl-seconds
            authorization-code-ttl-seconds
@@ -68,9 +73,17 @@
            token-store
            claims-provider]               :as config}]
   {:pre [(m/validate ProviderSetup config)]}
-  (let [key             (or signing-key (token/generate-rsa-key))
+  (let [key-set         (cond
+                          signing-keys (token/normalize-to-jwk-set
+                                        (com.nimbusds.jose.jwk.JWKSet.
+                                         ^java.util.List (java.util.ArrayList. ^java.util.Collection signing-keys)))
+                          signing-key  (token/normalize-to-jwk-set signing-key)
+                          :else        (token/normalize-to-jwk-set (token/generate-rsa-key)))
+        active-kid      (or active-signing-key-id
+                            (.getKeyID ^RSAKey (first (.getKeys ^com.nimbusds.jose.jwk.JWKSet key-set))))
         provider-config (cond-> {:issuer                         issuer
-                                 :signing-key                    key
+                                 :key-set                        key-set
+                                 :active-signing-key-id          active-kid
                                  :access-token-ttl-seconds       (or access-token-ttl-seconds 3600)
                                  :id-token-ttl-seconds           (or id-token-ttl-seconds 3600)
                                  :authorization-code-ttl-seconds (or authorization-code-ttl-seconds 600)
