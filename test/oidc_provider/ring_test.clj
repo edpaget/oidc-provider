@@ -4,7 +4,8 @@
    [clojure.test :refer [deftest is testing]]
    [oidc-provider.registration :as reg]
    [oidc-provider.ring :as ring]
-   [oidc-provider.store :as store])
+   [oidc-provider.store :as store]
+   [oidc-provider.util :as util])
   (:import
    (java.io ByteArrayInputStream)))
 
@@ -150,3 +151,46 @@
           body     (json/parse-string (:body response))]
       (is (= 400 (:status response)))
       (is (= #{"error" "error_description"} (set (keys body)))))))
+
+(defn- revocation-fixtures []
+  (let [client-store (store/create-client-store
+                      [{:client-id          "test-client"
+                        :client-type        "confidential"
+                        :client-secret-hash (util/hash-client-secret "secret123")
+                        :redirect-uris      ["https://app.example.com/callback"]
+                        :grant-types        ["authorization_code" "refresh_token"]
+                        :response-types     ["code"]
+                        :scopes             ["openid"]}])
+        token-store  (store/create-token-store)
+        auth-header  (str "Basic " (.encodeToString
+                                    (java.util.Base64/getEncoder)
+                                    (.getBytes "test-client:secret123" "UTF-8")))]
+    {:handler     (ring/revocation-handler client-store token-store)
+     :auth-header auth-header}))
+
+(deftest revocation-wrong-content-type-test
+  (testing "POST with application/json returns 415"
+    (let [{:keys [handler auth-header]} (revocation-fixtures)
+          response                      (handler {:request-method :post
+                                                  :headers        {"content-type"  "application/json"
+                                                                   "authorization" auth-header}
+                                                  :params         {:token "at-123"}})]
+      (is (= 415 (:status response)))
+      (is (= "application/x-www-form-urlencoded" (get-in response [:headers "Accept"]))))))
+
+(deftest revocation-missing-content-type-test
+  (testing "POST with no content-type returns 415"
+    (let [{:keys [handler auth-header]} (revocation-fixtures)
+          response                      (handler {:request-method :post
+                                                  :headers        {"authorization" auth-header}
+                                                  :params         {:token "at-123"}})]
+      (is (= 415 (:status response))))))
+
+(deftest revocation-valid-content-type-test
+  (testing "POST with application/x-www-form-urlencoded proceeds normally"
+    (let [{:keys [handler auth-header]} (revocation-fixtures)
+          response                      (handler {:request-method :post
+                                                  :headers        {"content-type"  "application/x-www-form-urlencoded; charset=UTF-8"
+                                                                   "authorization" auth-header}
+                                                  :params         {:token "nonexistent" :client_id "test-client"}})]
+      (is (= 200 (:status response))))))

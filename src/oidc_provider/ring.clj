@@ -99,9 +99,16 @@
       {:status  405
        :headers {"Allow" "POST" "Content-Type" "application/json"}
        :body    (json/generate-string {"error" "method_not_allowed"})}
-      (let [auth-header (get-in request [:headers "authorization"])
-            result      (revocation/handle-revocation-request
-                         (:params request) auth-header
-                         client-store token-store)]
-        (cond-> result
-          (:body result) (update :body json/generate-string))))))
+      (let [content-type (get-in request [:headers "content-type"])]
+        (if-not (and content-type (str/starts-with? content-type "application/x-www-form-urlencoded"))
+          {:status  415
+           :headers {"Content-Type" "application/json"
+                     "Accept"       "application/x-www-form-urlencoded"}
+           :body    (json/generate-string {"error"             "invalid_request"
+                                           "error_description" "Content-Type must be application/x-www-form-urlencoded"})}
+          (let [auth-header (get-in request [:headers "authorization"])
+                result      (revocation/handle-revocation-request
+                             (:params request) auth-header
+                             client-store token-store)]
+            (cond-> result
+              (:body result) (update :body json/generate-string))))))))
