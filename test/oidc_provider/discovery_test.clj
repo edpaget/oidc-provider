@@ -40,3 +40,22 @@
                   :resource-indicators-supported false}
           result (discovery/openid-configuration config)]
       (is (= false (:resource_indicators_supported result))))))
+
+(deftest discovery-default-client-id-metadata-document-supported-test
+  (testing "default config does not include client_id_metadata_document_supported"
+    (let [config {:issuer                 "https://test.example.com"
+                  :authorization-endpoint "https://test.example.com/authorize"
+                  :token-endpoint         "https://test.example.com/token"
+                  :jwks-uri               "https://test.example.com/jwks"}
+          result (discovery/openid-configuration config)]
+      (is (not (contains? result :client_id_metadata_document_supported))))))
+
+(deftest discovery-explicit-client-id-metadata-document-supported-test
+  (testing "explicit true value is respected"
+    (let [config {:issuer                                "https://test.example.com"
+                  :authorization-endpoint                "https://test.example.com/authorize"
+                  :token-endpoint                        "https://test.example.com/token"
+                  :jwks-uri                              "https://test.example.com/jwks"
+                  :client-id-metadata-document-supported true}
+          result (discovery/openid-configuration config)]
+      (is (= true (:client_id_metadata_document_supported result))))))

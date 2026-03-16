@@ -120,7 +120,8 @@
                  :token-endpoint-auth-methods-supported
                  :claims-supported
                  :registration-endpoint
-                 :revocation-endpoint])))
+                 :revocation-endpoint
+                 :client-id-metadata-document-supported])))
 
 (defn jwks
   "Returns JWKS for the provider.

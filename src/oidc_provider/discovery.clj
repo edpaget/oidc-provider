@@ -23,6 +23,7 @@
    [:claims-supported {:optional true} [:vector :string]]
    [:code-challenge-methods-supported {:optional true} [:vector :string]]
    [:resource-indicators-supported {:optional true} :boolean]
+   [:client-id-metadata-document-supported {:optional true} :boolean]
    [:registration-endpoint {:optional true} :string]
    [:revocation-endpoint {:optional true} :string]])
 
@@ -49,7 +50,8 @@
            token-endpoint-auth-methods-supported
            claims-supported
            code-challenge-methods-supported
-           resource-indicators-supported]        :as config}]
+           resource-indicators-supported
+           client-id-metadata-document-supported] :as config}]
   {:pre [(m/validate DiscoveryConfig config)]}
   (cond-> {:issuer                                issuer
            :authorization_endpoint                authorization-endpoint
@@ -69,7 +71,8 @@
     userinfo-endpoint (assoc :userinfo_endpoint userinfo-endpoint)
     claims-supported (assoc :claims_supported claims-supported)
     registration-endpoint (assoc :registration_endpoint registration-endpoint)
-    revocation-endpoint (assoc :revocation_endpoint revocation-endpoint)))
+    revocation-endpoint (assoc :revocation_endpoint revocation-endpoint)
+    client-id-metadata-document-supported (assoc :client_id_metadata_document_supported true)))
 
 (defn jwks-endpoint
   "Generates JWKS endpoint response.
