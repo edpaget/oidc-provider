@@ -1,6 +1,5 @@
 (ns oidc-provider.revocation-test
   (:require
-   [cheshire.core :as json]
    [clojure.test :refer [deftest is testing]]
    [oidc-provider.protocol :as proto]
    [oidc-provider.revocation :as revocation]
@@ -80,31 +79,28 @@
         (is (= 200 (:status result)))
         (is (some? (proto/get-refresh-token token-store "rt-other")))))))
 
-(deftest revoke-missing-token-body-test
-  (testing "400 body is a JSON string with error invalid_request"
+(deftest revoke-missing-token-error-body-test
+  (testing "400 response includes error body and cache-control headers"
     (let [{:keys [client-store token-store auth-header]} (make-fixtures)
           result                                         (revocation/handle-revocation-request
                                                           {:client_id "test-client"}
-                                                          auth-header client-store token-store)
-          body                                           (json/parse-string (:body result) true)]
+                                                          auth-header client-store token-store)]
       (is (= 400 (:status result)))
-      (is (string? (:body result)))
-      (is (= "invalid_request" (:error body)))
-      (is (= "Missing token parameter" (:error_description body))))))
+      (is (= {:error "invalid_request" :error_description "Missing token parameter"} (:body result)))
+      (is (= "no-store" (get-in result [:headers "Cache-Control"]))))))
 
-(deftest revoke-unauthenticated-body-test
-  (testing "401 body is a JSON string with error invalid_client"
+(deftest revoke-unauthenticated-error-body-test
+  (testing "401 response includes error body and cache-control headers"
     (let [{:keys [client-store token-store]} (make-fixtures)
           bad-auth                           (str "Basic " (.encodeToString
                                                             (java.util.Base64/getEncoder)
                                                             (.getBytes "test-client:wrong" "UTF-8")))
           result                             (revocation/handle-revocation-request
                                               {:token "at-123" :client_id "test-client"}
-                                              bad-auth client-store token-store)
-          body                               (json/parse-string (:body result) true)]
+                                              bad-auth client-store token-store)]
       (is (= 401 (:status result)))
-      (is (string? (:body result)))
-      (is (= "invalid_client" (:error body))))))
+      (is (= {:error "invalid_client"} (:body result)))
+      (is (= "no-store" (get-in result [:headers "Cache-Control"]))))))
 
 (deftest revoke-unauthenticated-test
   (testing "returns 401 when client authentication fails"

@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Authorization responses no longer include an empty `iss` parameter when provider config lacks an issuer
 
 ### Changed
-- Revocation error responses use JSON-serialized bodies with `Cache-Control: no-store` headers, consistent with the token endpoint
+- Revocation error responses include `Cache-Control: no-store` and `Pragma: no-cache` headers per RFC 6749 §5.1
 
 ### Security
 - URL-decode Basic auth credentials per RFC 6749 §2.3.1 to correctly handle special characters in client_id/client_secret

@@ -8,6 +8,11 @@
    [oidc-provider.protocol :as proto]
    [oidc-provider.token-endpoint :as token-ep]))
 
+(def ^:private no-cache-headers
+  {"Content-Type"  "application/json"
+   "Cache-Control" "no-store"
+   "Pragma"        "no-cache"})
+
 (set! *warn-on-reflection* true)
 
 (def RevocationRequest
@@ -28,7 +33,9 @@
   (try
     (let [client (token-ep/authenticate-client params authorization-header client-store)]
       (if-not (:token params)
-        (token-ep/token-error-response "invalid_request" "Missing token parameter")
+        {:status  400
+         :headers no-cache-headers
+         :body    {:error "invalid_request" :error_description "Missing token parameter"}}
         (let [token      (:token params)
               token-data (or (proto/get-access-token token-store token)
                              (proto/get-refresh-token token-store token))]
@@ -36,4 +43,6 @@
             (proto/revoke-token token-store token))
           {:status 200})))
     (catch clojure.lang.ExceptionInfo _
-      (token-ep/token-error-response "invalid_client" nil :status 401))))
+      {:status  401
+       :headers no-cache-headers
+       :body    {:error "invalid_client"}})))

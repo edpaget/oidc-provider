@@ -102,4 +102,5 @@
             result      (revocation/handle-revocation-request
                          (:params request) auth-header
                          client-store token-store)]
-        result))))
+        (cond-> result
+          (:body result) (update :body json/generate-string))))))
