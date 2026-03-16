@@ -59,6 +59,26 @@
                                                           auth-header client-store token-store)]
       (is (= 400 (:status result))))))
 
+(deftest revoke-other-clients-access-token-test
+  (testing "cannot revoke another client's access token"
+    (let [{:keys [client-store token-store auth-header]} (make-fixtures)]
+      (proto/save-access-token token-store "at-other" "user-1" "other-client" ["openid"] 999999999999 nil)
+      (let [result (revocation/handle-revocation-request
+                    {:token "at-other" :client_id "test-client"}
+                    auth-header client-store token-store)]
+        (is (= 200 (:status result)))
+        (is (some? (proto/get-access-token token-store "at-other")))))))
+
+(deftest revoke-other-clients-refresh-token-test
+  (testing "cannot revoke another client's refresh token"
+    (let [{:keys [client-store token-store auth-header]} (make-fixtures)]
+      (proto/save-refresh-token token-store "rt-other" "user-1" "other-client" ["openid"] nil nil)
+      (let [result (revocation/handle-revocation-request
+                    {:token "rt-other" :client_id "test-client"}
+                    auth-header client-store token-store)]
+        (is (= 200 (:status result)))
+        (is (some? (proto/get-refresh-token token-store "rt-other")))))))
+
 (deftest revoke-unauthenticated-test
   (testing "returns 401 when client authentication fails"
     (let [{:keys [client-store token-store]} (make-fixtures)
