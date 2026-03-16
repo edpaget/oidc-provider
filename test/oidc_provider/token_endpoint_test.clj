@@ -858,8 +858,8 @@
             expected (+ (.millis fixed-clock) (* 1000 86400))]
         (is (= expected (:expiry new-data)))))))
 
-(deftest code-not-consumed-on-validation-failure-test
-  (testing "authorization code remains in store after failed exchange"
+(deftest code-consumed-on-validation-failure-test
+  (testing "authorization code is consumed even when exchange fails"
     (let [client-store    (store/create-client-store
                            [{:client-id      "test-client"
                              :client-type    "confidential"
@@ -886,7 +886,7 @@
                              code-store
                              token-store
                              claims-provider)))
-      (is (some? (proto/get-authorization-code code-store code))))))
+      (is (nil? (proto/get-authorization-code code-store code))))))
 
 (deftest code-consumed-on-successful-exchange-test
   (testing "authorization code is deleted from store after successful exchange"

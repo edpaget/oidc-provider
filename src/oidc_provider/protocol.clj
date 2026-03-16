@@ -89,7 +89,15 @@
 
     Takes an authorization code string and removes it from storage. Authorization codes
     are single-use, so they should be deleted after being exchanged for tokens. Returns
-    true if deleted successfully."))
+    true if deleted successfully.")
+
+  (consume-authorization-code [this code]
+    "Atomically retrieves and deletes an authorization code.
+
+    Takes an authorization code string, removes it from storage, and returns its
+    metadata map. If the code does not exist (or has already been consumed), returns
+    `nil`. This prevents replay attacks where concurrent requests could both read the
+    same code before either deletes it."))
 
 (defprotocol TokenStore
   "Protocol for managing access and refresh tokens."

@@ -135,7 +135,7 @@
                     {:client-id (:client-id client)})))
   (when-not code
     (throw (ex-info "Missing code parameter" {})))
-  (let [code-data (proto/get-authorization-code code-store code)]
+  (let [code-data (proto/consume-authorization-code code-store code)]
     (when-not code-data
       (throw (ex-info "Invalid or expired authorization code" {:code code})))
     (when (> (.millis ^java.time.Clock (:clock provider-config)) (:expiry code-data))
@@ -149,7 +149,6 @@
       (throw (ex-info "Redirect URI mismatch" {:expected (:redirect-uri code-data)
                                                :actual   redirect_uri})))
     (verify-pkce code-data code_verifier)
-    (proto/delete-authorization-code code-store code)
     (let [user-id        (:user-id code-data)
           scope          (:scope code-data)
           resource       (:resource code-data)

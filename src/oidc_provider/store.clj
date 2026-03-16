@@ -62,7 +62,14 @@
 
   (delete-authorization-code [_ code]
     (swap! codes dissoc code)
-    true))
+    true)
+
+  (consume-authorization-code [_ code]
+    (let [result (atom nil)]
+      (swap! codes (fn [m]
+                     (reset! result (get m code))
+                     (dissoc m code)))
+      @result)))
 
 (defn create-authorization-code-store
   "Creates an in-memory authorization code store.

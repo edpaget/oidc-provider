@@ -45,6 +45,31 @@
       (is (= ["https://app.example.com/cb"] (:redirect-uris updated)))
       (is (= "https://example.com" (:client-uri updated))))))
 
+(deftest consume-authorization-code-test
+  (testing "returns code data and removes code from store"
+    (let [code-store (store/create-authorization-code-store)
+          expiry     (+ (System/currentTimeMillis) 60000)]
+      (proto/save-authorization-code code-store "code-1" "user-1" "client-1"
+                                     "https://app.example.com/cb" ["openid"] nil expiry nil nil nil)
+      (let [data (proto/consume-authorization-code code-store "code-1")]
+        (is (= "user-1" (:user-id data)))
+        (is (= "client-1" (:client-id data)))
+        (is (nil? (proto/get-authorization-code code-store "code-1")))))))
+
+(deftest consume-authorization-code-missing-test
+  (testing "returns nil for nonexistent code"
+    (let [code-store (store/create-authorization-code-store)]
+      (is (nil? (proto/consume-authorization-code code-store "nonexistent"))))))
+
+(deftest consume-authorization-code-idempotent-test
+  (testing "second consume returns nil"
+    (let [code-store (store/create-authorization-code-store)
+          expiry     (+ (System/currentTimeMillis) 60000)]
+      (proto/save-authorization-code code-store "code-1" "user-1" "client-1"
+                                     "https://app.example.com/cb" ["openid"] nil expiry nil nil nil)
+      (is (some? (proto/consume-authorization-code code-store "code-1")))
+      (is (nil? (proto/consume-authorization-code code-store "code-1"))))))
+
 (deftest save-refresh-token-with-expiry-test
   (testing "stores and retrieves expiry on a refresh token"
     (let [token-store (store/create-token-store)
