@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-16
+
 ### Security
 - SSRF protection: `fetch-metadata-document` blocks requests to private, loopback, and link-local addresses
 - `fetch-metadata-document` now enforces body size limits during streaming read, preventing memory exhaustion from oversized responses
