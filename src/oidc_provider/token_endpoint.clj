@@ -100,7 +100,7 @@
       (let [verifier (CodeVerifier. ^String code-verifier)
             method   (CodeChallengeMethod/parse (or (:code-challenge-method code-data) "S256"))
             computed (.getValue (CodeChallenge/compute method verifier))]
-        (when (not= computed stored-challenge)
+        (when-not (util/constant-time-eq? computed stored-challenge)
           (throw (ex-info "PKCE verification failed" {:error "invalid_grant"})))))))
 
 (defn handle-authorization-code-grant
@@ -125,7 +125,6 @@
   (let [code-data (proto/get-authorization-code code-store code)]
     (when-not code-data
       (throw (ex-info "Invalid or expired authorization code" {:code code})))
-    (proto/delete-authorization-code code-store code)
     (when (> (.millis ^java.time.Clock (:clock provider-config)) (:expiry code-data))
       (throw (ex-info "Authorization code expired" {:code code})))
     (when (not= (:client-id code-data) (:client-id client))
@@ -137,12 +136,14 @@
       (throw (ex-info "Redirect URI mismatch" {:expected (:redirect-uri code-data)
                                                :actual   redirect_uri})))
     (verify-pkce code-data code_verifier)
+    (proto/delete-authorization-code code-store code)
     (let [user-id        (:user-id code-data)
           scope          (:scope code-data)
           resource       (:resource code-data)
           openid?        (some #{"openid"} scope)
+          refresh?       (some #{"refresh_token"} (:grant-types client))
           access-token   (token/generate-access-token)
-          refresh-token  (token/generate-refresh-token)
+          refresh-token  (when refresh? (token/generate-refresh-token))
           ttl            (or (:access-token-ttl-seconds provider-config) 3600)
           now            (.millis ^java.time.Clock (:clock provider-config))
           expiry         (+ now (* 1000 ttl))
@@ -154,14 +155,15 @@
                               provider-config user-id (:client-id client)
                               user-claims {:nonce (:nonce code-data)})))]
       (proto/save-access-token token-store access-token user-id (:client-id client) scope expiry resource)
-      (proto/save-refresh-token token-store refresh-token user-id (:client-id client) scope refresh-expiry resource)
-      (cond-> {:access_token  access-token
-               :token_type    "Bearer"
-               :expires_in    ttl
-               :refresh_token refresh-token
-               :scope         (str/join " " scope)}
-        id-token (assoc :id_token id-token)
-        resource (assoc :resource resource)))))
+      (when refresh-token
+        (proto/save-refresh-token token-store refresh-token user-id (:client-id client) scope refresh-expiry resource))
+      (cond-> {:access_token access-token
+               :token_type   "Bearer"
+               :expires_in   ttl
+               :scope        (str/join " " scope)}
+        refresh-token (assoc :refresh_token refresh-token)
+        id-token      (assoc :id_token id-token)
+        resource      (assoc :resource resource)))))
 
 (defn handle-refresh-token-grant
   "Handles refresh_token grant type.

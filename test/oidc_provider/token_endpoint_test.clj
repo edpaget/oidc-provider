@@ -484,19 +484,18 @@
       (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid" "profile"] "nonce123" expiry nil nil resources)
-      (let [response     (token-ep/handle-authorization-code-grant
-                          {:code         code
-                           :redirect_uri "https://app.example.com/callback"}
-                          (proto/get-client client-store "test-client")
-                          provider-config
-                          code-store
-                          token-store
-                          claims-provider)
-            access-data  (proto/get-access-token token-store (:access_token response))
-            refresh-data (proto/get-refresh-token token-store (:refresh_token response))]
+      (let [response    (token-ep/handle-authorization-code-grant
+                         {:code         code
+                          :redirect_uri "https://app.example.com/callback"}
+                         (proto/get-client client-store "test-client")
+                         provider-config
+                         code-store
+                         token-store
+                         claims-provider)
+            access-data (proto/get-access-token token-store (:access_token response))]
         (is (= resources (:resource response)))
         (is (= resources (:resource access-data)))
-        (is (= resources (:resource refresh-data)))))))
+        (is (nil? (:refresh_token response)))))))
 
 (deftest authorization-code-grant-no-resource-test
   (testing "no resource in auth code means no resource in tokens or response"
@@ -857,3 +856,94 @@
             new-data (proto/get-refresh-token token-store (:refresh_token response))
             expected (+ (.millis fixed-clock) (* 1000 86400))]
         (is (= expected (:expiry new-data)))))))
+
+(deftest code-not-consumed-on-validation-failure-test
+  (testing "authorization code remains in store after failed exchange"
+    (let [client-store    (store/create-client-store
+                           [{:client-id      "test-client"
+                             :client-type    "confidential"
+                             :client-secret  "secret123"
+                             :redirect-uris  ["https://app.example.com/callback"]
+                             :grant-types    ["authorization_code"]
+                             :response-types ["code"]
+                             :scopes         ["openid"]}])
+          code-store      (store/create-authorization-code-store)
+          token-store     (store/create-token-store)
+          claims-provider (->TestClaimsProvider)
+          provider-config (make-provider-config {})
+          code            (token/generate-authorization-code)
+          expiry          (+ (System/currentTimeMillis) (* 1000 600))]
+      (proto/save-authorization-code code-store code "user-123" "test-client"
+                                     "https://app.example.com/callback"
+                                     ["openid"] nil expiry nil nil nil)
+      (is (thrown-with-msg? Exception #"Redirect URI mismatch"
+                            (token-ep/handle-authorization-code-grant
+                             {:code         code
+                              :redirect_uri "https://evil.example.com/callback"}
+                             (proto/get-client client-store "test-client")
+                             provider-config
+                             code-store
+                             token-store
+                             claims-provider)))
+      (is (some? (proto/get-authorization-code code-store code))))))
+
+(deftest code-consumed-on-successful-exchange-test
+  (testing "authorization code is deleted from store after successful exchange"
+    (let [client-store    (store/create-client-store
+                           [{:client-id      "test-client"
+                             :client-type    "confidential"
+                             :client-secret  "secret123"
+                             :redirect-uris  ["https://app.example.com/callback"]
+                             :grant-types    ["authorization_code"]
+                             :response-types ["code"]
+                             :scopes         ["openid"]}])
+          code-store      (store/create-authorization-code-store)
+          token-store     (store/create-token-store)
+          claims-provider (->TestClaimsProvider)
+          provider-config (make-provider-config {})
+          code            (token/generate-authorization-code)
+          expiry          (+ (System/currentTimeMillis) (* 1000 600))]
+      (proto/save-authorization-code code-store code "user-123" "test-client"
+                                     "https://app.example.com/callback"
+                                     ["openid"] nil expiry nil nil nil)
+      (token-ep/handle-authorization-code-grant
+       {:code         code
+        :redirect_uri "https://app.example.com/callback"}
+       (proto/get-client client-store "test-client")
+       provider-config
+       code-store
+       token-store
+       claims-provider)
+      (is (nil? (proto/get-authorization-code code-store code))))))
+
+(deftest authorization-code-grant-with-refresh-token-grant-type-test
+  (testing "client with refresh_token grant type receives a refresh token"
+    (let [client-store    (store/create-client-store
+                           [{:client-id      "test-client"
+                             :client-type    "confidential"
+                             :client-secret  "secret123"
+                             :redirect-uris  ["https://app.example.com/callback"]
+                             :grant-types    ["authorization_code" "refresh_token"]
+                             :response-types ["code"]
+                             :scopes         ["openid" "profile"]}])
+          code-store      (store/create-authorization-code-store)
+          token-store     (store/create-token-store)
+          claims-provider (->TestClaimsProvider)
+          provider-config (make-provider-config {:id-token-ttl-seconds 3600})
+          code            (token/generate-authorization-code)
+          expiry          (+ (System/currentTimeMillis) (* 1000 600))]
+      (proto/save-authorization-code code-store code "user-123" "test-client"
+                                     "https://app.example.com/callback"
+                                     ["openid" "profile"] "nonce123" expiry nil nil nil)
+      (let [response     (token-ep/handle-authorization-code-grant
+                          {:code         code
+                           :redirect_uri "https://app.example.com/callback"}
+                          (proto/get-client client-store "test-client")
+                          provider-config
+                          code-store
+                          token-store
+                          claims-provider)
+            refresh-data (proto/get-refresh-token token-store (:refresh_token response))]
+        (is (string? (:refresh_token response)))
+        (is (= "user-123" (:user-id refresh-data)))
+        (is (= "test-client" (:client-id refresh-data)))))))

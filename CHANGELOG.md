@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- Use constant-time comparison for PKCE code challenge verification to prevent timing attacks
+- Defer authorization code deletion until after all validations pass, so a failed attempt doesn't burn the code for the legitimate user
+- Only issue refresh tokens to clients whose `grant-types` include `"refresh_token"`
+
 ## [0.1.2] - 2026-03-13
 
 ## [0.1.1] - 2026-03-13
