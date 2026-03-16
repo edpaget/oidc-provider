@@ -66,22 +66,27 @@
           code-data       (proto/get-authorization-code code-store code)]
       (is (= "https://app.example.com/callback" (:redirect-uri response)))
       (is (= "xyz" (get-in response [:params :state])))
+      (is (= "https://test.example.com" (get-in response [:params :iss])))
       (is (= "user-123" (:user-id code-data)))
       (is (= "test-client" (:client-id code-data)))
       (is (= ["openid" "profile"] (:scope code-data))))))
 
 (deftest handle-authorization-denial-test
-  (testing "generates error response"
-    (let [request  {:redirect_uri "https://app.example.com/callback"
-                    :state        "xyz"}
-          response (authz/handle-authorization-denial
-                    request
-                    "access_denied"
-                    "User denied access")]
+  (testing "generates error response with iss parameter"
+    (let [request         {:redirect_uri "https://app.example.com/callback"
+                           :state        "xyz"}
+          provider-config {:issuer "https://test.example.com"
+                           :clock  (Clock/systemUTC)}
+          response        (authz/handle-authorization-denial
+                           request
+                           "access_denied"
+                           "User denied access"
+                           provider-config)]
       (is (= "https://app.example.com/callback" (:redirect-uri response)))
       (is (= "access_denied" (get-in response [:params :error])))
       (is (= "User denied access" (get-in response [:params :error_description])))
-      (is (= "xyz" (get-in response [:params :state]))))))
+      (is (= "xyz" (get-in response [:params :state])))
+      (is (= "https://test.example.com" (get-in response [:params :iss]))))))
 
 (deftest build-redirect-url-test
   (testing "builds redirect URL with query params"

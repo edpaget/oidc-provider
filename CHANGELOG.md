@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - RFC 7009 token revocation endpoint
 
 ### Security
+- URL-decode Basic auth credentials per RFC 6749 §2.3.1 to correctly handle special characters in client_id/client_secret
+- Add `iss` (issuer) parameter to authorization responses per RFC 9207 to prevent mix-up attacks
 - Use constant-time comparison for PKCE code challenge verification to prevent timing attacks
 - Defer authorization code deletion until after all validations pass, so a failed attempt doesn't burn the code for the legitimate user
 - Only issue refresh tokens to clients whose `grant-types` include `"refresh_token"`

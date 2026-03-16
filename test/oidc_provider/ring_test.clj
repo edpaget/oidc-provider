@@ -123,3 +123,12 @@
                              :headers        {"authorization" "Bearer wrong-token"}
                              :body           (valid-request-body)})]
       (is (= 401 (:status response))))))
+
+(deftest error-response-does-not-leak-ex-data-test
+  (testing "exception with sensitive ex-data only exposes error and error_description"
+    (let [handler  (ring/registration-handler (store/create-client-store))
+          response (handler {:request-method :post
+                             :body           (json-body {"redirect_uris" ["not-a-url"]})})
+          body     (json/parse-string (:body response))]
+      (is (= 400 (:status response)))
+      (is (= #{"error" "error_description"} (set (keys body)))))))

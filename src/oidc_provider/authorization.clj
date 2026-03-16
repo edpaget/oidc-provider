@@ -145,7 +145,8 @@
                                      redirect_uri scopes nonce expiry
                                      code_challenge code_challenge_method resource)
       {:redirect-uri redirect_uri
-       :params       (cond-> {:code code}
+       :params       (cond-> {:code code
+                              :iss  (:issuer provider-config)}
                        state (assoc :state state))})
 
     :else
@@ -156,13 +157,14 @@
   "Handles user denial of authorization request.
 
    Takes a parsed authorization request, an OAuth2 error code (defaults to
-   \"access_denied\" if not provided), and a human-readable error description.
-   Builds an authorization response map containing the redirect URI and error
-   parameters. Returns the response map with the error, optional error description,
-   and optional state parameter."
-  [{:keys [redirect_uri state]} error-code error-description]
+   \"access_denied\" if not provided), a human-readable error description, and
+   provider configuration. Includes the `iss` response parameter per RFC 9207.
+   Returns the response map with the error, optional error description, and
+   optional state parameter."
+  [{:keys [redirect_uri state]} error-code error-description provider-config]
   {:redirect-uri redirect_uri
-   :params       (cond-> {:error (or error-code "access_denied")}
+   :params       (cond-> {:error (or error-code "access_denied")
+                          :iss   (:issuer provider-config)}
                    error-description (assoc :error_description error-description)
                    state (assoc :state state))})
 

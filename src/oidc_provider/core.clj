@@ -163,8 +163,8 @@
    and an error description. Builds an error response and constructs the redirect URL
    to send the user back to the client with the error information. Returns the redirect
    URL string."
-  [_provider request error-code error-description]
-  (let [response (authz/handle-authorization-denial request error-code error-description)]
+  [{:keys [provider-config] :as _provider} request error-code error-description]
+  (let [response (authz/handle-authorization-denial request error-code error-description provider-config)]
     (authz/build-redirect-url response)))
 
 (defn token-request

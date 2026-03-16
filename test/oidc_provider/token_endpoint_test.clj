@@ -9,7 +9,8 @@
   (:import
    [com.nimbusds.jose.jwk RSAKey]
    [com.nimbusds.oauth2.sdk.pkce CodeChallenge CodeChallengeMethod CodeVerifier]
-   [java.time Clock Instant ZoneOffset]))
+   [java.time Clock Instant ZoneOffset]
+   [java.util Base64]))
 
 (defn- make-provider-config [overrides]
   (let [key (token/generate-rsa-key)]
@@ -960,3 +961,12 @@
       (is (= 200 (:status resp)))
       (is (= "no-store" (get-in resp [:headers "Cache-Control"])))
       (is (= "no-cache" (get-in resp [:headers "Pragma"]))))))
+
+(deftest parse-basic-auth-url-decoded-test
+  (testing "URL-decodes client_id and client_secret per RFC 6749 §2.3.1"
+    (let [encoded (.encodeToString (Base64/getEncoder)
+                                   (.getBytes "my%20client:secret%3Avalue" "UTF-8"))
+          header  (str "Basic " encoded)
+          result  (token-ep/parse-basic-auth header)]
+      (is (= "my client" (:client-id result)))
+      (is (= "secret:value" (:client-secret result))))))

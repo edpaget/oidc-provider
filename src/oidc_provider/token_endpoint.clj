@@ -9,6 +9,7 @@
    [oidc-provider.util :as util])
   (:import
    [com.nimbusds.oauth2.sdk.pkce CodeChallenge CodeChallengeMethod CodeVerifier]
+   [java.net URLDecoder]
    [java.util Base64]))
 
 (set! *warn-on-reflection* true)
@@ -60,8 +61,8 @@
     (let [encoded                   (subs authorization-header 6)
           decoded                   (String. (.decode (Base64/getDecoder) encoded))
           [client-id client-secret] (str/split decoded #":" 2)]
-      {:client-id     client-id
-       :client-secret client-secret})))
+      {:client-id     (URLDecoder/decode ^String client-id "UTF-8")
+       :client-secret (URLDecoder/decode ^String client-secret "UTF-8")})))
 
 (defn authenticate-client
   "Authenticates an OAuth2 client from request parameters or Basic auth header.
