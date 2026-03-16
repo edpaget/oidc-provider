@@ -15,7 +15,7 @@
    [malli.core :as m]
    [oidc-provider.protocol :as proto])
   (:import
-   (java.net URI)
+   (java.net InetAddress URI)
    (java.net.http HttpClient HttpRequest HttpResponse$BodyHandlers)
    (java.time Clock Duration Instant)))
 
@@ -105,6 +105,25 @@
   (swap! cache-atom assoc url {:client-config client-config
                                :fetched-at    (.instant clock)}))
 
+(m/=> private-address? [:=> [:cat :string] :boolean])
+
+(defn private-address?
+  "Returns `true` when `hostname` resolves to a private, loopback, or link-local IP address.
+
+  Checks all A and AAAA records returned by DNS resolution using JDK methods
+  `isLoopbackAddress`, `isLinkLocalAddress`, and `isSiteLocalAddress`, which cover
+  `127.0.0.0/8`, `::1`, `169.254.0.0/16`, `fe80::/10`, RFC 1918, and RFC 4193 ranges."
+  [hostname]
+  (try
+    (let [addresses (InetAddress/getAllByName hostname)]
+      (boolean
+       (some (fn [^InetAddress addr]
+               (or (.isLoopbackAddress addr)
+                   (.isLinkLocalAddress addr)
+                   (.isSiteLocalAddress addr)))
+             addresses)))
+    (catch Exception _ false)))
+
 (def ^:private default-timeout-ms 5000)
 (def ^:private default-max-body-bytes 524288)
 (def ^:private default-cache-ttl-seconds 300)
@@ -121,6 +140,10 @@
   [url {:keys [fetch-timeout-ms max-body-bytes]
         :or   {fetch-timeout-ms default-timeout-ms
                max-body-bytes   default-max-body-bytes}}]
+  (let [host (.getHost (URI. ^String url))]
+    (when (private-address? host)
+      (throw (ex-info "fetch blocked: private address"
+                      {:url url :host host}))))
   (let [client   (-> (HttpClient/newBuilder)
                      (.followRedirects java.net.http.HttpClient$Redirect/NEVER)
                      (.connectTimeout (Duration/ofMillis fetch-timeout-ms))
@@ -146,15 +169,16 @@
 
   Checks the cache first, then fetches, validates, and converts the metadata document.
   Returns `ClientConfig` or nil on any failure."
-  [cache-atom url {:keys [cache-ttl-seconds clock fetch-fn]
+  [cache-atom url {:keys [cache-ttl-seconds clock fetch-fn]           :as opts
                    :or   {cache-ttl-seconds default-cache-ttl-seconds
                           clock             (Clock/systemUTC)}}]
   (or (cache-get cache-atom url cache-ttl-seconds clock)
       (try
-        (let [fetch    (or fetch-fn #(fetch-metadata-document % {}))
-              document (fetch url)
-              _        (validate-metadata-document document url)
-              config   (metadata-document->client-config document)]
+        (let [fetch-opts (select-keys opts [:fetch-timeout-ms :max-body-bytes])
+              fetch      (or fetch-fn #(fetch-metadata-document % fetch-opts))
+              document   (fetch url)
+              _          (validate-metadata-document document url)
+              config     (metadata-document->client-config document)]
           (cache-put cache-atom url config clock)
           config)
         (catch Exception _
@@ -183,9 +207,12 @@
   not found in the inner store, fetches the metadata document from the URL, validates it,
   and returns the resulting `ClientConfig`.
 
+  The default fetch function blocks requests to private, loopback, and link-local addresses
+  to prevent SSRF. Supply a custom `:fetch-fn` to override this behavior.
+
   Options:
 
-  - `:fetch-fn` — `(fn [url] metadata-map)`, injectable for testing (default: HTTP fetch)
+  - `:fetch-fn` — `(fn [url] metadata-map)`, overrides the default HTTP fetch including SSRF protection
   - `:cache-ttl-seconds` — how long to cache resolved metadata (default: 300)
   - `:fetch-timeout-ms` — HTTP request timeout (default: 5000)
   - `:max-body-bytes` — maximum metadata document size (default: 524288)

@@ -187,8 +187,25 @@
           updated (proto/update-client mstore "existing" {:client-name "Updated"})]
       (is (= "Updated" (:client-name updated))))))
 
+(deftest private-address-detects-loopback-test
+  (testing "loopback addresses are detected as private"
+    (is (true? (cm/private-address? "127.0.0.1")))
+    (is (true? (cm/private-address? "localhost")))))
+
+(deftest private-address-detects-rfc1918-test
+  (testing "RFC 1918 private addresses are detected"
+    (is (true? (cm/private-address? "10.0.0.1")))
+    (is (true? (cm/private-address? "192.168.1.1")))
+    (is (true? (cm/private-address? "172.16.0.1")))))
+
+(deftest fetch-metadata-document-blocks-private-address-test
+  (testing "fetch-metadata-document throws for private addresses"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"private address"
+         (cm/fetch-metadata-document "https://127.0.0.1/.well-known/oauth-client" {})))))
+
 (deftest fetch-metadata-document-http-server-test
-  (testing "fetches and parses JSON from an HTTP server"
+  (testing "resolves metadata from a local HTTP server via custom fetch-fn"
     (let [server (doto (com.sun.net.httpserver.HttpServer/create
                         (java.net.InetSocketAddress. 0) 0)
                    (.createContext "/.well-known/oauth-client"
@@ -200,8 +217,26 @@
                                            (.write body)
                                            (.close))))))
                    (.start))
-          port   (.getPort (.getAddress server))
-          url    (str "http://localhost:" port "/.well-known/oauth-client")
-          result (cm/fetch-metadata-document url {})]
-      (.stop server 0)
-      (is (= ["https://app.example.com/callback"] (get result "redirect_uris"))))))
+          port   (.getPort (.getAddress server))]
+      (try
+        (let [local-url (str "http://localhost:" port "/.well-known/oauth-client")
+              inner     (store/create-client-store)
+              fetch-fn  (fn [_url]
+                          (let [client   (-> (java.net.http.HttpClient/newBuilder)
+                                             (.followRedirects java.net.http.HttpClient$Redirect/NEVER)
+                                             (.build))
+                                request  (-> (java.net.http.HttpRequest/newBuilder)
+                                             (.uri (java.net.URI. local-url))
+                                             (.header "Accept" "application/json")
+                                             (.GET)
+                                             (.build))
+                                response (.send client request (java.net.http.HttpResponse$BodyHandlers/ofString))]
+                            (json/parse-string (.body response))))
+              mstore    (cm/create-metadata-resolving-store
+                         inner
+                         {:fetch-fn fetch-fn :clock fixed-clock})
+              result    (proto/get-client mstore test-url)]
+          (is (= test-url (:client-id result)))
+          (is (= ["https://app.example.com/callback"] (:redirect-uris result))))
+        (finally
+          (.stop server 0))))))
