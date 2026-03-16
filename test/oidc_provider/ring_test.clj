@@ -124,6 +124,24 @@
                              :body           (valid-request-body)})]
       (is (= 401 (:status response))))))
 
+(deftest registration-malli-error-description-test
+  (testing "Malli validation failure uses generic error_description"
+    (let [handler  (ring/registration-handler (store/create-client-store))
+          response (handler {:request-method :post
+                             :body           (json-body {})})
+          body     (json/parse-string (:body response))]
+      (is (= 400 (:status response)))
+      (is (= "invalid_client_metadata" (get body "error_description"))))))
+
+(deftest registration-semantic-error-description-test
+  (testing "semantic validation error surfaces specific error_description"
+    (let [handler  (ring/registration-handler (store/create-client-store))
+          response (handler {:request-method :post
+                             :body           (json-body {"redirect_uris" ["not-a-url"]})})
+          body     (json/parse-string (:body response))]
+      (is (= 400 (:status response)))
+      (is (= "Invalid redirect URI: not-a-url" (get body "error_description"))))))
+
 (deftest error-response-does-not-leak-ex-data-test
   (testing "exception with sensitive ex-data only exposes error and error_description"
     (let [handler  (ring/registration-handler (store/create-client-store))

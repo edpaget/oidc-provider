@@ -57,7 +57,8 @@
             (json-response 201 result))
           (catch clojure.lang.ExceptionInfo e
             (json-response 400 {"error"             "invalid_client_metadata"
-                                "error_description" (.getMessage e)})))))))
+                                "error_description" (or (:error_description (ex-data e))
+                                                        "invalid_client_metadata")})))))))
 
 (defn- handle-get
   "Handles GET client read requests."
