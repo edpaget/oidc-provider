@@ -14,11 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - URL-decode Basic auth credentials per RFC 6749 §2.3.1 to correctly handle special characters in client_id/client_secret
 - Add `iss` (issuer) parameter to authorization responses per RFC 9207 to prevent mix-up attacks
 - Use constant-time comparison for PKCE code challenge verification to prevent timing attacks
-- Defer authorization code deletion until after all validations pass, so a failed attempt doesn't burn the code for the legitimate user
+- Atomically consume authorization codes to prevent replay via concurrent requests (RFC 6749 §10.5)
 - Only issue refresh tokens to clients whose `grant-types` include `"refresh_token"`
 - Registration access tokens hashed at rest using PBKDF2
 - `validate-id-token` uses injected clock instead of `Date.` for testable time handling
 - Token responses include `Cache-Control: no-store` and `Pragma: no-cache` headers per RFC 6749 §5.1
+- `parse-basic-auth` returns `nil` instead of throwing NPE on malformed Base64 credentials without a colon separator
+- `client-config->response` no longer includes hashed `registration_access_token` in its output
+- Token revocation verifies token ownership before revoking, preventing cross-client revocation (RFC 7009)
 
 ## [0.1.2] - 2026-03-13
 
