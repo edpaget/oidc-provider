@@ -13,16 +13,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 - RFC 7009 token revocation endpoint
+- Revocation endpoint uses `token_type_hint` to optimize token lookup per RFC 7009 §2.1
 - Client ID Metadata Document resolution for URL-based client identifiers (draft-ietf-oauth-client-id-metadata-document)
 - `client_id_metadata_document_supported` discovery metadata field
 
 ### Fixed
 - Authorization responses no longer include an empty `iss` parameter when provider config lacks an issuer
+- Registration error responses surface specific descriptions for semantic validation errors while keeping schema internals hidden
 
 ### Changed
 - Revocation error responses include `Cache-Control: no-store` and `Pragma: no-cache` headers per RFC 6749 §5.1
 
 ### Security
+- Revocation endpoint validates `Content-Type: application/x-www-form-urlencoded` to mitigate cross-origin request forgery
 - URL-decode Basic auth credentials per RFC 6749 §2.3.1 to correctly handle special characters in client_id/client_secret
 - Add `iss` (issuer) parameter to authorization responses per RFC 9207 to prevent mix-up attacks
 - Use constant-time comparison for PKCE code challenge verification to prevent timing attacks
