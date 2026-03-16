@@ -264,6 +264,30 @@
       (is (thrown-with-msg? Exception #"Invalid resource indicator"
                             (authz/parse-authorization-request query-string client-store))))))
 
+(deftest authorization-approval-nil-issuer-test
+  (testing "omits :iss from response when provider-config has no :issuer"
+    (let [code-store      (store/create-authorization-code-store)
+          provider-config {:authorization-code-ttl-seconds 600
+                           :clock                          (Clock/systemUTC)}
+          request         {:response_type "code"
+                           :client_id     "test-client"
+                           :redirect_uri  "https://app.example.com/callback"
+                           :scope         "openid"}
+          response        (authz/handle-authorization-approval
+                           request "user-123" provider-config code-store)]
+      (is (contains? (:params response) :code))
+      (is (not (contains? (:params response) :iss))))))
+
+(deftest authorization-denial-nil-issuer-test
+  (testing "omits :iss from response when provider-config has no :issuer"
+    (let [request         {:redirect_uri "https://app.example.com/callback"
+                           :state        "xyz"}
+          provider-config {:clock (Clock/systemUTC)}
+          response        (authz/handle-authorization-denial
+                           request "access_denied" "User denied" provider-config)]
+      (is (= "access_denied" (get-in response [:params :error])))
+      (is (not (contains? (:params response) :iss))))))
+
 (deftest handle-authorization-approval-stores-resource-test
   (testing "resource indicators round-trip through code store"
     (let [code-store      (store/create-authorization-code-store)

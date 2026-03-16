@@ -145,8 +145,8 @@
                                      redirect_uri scopes nonce expiry
                                      code_challenge code_challenge_method resource)
       {:redirect-uri redirect_uri
-       :params       (cond-> {:code code
-                              :iss  (:issuer provider-config)}
+       :params       (cond-> {:code code}
+                       (:issuer provider-config) (assoc :iss (:issuer provider-config))
                        state (assoc :state state))})
 
     :else
@@ -163,8 +163,8 @@
    optional state parameter."
   [{:keys [redirect_uri state]} error-code error-description provider-config]
   {:redirect-uri redirect_uri
-   :params       (cond-> {:error (or error-code "access_denied")
-                          :iss   (:issuer provider-config)}
+   :params       (cond-> {:error (or error-code "access_denied")}
+                   (:issuer provider-config) (assoc :iss (:issuer provider-config))
                    error-description (assoc :error_description error-description)
                    state (assoc :state state))})
 
