@@ -15,6 +15,7 @@
    [malli.core :as m]
    [oidc-provider.protocol :as proto])
   (:import
+   (java.io ByteArrayOutputStream InputStream)
    (java.net InetAddress URI)
    (java.net.http HttpClient HttpRequest HttpResponse$BodyHandlers)
    (java.time Clock Duration Instant)))
@@ -128,6 +129,26 @@
 (def ^:private default-max-body-bytes 524288)
 (def ^:private default-cache-ttl-seconds 300)
 
+(defn- read-bounded
+  "Reads up to `max-bytes` from `input-stream`, returning the result as a UTF-8 String.
+  Throws `ex-info` if the stream contains more than `max-bytes`."
+  [^InputStream input-stream max-bytes url]
+  (let [buf (byte-array 8192)
+        out (ByteArrayOutputStream.)]
+    (try
+      (loop [total 0]
+        (let [n (.read input-stream buf)]
+          (when (pos? n)
+            (let [new-total (+ total n)]
+              (when (> new-total max-bytes)
+                (throw (ex-info "metadata document too large"
+                                {:url url :max max-bytes})))
+              (.write out buf 0 n)
+              (recur new-total)))))
+      (.toString out "UTF-8")
+      (finally
+        (.close input-stream)))))
+
 (m/=> fetch-metadata-document [:=> [:cat :string :map] [:maybe [:map-of :string :any]]])
 
 (defn fetch-metadata-document
@@ -135,8 +156,9 @@
 
   Uses `java.net.http.HttpClient` with `Accept: application/json`, configurable
   timeout (`:fetch-timeout-ms`, default 5000), and max body size (`:max-body-bytes`,
-  default 512KB). Redirect policy is `NEVER`. Returns the parsed JSON map on success,
-  or throws on failure."
+  default 512KB). Redirect policy is `NEVER`. The response body is read in a streaming
+  fashion with the size limit enforced during read, preventing memory exhaustion from
+  oversized responses. Returns the parsed JSON map on success, or throws on failure."
   [url {:keys [fetch-timeout-ms max-body-bytes]
         :or   {fetch-timeout-ms default-timeout-ms
                max-body-bytes   default-max-body-bytes}}]
@@ -154,15 +176,11 @@
                      (.timeout (Duration/ofMillis fetch-timeout-ms))
                      (.GET)
                      (.build))
-        response (.send client request (HttpResponse$BodyHandlers/ofString))]
+        response (.send client request (HttpResponse$BodyHandlers/ofInputStream))]
     (when (not= 200 (.statusCode response))
       (throw (ex-info "metadata fetch failed"
                       {:status (.statusCode response) :url url})))
-    (let [^String body (.body response)]
-      (when (> (.length body) max-body-bytes)
-        (throw (ex-info "metadata document too large"
-                        {:url url :size (.length body) :max max-body-bytes})))
-      (json/parse-string body))))
+    (json/parse-string (read-bounded (.body response) max-body-bytes url))))
 
 (defn- resolve-client-metadata
   "Resolves a URL-based client ID to a `ClientConfig`.

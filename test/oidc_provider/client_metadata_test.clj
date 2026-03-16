@@ -204,6 +204,69 @@
          clojure.lang.ExceptionInfo #"private address"
          (cm/fetch-metadata-document "https://127.0.0.1/.well-known/oauth-client" {})))))
 
+(deftest fetch-metadata-document-rejects-oversized-response-test
+  (testing "throws when response body exceeds max-body-bytes during streaming read"
+    (let [large-body (json/generate-string (assoc valid-metadata "padding" (apply str (repeat 1000 "x"))))
+          server     (doto (com.sun.net.httpserver.HttpServer/create
+                            (java.net.InetSocketAddress. 0) 0)
+                       (.createContext "/.well-known/oauth-client"
+                                       (reify com.sun.net.httpserver.HttpHandler
+                                         (handle [_ exchange]
+                                           (let [body (.getBytes ^String large-body "UTF-8")]
+                                             (.sendResponseHeaders exchange 200 (count body))
+                                             (doto (.getResponseBody exchange)
+                                               (.write body)
+                                               (.close))))))
+                       (.start))
+          port       (.getPort (.getAddress server))]
+      (try
+        (let [local-url (str "http://localhost:" port "/.well-known/oauth-client")
+              client    (-> (java.net.http.HttpClient/newBuilder)
+                            (.followRedirects java.net.http.HttpClient$Redirect/NEVER)
+                            (.build))
+              request   (-> (java.net.http.HttpRequest/newBuilder)
+                            (.uri (java.net.URI. ^String local-url))
+                            (.header "Accept" "application/json")
+                            (.GET)
+                            (.build))
+              response  (.send client request (java.net.http.HttpResponse$BodyHandlers/ofInputStream))]
+          (is (thrown-with-msg?
+               clojure.lang.ExceptionInfo #"metadata document too large"
+               (#'cm/read-bounded (.body response) 64 local-url))))
+        (finally
+          (.stop server 0))))))
+
+(deftest fetch-metadata-document-accepts-response-within-limit-test
+  (testing "accepts response body within max-body-bytes during streaming read"
+    (let [server (doto (com.sun.net.httpserver.HttpServer/create
+                        (java.net.InetSocketAddress. 0) 0)
+                   (.createContext "/.well-known/oauth-client"
+                                   (reify com.sun.net.httpserver.HttpHandler
+                                     (handle [_ exchange]
+                                       (let [body (.getBytes (json/generate-string valid-metadata) "UTF-8")]
+                                         (.sendResponseHeaders exchange 200 (count body))
+                                         (doto (.getResponseBody exchange)
+                                           (.write body)
+                                           (.close))))))
+                   (.start))
+          port   (.getPort (.getAddress server))]
+      (try
+        (let [local-url (str "http://localhost:" port "/.well-known/oauth-client")
+              client    (-> (java.net.http.HttpClient/newBuilder)
+                            (.followRedirects java.net.http.HttpClient$Redirect/NEVER)
+                            (.build))
+              request   (-> (java.net.http.HttpRequest/newBuilder)
+                            (.uri (java.net.URI. ^String local-url))
+                            (.header "Accept" "application/json")
+                            (.GET)
+                            (.build))
+              response  (.send client request (java.net.http.HttpResponse$BodyHandlers/ofInputStream))
+              result    (json/parse-string (#'cm/read-bounded (.body response) 524288 local-url))]
+          (is (= test-url (get result "client_id")))
+          (is (= ["https://app.example.com/callback"] (get result "redirect_uris"))))
+        (finally
+          (.stop server 0))))))
+
 (deftest fetch-metadata-document-http-server-test
   (testing "resolves metadata from a local HTTP server via custom fetch-fn"
     (let [server (doto (com.sun.net.httpserver.HttpServer/create
