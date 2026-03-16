@@ -1,0 +1,194 @@
+(ns oidc-provider.client-metadata
+  "Client ID Metadata Document resolution per draft-ietf-oauth-client-id-metadata-document.
+
+  When a client's `client_id` is an HTTPS URL, this namespace resolves it to a JSON
+  metadata document containing the client's configuration (redirect URIs, name, etc.),
+  enabling verification without pre-registration.
+
+  Use [[create-metadata-resolving-store]] to wrap an existing
+  [[oidc-provider.protocol/ClientStore]] with metadata document resolution. URL-based
+  client IDs that are not found in the inner store are fetched, validated, and cached
+  automatically. Metadata clients are always treated as public (no `client_secret`)."
+  (:require
+   [cheshire.core :as json]
+   [clojure.string :as str]
+   [malli.core :as m]
+   [oidc-provider.protocol :as proto])
+  (:import
+   (java.net URI)
+   (java.net.http HttpClient HttpRequest HttpResponse$BodyHandlers)
+   (java.time Clock Duration Instant)))
+
+(set! *warn-on-reflection* true)
+
+(def ClientMetadataDocument
+  "Malli schema for a Client ID Metadata Document (wire format, string keys)."
+  [:map
+   ["client_id" :string]
+   ["redirect_uris" [:vector {:min 1} :string]]
+   ["grant_types" {:optional true} [:vector [:enum "authorization_code" "refresh_token" "client_credentials"]]]
+   ["response_types" {:optional true} [:vector [:enum "code" "token" "id_token"]]]
+   ["client_name" {:optional true} :string]
+   ["token_endpoint_auth_method" {:optional true} [:enum "client_secret_basic" "client_secret_post" "none"]]
+   ["scope" {:optional true} :string]
+   ["client_uri" {:optional true} :string]
+   ["logo_uri" {:optional true} :string]
+   ["contacts" {:optional true} [:vector :string]]])
+
+(m/=> url-client-id? [:=> [:cat :string] :boolean])
+
+(defn url-client-id?
+  "Returns true when `client-id` is an HTTPS URL, indicating it should be resolved
+  as a Client ID Metadata Document."
+  [client-id]
+  (and (str/starts-with? client-id "https://")
+       (try
+         (let [uri (URI. ^String client-id)]
+           (and (.isAbsolute uri) (some? (.getHost uri))))
+         (catch Exception _ false))))
+
+(m/=> validate-metadata-document [:=> [:cat [:map-of :string :any] :string] [:map-of :string :any]])
+
+(defn validate-metadata-document
+  "Validates a metadata document against [[ClientMetadataDocument]] schema and verifies
+  that the `client_id` field matches the `fetch-url` the document was retrieved from.
+
+  Returns the document on success. Throws `ex-info` on validation failure or
+  `client_id` mismatch."
+  [document fetch-url]
+  (when-not (m/validate ClientMetadataDocument document)
+    (throw (ex-info "invalid metadata document"
+                    {:error  "invalid_client_metadata"
+                     :errors (m/explain ClientMetadataDocument document)})))
+  (when (not= (get document "client_id") fetch-url)
+    (throw (ex-info "client_id mismatch"
+                    {:error    "invalid_client_metadata"
+                     :expected fetch-url
+                     :actual   (get document "client_id")})))
+  document)
+
+(m/=> metadata-document->client-config [:=> [:cat [:map-of :string :any]] :map])
+
+(defn metadata-document->client-config
+  "Converts a wire-format metadata document to a kebab-case `ClientConfig` map.
+
+  Always sets `:client-type` to `\"public\"` since metadata document clients cannot
+  have a `client_secret`. Applies RFC 7591 defaults for missing `grant_types`,
+  `response_types`, and `token_endpoint_auth_method`."
+  [document]
+  (let [scope-str (get document "scope")
+        scopes    (if scope-str (vec (str/split scope-str #" ")) [])]
+    (cond-> {:client-id                  (get document "client_id")
+             :client-type                "public"
+             :redirect-uris              (get document "redirect_uris")
+             :grant-types                (or (get document "grant_types") ["authorization_code"])
+             :response-types             (or (get document "response_types") ["code"])
+             :scopes                     scopes
+             :token-endpoint-auth-method (or (get document "token_endpoint_auth_method") "none")}
+      (get document "client_name") (assoc :client-name (get document "client_name"))
+      (get document "client_uri")  (assoc :client-uri (get document "client_uri"))
+      (get document "logo_uri")    (assoc :logo-uri (get document "logo_uri"))
+      (get document "contacts")    (assoc :contacts (get document "contacts")))))
+
+(defn cache-get
+  "Returns the cached `ClientConfig` for `url` if present and not expired, else nil."
+  [cache-atom url ttl-seconds ^Clock clock]
+  (when-let [{:keys [client-config ^Instant fetched-at]} (get @cache-atom url)]
+    (let [now      (.instant clock)
+          age-secs (.getSeconds (Duration/between fetched-at now))]
+      (when (< age-secs ttl-seconds)
+        client-config))))
+
+(defn cache-put
+  "Stores a `ClientConfig` in the cache for `url` with the current timestamp."
+  [cache-atom url client-config ^Clock clock]
+  (swap! cache-atom assoc url {:client-config client-config
+                               :fetched-at    (.instant clock)}))
+
+(def ^:private default-timeout-ms 5000)
+(def ^:private default-max-body-bytes 524288)
+(def ^:private default-cache-ttl-seconds 300)
+
+(m/=> fetch-metadata-document [:=> [:cat :string :map] [:maybe [:map-of :string :any]]])
+
+(defn fetch-metadata-document
+  "Fetches a Client ID Metadata Document from `url` via HTTP GET.
+
+  Uses `java.net.http.HttpClient` with `Accept: application/json`, configurable
+  timeout (`:fetch-timeout-ms`, default 5000), and max body size (`:max-body-bytes`,
+  default 512KB). Redirect policy is `NEVER`. Returns the parsed JSON map on success,
+  or throws on failure."
+  [url {:keys [fetch-timeout-ms max-body-bytes]
+        :or   {fetch-timeout-ms default-timeout-ms
+               max-body-bytes   default-max-body-bytes}}]
+  (let [client   (-> (HttpClient/newBuilder)
+                     (.followRedirects java.net.http.HttpClient$Redirect/NEVER)
+                     (.connectTimeout (Duration/ofMillis fetch-timeout-ms))
+                     (.build))
+        request  (-> (HttpRequest/newBuilder)
+                     (.uri (URI. ^String url))
+                     (.header "Accept" "application/json")
+                     (.timeout (Duration/ofMillis fetch-timeout-ms))
+                     (.GET)
+                     (.build))
+        response (.send client request (HttpResponse$BodyHandlers/ofString))]
+    (when (not= 200 (.statusCode response))
+      (throw (ex-info "metadata fetch failed"
+                      {:status (.statusCode response) :url url})))
+    (let [^String body (.body response)]
+      (when (> (.length body) max-body-bytes)
+        (throw (ex-info "metadata document too large"
+                        {:url url :size (.length body) :max max-body-bytes})))
+      (json/parse-string body))))
+
+(defn- resolve-client-metadata
+  "Resolves a URL-based client ID to a `ClientConfig`.
+
+  Checks the cache first, then fetches, validates, and converts the metadata document.
+  Returns `ClientConfig` or nil on any failure."
+  [cache-atom url {:keys [cache-ttl-seconds clock fetch-fn]
+                   :or   {cache-ttl-seconds default-cache-ttl-seconds
+                          clock             (Clock/systemUTC)}}]
+  (or (cache-get cache-atom url cache-ttl-seconds clock)
+      (try
+        (let [fetch    (or fetch-fn #(fetch-metadata-document % {}))
+              document (fetch url)
+              _        (validate-metadata-document document url)
+              config   (metadata-document->client-config document)]
+          (cache-put cache-atom url config clock)
+          config)
+        (catch Exception _
+          nil))))
+
+(defrecord MetadataResolvingClientStore [inner cache opts]
+  proto/ClientStore
+  (get-client [_ client-id]
+    (or (proto/get-client inner client-id)
+        (when (url-client-id? client-id)
+          (resolve-client-metadata cache client-id opts))))
+
+  (register-client [_ client-config]
+    (proto/register-client inner client-config))
+
+  (update-client [_ client-id updated-config]
+    (proto/update-client inner client-id updated-config)))
+
+(m/=> create-metadata-resolving-store [:=> [:cat :any :map] [:fn #(satisfies? proto/ClientStore %)]])
+
+(defn create-metadata-resolving-store
+  "Creates a [[MetadataResolvingClientStore]] that wraps `inner-store` with Client ID
+  Metadata Document resolution.
+
+  For non-URL client IDs, delegates directly to `inner-store`. For HTTPS URL client IDs
+  not found in the inner store, fetches the metadata document from the URL, validates it,
+  and returns the resulting `ClientConfig`.
+
+  Options:
+
+  - `:fetch-fn` — `(fn [url] metadata-map)`, injectable for testing (default: HTTP fetch)
+  - `:cache-ttl-seconds` — how long to cache resolved metadata (default: 300)
+  - `:fetch-timeout-ms` — HTTP request timeout (default: 5000)
+  - `:max-body-bytes` — maximum metadata document size (default: 524288)
+  - `:clock` — `java.time.Clock` instance for testable time (default: system UTC)"
+  [inner-store opts]
+  (->MetadataResolvingClientStore inner-store (atom {}) opts))

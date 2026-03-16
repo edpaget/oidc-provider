@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 - RFC 7009 token revocation endpoint
+- Client ID Metadata Document resolution for URL-based client identifiers (draft-ietf-oauth-client-id-metadata-document)
 
 ### Security
 - URL-decode Basic auth credentials per RFC 6749 §2.3.1 to correctly handle special characters in client_id/client_secret
