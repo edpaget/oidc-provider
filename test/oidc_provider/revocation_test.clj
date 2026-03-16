@@ -102,6 +102,36 @@
       (is (= {:error "invalid_client"} (:body result)))
       (is (= "no-store" (get-in result [:headers "Cache-Control"]))))))
 
+(deftest revoke-with-access-token-hint-test
+  (testing "hint access_token revokes access token successfully"
+    (let [{:keys [client-store token-store auth-header]} (make-fixtures)]
+      (proto/save-access-token token-store "at-hint" "user-1" "test-client" ["openid"] 999999999999 nil)
+      (let [result (revocation/handle-revocation-request
+                    {:token "at-hint" :token_type_hint "access_token" :client_id "test-client"}
+                    auth-header client-store token-store)]
+        (is (= 200 (:status result)))
+        (is (nil? (proto/get-access-token token-store "at-hint")))))))
+
+(deftest revoke-with-refresh-token-hint-test
+  (testing "hint refresh_token revokes refresh token successfully"
+    (let [{:keys [client-store token-store auth-header]} (make-fixtures)]
+      (proto/save-refresh-token token-store "rt-hint" "user-1" "test-client" ["openid"] nil nil)
+      (let [result (revocation/handle-revocation-request
+                    {:token "rt-hint" :token_type_hint "refresh_token" :client_id "test-client"}
+                    auth-header client-store token-store)]
+        (is (= 200 (:status result)))
+        (is (nil? (proto/get-refresh-token token-store "rt-hint")))))))
+
+(deftest revoke-with-wrong-hint-test
+  (testing "wrong hint still revokes via fallback lookup"
+    (let [{:keys [client-store token-store auth-header]} (make-fixtures)]
+      (proto/save-refresh-token token-store "rt-wrong" "user-1" "test-client" ["openid"] nil nil)
+      (let [result (revocation/handle-revocation-request
+                    {:token "rt-wrong" :token_type_hint "access_token" :client_id "test-client"}
+                    auth-header client-store token-store)]
+        (is (= 200 (:status result)))
+        (is (nil? (proto/get-refresh-token token-store "rt-wrong")))))))
+
 (deftest revoke-unauthenticated-test
   (testing "returns 401 when client authentication fails"
     (let [{:keys [client-store token-store]} (make-fixtures)
