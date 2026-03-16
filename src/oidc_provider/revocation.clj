@@ -28,9 +28,7 @@
   (try
     (let [client (token-ep/authenticate-client params authorization-header client-store)]
       (if-not (:token params)
-        {:status  400
-         :headers {"Content-Type" "application/json"}
-         :body    {:error "invalid_request" :error_description "Missing token parameter"}}
+        (token-ep/token-error-response "invalid_request" "Missing token parameter")
         (let [token      (:token params)
               token-data (or (proto/get-access-token token-store token)
                              (proto/get-refresh-token token-store token))]
@@ -38,6 +36,4 @@
             (proto/revoke-token token-store token))
           {:status 200})))
     (catch clojure.lang.ExceptionInfo _
-      {:status  401
-       :headers {"Content-Type" "application/json"}
-       :body    {:error "invalid_client"}})))
+      (token-ep/token-error-response "invalid_client" nil :status 401))))
