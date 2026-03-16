@@ -58,11 +58,12 @@
   when the header is absent or not a Basic scheme."
   [authorization-header]
   (when (and authorization-header (str/starts-with? authorization-header "Basic "))
-    (let [encoded                   (subs authorization-header 6)
-          decoded                   (String. (.decode (Base64/getDecoder) encoded))
-          [client-id client-secret] (str/split decoded #":" 2)]
-      {:client-id     (URLDecoder/decode ^String client-id "UTF-8")
-       :client-secret (URLDecoder/decode ^String client-secret "UTF-8")})))
+    (let [encoded (subs authorization-header 6)
+          decoded (String. (.decode (Base64/getDecoder) encoded))]
+      (when (str/includes? decoded ":")
+        (let [[client-id client-secret] (str/split decoded #":" 2)]
+          {:client-id     (URLDecoder/decode ^String client-id "UTF-8")
+           :client-secret (URLDecoder/decode ^String client-secret "UTF-8")})))))
 
 (defn authenticate-client
   "Authenticates an OAuth2 client from request parameters or Basic auth header.

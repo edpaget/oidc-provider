@@ -970,3 +970,10 @@
           result  (token-ep/parse-basic-auth header)]
       (is (= "my client" (:client-id result)))
       (is (= "secret:value" (:client-secret result))))))
+
+(deftest parse-basic-auth-no-colon-test
+  (testing "returns nil when decoded value has no colon separator"
+    (let [encoded (.encodeToString (Base64/getEncoder)
+                                   (.getBytes "nocredentials" "UTF-8"))
+          header  (str "Basic " encoded)]
+      (is (nil? (token-ep/parse-basic-auth header))))))
