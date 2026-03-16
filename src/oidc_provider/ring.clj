@@ -1,12 +1,14 @@
 (ns oidc-provider.ring
-  "Ring handler for OAuth2 Dynamic Client Registration (RFC 7591/7592).
+  "Ring handlers for OAuth2 Dynamic Client Registration (RFC 7591/7592) and
+  Token Revocation (RFC 7009).
 
-  Provides [[registration-handler]] which returns a Ring handler supporting
-  POST for client registration and GET for client configuration reads."
+  Provides [[registration-handler]] for client registration and
+  [[revocation-handler]] for token revocation."
   (:require
    [cheshire.core :as json]
    [clojure.string :as str]
    [oidc-provider.registration :as reg]
+   [oidc-provider.revocation :as revocation]
    [oidc-provider.util :as util]))
 
 (set! *warn-on-reflection* true)
@@ -84,3 +86,21 @@
       {:status  405
        :headers {"Allow" "GET, POST" "Content-Type" "application/json"}
        :body    (json/generate-string {"error" "method_not_allowed"})})))
+
+(defn revocation-handler
+  "Creates a Ring handler for RFC 7009 token revocation.
+
+  Takes `client-store` and `token-store`. Only accepts POST requests; returns
+  405 for other methods."
+  [client-store token-store]
+  (fn [request]
+    (if (not= :post (:request-method request))
+      {:status  405
+       :headers {"Allow" "POST" "Content-Type" "application/json"}
+       :body    (json/generate-string {"error" "method_not_allowed"})}
+      (let [auth-header (get-in request [:headers "authorization"])
+            result      (revocation/handle-revocation-request
+                         (:params request) auth-header
+                         client-store token-store)]
+        (cond-> result
+          (:body result) (update :body json/generate-string))))))

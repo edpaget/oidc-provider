@@ -1,5 +1,6 @@
 (ns oidc-provider.registration-test
   (:require
+   [clojure.string :as str]
    [clojure.test :refer [deftest is testing]]
    [oidc-provider.protocol :as proto]
    [oidc-provider.registration :as reg]
@@ -41,15 +42,17 @@
       (is (util/verify-client-secret (get response "client_secret") (:client-secret-hash stored))))))
 
 (deftest registration-access-token-test
-  (testing "response includes registration_access_token matching stored value"
+  (testing "response token is plaintext, stored value is a PBKDF2 hash that verifies"
     (let [client-store (store/create-client-store)
           response     (reg/handle-registration-request
                         {"redirect_uris" ["https://app.example.com/callback"]}
                         client-store)
           client-id    (get response "client_id")
-          stored       (proto/get-client client-store client-id)]
-      (is (= (get response "registration_access_token")
-             (:registration-access-token stored))))))
+          stored       (proto/get-client client-store client-id)
+          plaintext    (get response "registration_access_token")]
+      (is (string? plaintext))
+      (is (str/starts-with? (:registration-access-token stored) "PBKDF2"))
+      (is (util/verify-client-secret plaintext (:registration-access-token stored))))))
 
 (deftest register-with-custom-metadata-test
   (testing "client_name and scope are preserved in response"
@@ -208,7 +211,8 @@
           token        (get reg-response "registration_access_token")
           read-result  (reg/handle-client-read client-store client-id token)]
       (is (= 200 (:status read-result)))
-      (is (= (dissoc reg-response "client_secret") (:body read-result))))))
+      (is (= (dissoc reg-response "client_secret" "registration_access_token")
+             (:body read-result))))))
 
 (deftest client-read-invalid-token-test
   (testing "returns 401 when token does not match"

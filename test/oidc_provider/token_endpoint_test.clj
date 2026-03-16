@@ -947,3 +947,16 @@
         (is (string? (:refresh_token response)))
         (is (= "user-123" (:user-id refresh-data)))
         (is (= "test-client" (:client-id refresh-data)))))))
+
+(deftest token-error-response-cache-headers-test
+  (testing "error response includes Cache-Control and Pragma headers"
+    (let [resp (token-ep/token-error-response "invalid_request" "bad request")]
+      (is (= "no-store" (get-in resp [:headers "Cache-Control"])))
+      (is (= "no-cache" (get-in resp [:headers "Pragma"]))))))
+
+(deftest token-success-response-cache-headers-test
+  (testing "success response includes Cache-Control and Pragma headers"
+    (let [resp (token-ep/token-success-response {:access_token "tok" :token_type "Bearer"})]
+      (is (= 200 (:status resp)))
+      (is (= "no-store" (get-in resp [:headers "Cache-Control"])))
+      (is (= "no-cache" (get-in resp [:headers "Pragma"]))))))

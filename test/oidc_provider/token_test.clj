@@ -5,7 +5,7 @@
    [oidc-provider.token :as token])
   (:import
    [com.nimbusds.jose.jwk JWKSet RSAKey]
-   [java.time Clock]))
+   [java.time Clock Instant ZoneOffset]))
 
 (deftest normalize-single-key-to-jwk-set-test
   (testing "single RSAKey wraps into a one-key JWKSet with kid preserved"
@@ -88,3 +88,15 @@
       (is (every? #(= "RSA" (:kty %)) keys))
       (is (every? #(nil? (:d %)) keys))
       (is (every? #(= "sig" (:use %)) keys)))))
+
+(deftest validate-id-token-uses-injected-clock-test
+  (testing "validation uses injected clock, not system clock"
+    (let [k            (token/generate-rsa-key)
+          key-set      (JWKSet. ^com.nimbusds.jose.jwk.JWK k)
+          config       (make-config key-set (.getKeyID ^RSAKey k))
+          jwt-str      (token/generate-id-token config "user-1" "client-1" {} {})
+          future-clock (Clock/fixed (.plusSeconds (Instant/now) (* 365 24 3600))
+                                    ZoneOffset/UTC)
+          future-cfg   (assoc config :clock future-clock)]
+      (is (thrown-with-msg? Exception #"Token expired"
+                            (token/validate-id-token future-cfg jwt-str "client-1"))))))

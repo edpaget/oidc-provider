@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- RFC 7009 token revocation endpoint
+
 ### Security
 - Use constant-time comparison for PKCE code challenge verification to prevent timing attacks
 - Defer authorization code deletion until after all validations pass, so a failed attempt doesn't burn the code for the legitimate user
 - Only issue refresh tokens to clients whose `grant-types` include `"refresh_token"`
+- Registration access tokens hashed at rest using PBKDF2
+- `validate-id-token` uses injected clock instead of `Date.` for testable time handling
+- Token responses include `Cache-Control: no-store` and `Pragma: no-cache` headers per RFC 6749 §5.1
 
 ## [0.1.2] - 2026-03-13
 

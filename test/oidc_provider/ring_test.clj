@@ -60,7 +60,8 @@
                                  :uri            (str "/register/" client-id)
                                  :headers        {"authorization" (str "Bearer " token)}})]
       (is (= 200 (:status response)))
-      (is (= reg-response (json/parse-string (:body response)))))))
+      (is (= (dissoc reg-response "registration_access_token")
+             (json/parse-string (:body response)))))))
 
 (deftest get-client-read-invalid-token-test
   (testing "GET with wrong Bearer token returns 401"

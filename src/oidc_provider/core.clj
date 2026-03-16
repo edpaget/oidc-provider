@@ -34,6 +34,7 @@
    [:token-store {:optional true} [:fn #(satisfies? proto/TokenStore %)]]
    [:claims-provider {:optional true} [:fn #(satisfies? proto/ClaimsProvider %)]]
    [:registration-endpoint {:optional true} :string]
+   [:revocation-endpoint {:optional true} :string]
    [:refresh-token-ttl-seconds {:optional true} pos-int?]
    [:rotate-refresh-tokens {:optional true} :boolean]
    [:clock {:optional true} [:fn (fn [c] (instance? java.time.Clock c))]]])
@@ -118,7 +119,8 @@
                  :id-token-signing-alg-values-supported
                  :token-endpoint-auth-methods-supported
                  :claims-supported
-                 :registration-endpoint])))
+                 :registration-endpoint
+                 :revocation-endpoint])))
 
 (defn jwks
   "Returns JWKS for the provider.
@@ -232,3 +234,13 @@
    provided, POST requests require a matching Bearer token."
   [provider & opts]
   (apply ring-handlers/registration-handler (:client-store provider) opts))
+
+(defn revocation-handler
+  "Creates a Ring handler for RFC 7009 token revocation.
+
+   Takes a Provider instance and returns a Ring handler that accepts POST
+   requests to revoke access or refresh tokens."
+  [provider]
+  (ring-handlers/revocation-handler
+   (:client-store provider)
+   (:token-store provider)))

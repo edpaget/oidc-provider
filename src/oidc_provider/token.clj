@@ -149,7 +149,7 @@
 
   Throws:
     ex-info on validation failure"
-  [{:keys [issuer key-set] :as config} token expected-client-id]
+  [{:keys [issuer key-set clock] :as config} token expected-client-id]
   {:pre [(m/validate ProviderConfig config)]}
   (let [^DefaultJWTProcessor processor (DefaultJWTProcessor.)
         key-selector                   (JWSVerificationKeySelector.
@@ -164,7 +164,7 @@
           issuer-val           (.getIssuer claims)
           audience             (.getAudience claims)
           ^Date expiry         (.getExpirationTime claims)
-          now                  (Date.)]
+          now                  (Date/from (.instant ^Clock clock))]
       (when-not (= issuer-val issuer)
         (throw (ex-info "Issuer mismatch"
                         {:expected issuer

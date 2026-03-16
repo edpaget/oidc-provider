@@ -173,13 +173,16 @@
   (when-not (m/validate RegistrationRequest request)
     (throw (ex-info "invalid_client_metadata"
                     {:errors (m/explain RegistrationRequest request)})))
-  (let [config   (-> request apply-defaults validate-request request->client-config)
-        secret   (when (not= (:token-endpoint-auth-method config) "none")
-                   (util/generate-client-secret))
-        to-store (cond-> config
-                   secret (assoc :client-secret-hash (util/hash-client-secret secret)))
-        stored   (proto/register-client client-store to-store)]
-    (cond-> (client-config->response stored)
+  (let [config    (-> request apply-defaults validate-request request->client-config)
+        reg-token (:registration-access-token config)
+        secret    (when (not= (:token-endpoint-auth-method config) "none")
+                    (util/generate-client-secret))
+        to-store  (cond-> (assoc config :registration-access-token
+                                 (util/hash-client-secret reg-token))
+                    secret (assoc :client-secret-hash (util/hash-client-secret secret)))
+        stored    (proto/register-client client-store to-store)]
+    (cond-> (-> (client-config->response stored)
+                (assoc "registration_access_token" reg-token))
       secret (assoc "client_secret" secret))))
 
 (defn handle-client-read
@@ -188,12 +191,15 @@
   Takes the `store` implementing [[oidc-provider.protocol/ClientStore]],
   `client-id`, and the bearer `access-token` presented by the caller.
   Returns the client configuration if the token is valid, or a 401 error
-  response otherwise."
+  response otherwise. The stored registration access token is a PBKDF2 hash;
+  verification uses [[oidc-provider.util/verify-client-secret]]."
   [store client-id access-token]
   (let [client (proto/get-client store client-id)]
     (if (and client
-             (util/constant-time-eq? access-token (:registration-access-token client)))
-      {:status 200 :body (client-config->response client)}
+             (try
+               (util/verify-client-secret access-token (:registration-access-token client))
+               (catch Exception _ false)))
+      {:status 200 :body (dissoc (client-config->response client) "registration_access_token")}
       {:status 401 :body {"error" "invalid_token"}})))
 
 (defn registration-error-response

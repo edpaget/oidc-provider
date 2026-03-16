@@ -49,7 +49,12 @@
     (string? resource) [resource]
     :else              nil))
 
-(defn- parse-basic-auth
+(defn parse-basic-auth
+  "Parses an HTTP Basic Authorization header into client credentials.
+
+  Decodes the Base64-encoded `client_id:client_secret` pair from the header
+  value. Returns a map with `:client-id` and `:client-secret` keys, or `nil`
+  when the header is absent or not a Basic scheme."
   [authorization-header]
   (when (and authorization-header (str/starts-with? authorization-header "Basic "))
     (let [encoded                   (subs authorization-header 6)
@@ -58,7 +63,13 @@
       {:client-id     client-id
        :client-secret client-secret})))
 
-(defn- authenticate-client
+(defn authenticate-client
+  "Authenticates an OAuth2 client from request parameters or Basic auth header.
+
+  Resolves the client identity from `params` (`:client_id` / `:client_secret`)
+  or the `authorization-header` (HTTP Basic), looks the client up in
+  `client-store`, and verifies credentials. Returns the client config map on
+  success. Throws `ex-info` on missing, unknown, or mismatched credentials."
   [params authorization-header client-store]
   (let [basic-auth    (parse-basic-auth authorization-header)
         client-id     (or (:client-id basic-auth) (:client_id params))
@@ -300,19 +311,31 @@
                       {:errors (m/explain TokenResponse response)})))
     response))
 
+(def ^:private no-cache-headers
+  {"Content-Type"  "application/json"
+   "Cache-Control" "no-store"
+   "Pragma"        "no-cache"})
+
 (defn token-error-response
-  "Creates an OAuth2 error response.
+  "Creates an OAuth2 error response with cache-control headers per RFC 6749 §5.1.
 
-  Args:
-    error: Error code (e.g., \"invalid_request\", \"invalid_client\")
-    error-description: Human-readable error description
-    status: HTTP status code (default 400)
-
-  Returns:
-    Map with :status, :headers, and :body"
+  Takes an `error` code string, an `error-description` string, and an optional
+  `:status` (defaults to 400). Returns a Ring response map with JSON body and
+  `Cache-Control: no-store` / `Pragma: no-cache` headers."
   [error error-description & {:keys [status] :or {status 400}}]
   {:status  status
-   :headers {"Content-Type" "application/json"}
+   :headers no-cache-headers
    :body    (json/generate-string
              (cond-> {:error error}
                error-description (assoc :error_description error-description)))})
+
+(defn token-success-response
+  "Wraps a token response map as a Ring response with cache-control headers per RFC 6749 §5.1.
+
+  Takes a `token-map` (e.g. the result of [[handle-token-request]]) and returns
+  a Ring response with status 200, JSON body, and `Cache-Control: no-store` /
+  `Pragma: no-cache` headers."
+  [token-map]
+  {:status  200
+   :headers no-cache-headers
+   :body    (json/generate-string token-map)})
