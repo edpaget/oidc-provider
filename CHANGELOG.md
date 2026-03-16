@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Client ID Metadata Document resolution for URL-based client identifiers (draft-ietf-oauth-client-id-metadata-document)
 - `client_id_metadata_document_supported` discovery metadata field
 
+### Fixed
+- Authorization responses no longer include an empty `iss` parameter when provider config lacks an issuer
+
+### Changed
+- Revocation error responses use JSON-serialized bodies with `Cache-Control: no-store` headers, consistent with the token endpoint
+
 ### Security
 - URL-decode Basic auth credentials per RFC 6749 §2.3.1 to correctly handle special characters in client_id/client_secret
 - Add `iss` (issuer) parameter to authorization responses per RFC 9207 to prevent mix-up attacks
