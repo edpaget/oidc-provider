@@ -149,7 +149,6 @@
   "Converts a stored kebab-case client config to a snake_case registration response."
   [client]
   (cond-> {"client_id"                  (:client-id client)
-           "registration_access_token"  (:registration-access-token client)
            "redirect_uris"              (:redirect-uris client)
            "grant_types"                (:grant-types client)
            "response_types"             (:response-types client)
@@ -199,7 +198,7 @@
              (try
                (util/verify-client-secret access-token (:registration-access-token client))
                (catch Exception _ false)))
-      {:status 200 :body (dissoc (client-config->response client) "registration_access_token")}
+      {:status 200 :body (client-config->response client)}
       {:status 401 :body {"error" "invalid_token"}})))
 
 (defn registration-error-response

@@ -199,6 +199,18 @@
           stored       (proto/get-client client-store client-id)]
       (is (= "confidential" (:client-type stored))))))
 
+(deftest client-read-does-not-expose-registration-token-test
+  (testing "handle-client-read response does not contain registration_access_token"
+    (let [client-store (store/create-client-store)
+          reg-response (reg/handle-registration-request
+                        {"redirect_uris" ["https://app.example.com/callback"]}
+                        client-store)
+          client-id    (get reg-response "client_id")
+          token        (get reg-response "registration_access_token")
+          read-result  (reg/handle-client-read client-store client-id token)]
+      (is (= 200 (:status read-result)))
+      (is (not (contains? (:body read-result) "registration_access_token"))))))
+
 (deftest client-read-success-test
   (testing "reads back client configuration with valid token"
     (let [client-store (store/create-client-store)
