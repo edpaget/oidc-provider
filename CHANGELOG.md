@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-17
+
 ### Changed
 - Client authentication now requires hashed secrets via `:client-secret-hash`; plaintext `:client-secret` field removed from `ClientConfig` schema
 - **Breaking** — `handle-registration-request` and `handle-client-read` now expect and return keyword keys (e.g., `:redirect_uris`, `:client_id`) instead of string keys. Callers passing parsed JSON must use `(json/parse-string body true)` or equivalent to produce keyword maps.
