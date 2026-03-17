@@ -3,9 +3,12 @@
    [clojure.test :refer [deftest is testing]]
    [oidc-provider.core :as core]
    [oidc-provider.protocol :as proto]
-   [oidc-provider.token :as token])
+   [oidc-provider.token :as token]
+   [oidc-provider.util :as util])
   (:import
    [com.nimbusds.jose.jwk JWKSet RSAKey]))
+
+(def ^:private secret123-hash (util/hash-client-secret "secret123"))
 
 (defrecord TestClaimsProvider []
   proto/ClaimsProvider
@@ -39,15 +42,15 @@
                      :jwks-uri               "https://test.example.com/jwks"})
           client   (core/register-client
                     provider
-                    {:client-id      "test-client"
-                     :client-type    "confidential"
-                     :client-secret  "secret123"
-                     :redirect-uris  ["https://app.example.com/callback"]
-                     :grant-types    ["authorization_code" "refresh_token"]
-                     :response-types ["code"]
-                     :scopes         ["openid" "profile" "email"]})]
+                    {:client-id          "test-client"
+                     :client-type        "confidential"
+                     :client-secret-hash secret123-hash
+                     :redirect-uris      ["https://app.example.com/callback"]
+                     :grant-types        ["authorization_code" "refresh_token"]
+                     :response-types     ["code"]
+                     :scopes             ["openid" "profile" "email"]})]
       (is (= "test-client" (:client-id client)))
-      (is (= "secret123" (:client-secret client)))
+      (is (= secret123-hash (:client-secret-hash client)))
       (is (= ["https://app.example.com/callback"] (:redirect-uris client))))))
 
 (deftest retrieve-registered-client-test
@@ -59,13 +62,13 @@
                      :jwks-uri               "https://test.example.com/jwks"})
           _        (core/register-client
                     provider
-                    {:client-id      "test-client"
-                     :client-type    "confidential"
-                     :client-secret  "secret123"
-                     :redirect-uris  ["https://app.example.com/callback"]
-                     :grant-types    ["authorization_code"]
-                     :response-types ["code"]
-                     :scopes         ["openid"]})
+                    {:client-id          "test-client"
+                     :client-type        "confidential"
+                     :client-secret-hash secret123-hash
+                     :redirect-uris      ["https://app.example.com/callback"]
+                     :grant-types        ["authorization_code"]
+                     :response-types     ["code"]
+                     :scopes             ["openid"]})
           client   (core/get-client provider "test-client")]
       (is (= "test-client" (:client-id client))))))
 

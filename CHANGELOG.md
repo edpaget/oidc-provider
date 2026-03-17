@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Client authentication now requires hashed secrets via `:client-secret-hash`; plaintext `:client-secret` field removed from `ClientConfig` schema
+
+### Removed
+- `initial-access-token` option from `registration-handler`; use application-level middleware to gate registration access
+
+### Security
+- Eliminated plaintext client secret storage and comparison path
+
 ## [0.2.0] - 2026-03-16
 
 ### Security

@@ -8,8 +8,7 @@
    [cheshire.core :as json]
    [clojure.string :as str]
    [oidc-provider.registration :as reg]
-   [oidc-provider.revocation :as revocation]
-   [oidc-provider.util :as util]))
+   [oidc-provider.revocation :as revocation]))
 
 (set! *warn-on-reflection* true)
 
@@ -43,22 +42,18 @@
 
 (defn- handle-post
   "Handles POST registration requests."
-  [request client-store initial-access-token]
-  (if (and initial-access-token
-           (let [token (extract-bearer-token request)]
-             (not (and token (util/constant-time-eq? token initial-access-token)))))
-    (json-response 401 {"error" "invalid_token"})
-    (let [parsed (parse-json-body request)]
-      (if-not parsed
-        (json-response 400 {"error"             "invalid_client_metadata"
-                            "error_description" "Missing or malformed JSON body"})
-        (try
-          (let [result (reg/handle-registration-request parsed client-store)]
-            (json-response 201 result))
-          (catch clojure.lang.ExceptionInfo e
-            (json-response 400 {"error"             "invalid_client_metadata"
-                                "error_description" (or (:error_description (ex-data e))
-                                                        "invalid_client_metadata")})))))))
+  [request client-store]
+  (let [parsed (parse-json-body request)]
+    (if-not parsed
+      (json-response 400 {"error"             "invalid_client_metadata"
+                          "error_description" "Missing or malformed JSON body"})
+      (try
+        (let [result (reg/handle-registration-request parsed client-store)]
+          (json-response 201 result))
+        (catch clojure.lang.ExceptionInfo e
+          (json-response 400 {"error"             "invalid_client_metadata"
+                              "error_description" (or (:error_description (ex-data e))
+                                                      "invalid_client_metadata")}))))))
 
 (defn- handle-get
   "Handles GET client read requests."
@@ -73,16 +68,14 @@
 (defn registration-handler
   "Creates a Ring handler for dynamic client registration.
 
-  Takes a `client-store` implementing [[oidc-provider.protocol/ClientStore]]
-  and optional keyword arguments. When `:initial-access-token` is provided,
-  POST requests require a matching Bearer token for gated registration.
-
+  Takes a `client-store` implementing [[oidc-provider.protocol/ClientStore]].
   Returns a Ring handler function that dispatches POST for registration
-  and GET for client configuration reads."
-  [client-store & {:keys [initial-access-token]}]
+  and GET for client configuration reads. To gate registration access,
+  use application-level middleware."
+  [client-store]
   (fn [request]
     (case (:request-method request)
-      :post (handle-post request client-store initial-access-token)
+      :post (handle-post request client-store)
       :get  (handle-get request client-store)
       {:status  405
        :headers {"Allow" "GET, POST" "Content-Type" "application/json"}

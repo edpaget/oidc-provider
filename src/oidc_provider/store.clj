@@ -1,9 +1,8 @@
 (ns oidc-provider.store
   "In-memory implementations of storage protocols for development and testing.
 
-  These stores hold plaintext client secrets in memory and are **not suitable for
-  production**. Production deployments should use hashed secrets via the
-  `:client-secret-hash` field and [[oidc-provider.util/hash-client-secret]]."
+  Clients should use `:client-secret-hash` (via [[oidc-provider.util/hash-client-secret]])
+  for credential storage."
   (:require
    [oidc-provider.protocol :as proto]))
 

@@ -4,19 +4,23 @@
    [clojure.test :refer [deftest is testing]]
    [oidc-provider.authorization :as authz]
    [oidc-provider.protocol :as proto]
-   [oidc-provider.store :as store])
+   [oidc-provider.store :as store]
+   [oidc-provider.util :as util])
   (:import
    [java.time Clock]))
+
+(def ^:private secret-hash (util/hash-client-secret "secret"))
+(def ^:private secret123-hash (util/hash-client-secret "secret123"))
 
 (deftest parse-valid-authorization-request-test
   (testing "parses valid authorization request"
     (let [client-store (store/create-client-store
-                        [{:client-id      "test-client"
-                          :client-type    "confidential"
-                          :client-secret  "secret"
-                          :redirect-uris  ["https://app.example.com/callback"]
-                          :response-types ["code"]
-                          :scopes         ["openid" "profile" "email"]}])
+                        [{:client-id          "test-client"
+                          :client-type        "confidential"
+                          :client-secret-hash secret-hash
+                          :redirect-uris      ["https://app.example.com/callback"]
+                          :response-types     ["code"]
+                          :scopes             ["openid" "profile" "email"]}])
           query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid+profile&state=xyz&nonce=abc"
           request      (authz/parse-authorization-request query-string client-store)]
       (is (= "code" (:response_type request)))
@@ -28,12 +32,12 @@
 (deftest parse-authorization-request-invalid-redirect-uri-test
   (testing "throws on invalid redirect_uri"
     (let [client-store (store/create-client-store
-                        [{:client-id      "test-client"
-                          :client-type    "confidential"
-                          :client-secret  "secret"
-                          :redirect-uris  ["https://app.example.com/callback"]
-                          :response-types ["code"]
-                          :scopes         ["openid"]}])
+                        [{:client-id          "test-client"
+                          :client-type        "confidential"
+                          :client-secret-hash secret-hash
+                          :redirect-uris      ["https://app.example.com/callback"]
+                          :response-types     ["code"]
+                          :scopes             ["openid"]}])
           query-string "response_type=code&client_id=test-client&redirect_uri=https://evil.com/callback"]
       (is (thrown-with-msg? Exception #"Invalid redirect_uri"
                             (authz/parse-authorization-request query-string client-store))))))
@@ -189,12 +193,12 @@
 (deftest confidential-client-without-pkce-succeeds-test
   (testing "confidential client without code_challenge succeeds"
     (let [client-store (store/create-client-store
-                        [{:client-id      "conf-client"
-                          :client-type    "confidential"
-                          :client-secret  "secret123"
-                          :redirect-uris  ["https://app.example.com/callback"]
-                          :response-types ["code"]
-                          :scopes         ["openid"]}])
+                        [{:client-id          "conf-client"
+                          :client-type        "confidential"
+                          :client-secret-hash secret123-hash
+                          :redirect-uris      ["https://app.example.com/callback"]
+                          :response-types     ["code"]
+                          :scopes             ["openid"]}])
           query-string "response_type=code&client_id=conf-client&redirect_uri=https://app.example.com/callback&scope=openid"
           request      (authz/parse-authorization-request query-string client-store)]
       (is (= "conf-client" (:client_id request))))))
@@ -215,12 +219,12 @@
 (deftest parse-authorization-request-with-resource-test
   (testing "single resource param is parsed as vector"
     (let [client-store (store/create-client-store
-                        [{:client-id      "test-client"
-                          :client-type    "confidential"
-                          :client-secret  "secret"
-                          :redirect-uris  ["https://app.example.com/callback"]
-                          :response-types ["code"]
-                          :scopes         ["openid"]}])
+                        [{:client-id          "test-client"
+                          :client-type        "confidential"
+                          :client-secret-hash secret-hash
+                          :redirect-uris      ["https://app.example.com/callback"]
+                          :response-types     ["code"]
+                          :scopes             ["openid"]}])
           query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&resource=https%3A%2F%2Fapi.example.com"
           request      (authz/parse-authorization-request query-string client-store)]
       (is (= ["https://api.example.com"] (:resource request))))))
@@ -228,12 +232,12 @@
 (deftest parse-authorization-request-with-multiple-resources-test
   (testing "multiple resource params are all collected"
     (let [client-store (store/create-client-store
-                        [{:client-id      "test-client"
-                          :client-type    "confidential"
-                          :client-secret  "secret"
-                          :redirect-uris  ["https://app.example.com/callback"]
-                          :response-types ["code"]
-                          :scopes         ["openid"]}])
+                        [{:client-id          "test-client"
+                          :client-type        "confidential"
+                          :client-secret-hash secret-hash
+                          :redirect-uris      ["https://app.example.com/callback"]
+                          :response-types     ["code"]
+                          :scopes             ["openid"]}])
           query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&resource=https%3A%2F%2Fapi.example.com&resource=https%3A%2F%2Fother.example.com"
           request      (authz/parse-authorization-request query-string client-store)]
       (is (= ["https://api.example.com" "https://other.example.com"] (:resource request))))))
@@ -241,12 +245,12 @@
 (deftest parse-authorization-request-rejects-relative-resource-test
   (testing "relative URI resource is rejected with invalid_target"
     (let [client-store (store/create-client-store
-                        [{:client-id      "test-client"
-                          :client-type    "confidential"
-                          :client-secret  "secret"
-                          :redirect-uris  ["https://app.example.com/callback"]
-                          :response-types ["code"]
-                          :scopes         ["openid"]}])
+                        [{:client-id          "test-client"
+                          :client-type        "confidential"
+                          :client-secret-hash secret-hash
+                          :redirect-uris      ["https://app.example.com/callback"]
+                          :response-types     ["code"]
+                          :scopes             ["openid"]}])
           query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&resource=%2Frelative%2Fpath"]
       (is (thrown-with-msg? Exception #"Invalid resource indicator"
                             (authz/parse-authorization-request query-string client-store))))))
@@ -254,12 +258,12 @@
 (deftest parse-authorization-request-rejects-fragment-resource-test
   (testing "URI with fragment resource is rejected with invalid_target"
     (let [client-store (store/create-client-store
-                        [{:client-id      "test-client"
-                          :client-type    "confidential"
-                          :client-secret  "secret"
-                          :redirect-uris  ["https://app.example.com/callback"]
-                          :response-types ["code"]
-                          :scopes         ["openid"]}])
+                        [{:client-id          "test-client"
+                          :client-type        "confidential"
+                          :client-secret-hash secret-hash
+                          :redirect-uris      ["https://app.example.com/callback"]
+                          :response-types     ["code"]
+                          :scopes             ["openid"]}])
           query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&resource=https%3A%2F%2Fapi.example.com%23frag"]
       (is (thrown-with-msg? Exception #"Invalid resource indicator"
                             (authz/parse-authorization-request query-string client-store))))))

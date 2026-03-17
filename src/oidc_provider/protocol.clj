@@ -27,7 +27,6 @@
   [:map
    [:client-id :string]
    [:client-type [:enum "confidential" "public"]]
-   [:client-secret {:optional true} :string]
    [:client-secret-hash {:optional true} :string]
    [:redirect-uris [:vector :string]]
    [:grant-types [:vector [:enum "authorization_code" "refresh_token" "client_credentials"]]]

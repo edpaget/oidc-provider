@@ -230,11 +230,10 @@
 (defn registration-handler
   "Creates a Ring handler for dynamic client registration.
 
-   Takes a Provider instance and optional keyword arguments forwarded to
-   [[oidc-provider.ring/registration-handler]]. When `:initial-access-token` is
-   provided, POST requests require a matching Bearer token."
-  [provider & opts]
-  (apply ring-handlers/registration-handler (:client-store provider) opts))
+   Takes a Provider instance. To gate registration access, use
+   application-level middleware."
+  [provider]
+  (ring-handlers/registration-handler (:client-store provider)))
 
 (defn revocation-handler
   "Creates a Ring handler for RFC 7009 token revocation.

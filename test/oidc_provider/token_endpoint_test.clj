@@ -21,6 +21,8 @@
             :clock                    (Clock/systemUTC)}
            overrides)))
 
+(def ^:private secret123-hash (util/hash-client-secret "secret123"))
+
 (defrecord TestClaimsProvider []
   proto/ClaimsProvider
   (get-claims [_ user-id _scope]
@@ -31,13 +33,13 @@
 (deftest authenticate-client-wrong-secret-test
   (testing "rejects wrong client secret"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code"]
-                             :response-types ["code"]
-                             :scopes         ["openid"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code"]
+                             :response-types     ["code"]
+                             :scopes             ["openid"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -58,13 +60,13 @@
 (deftest authenticate-client-missing-secret-test
   (testing "rejects missing client secret when required"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code"]
-                             :response-types ["code"]
-                             :scopes         ["openid"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code"]
+                             :response-types     ["code"]
+                             :scopes             ["openid"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -84,13 +86,13 @@
 (deftest handle-authorization-code-grant-test
   (testing "exchanges authorization code for tokens stored with correct metadata"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code"]
-                             :response-types ["code"]
-                             :scopes         ["openid" "profile" "email"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code"]
+                             :response-types     ["code"]
+                             :scopes             ["openid" "profile" "email"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -120,13 +122,13 @@
 (deftest authorization-code-grant-no-openid-scope-test
   (testing "omits id_token when openid is not in scope"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code"]
-                             :response-types ["code"]
-                             :scopes         ["profile" "email"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code"]
+                             :response-types     ["code"]
+                             :scopes             ["profile" "email"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -153,13 +155,13 @@
 (deftest handle-authorization-code-grant-expired-test
   (testing "throws on expired authorization code"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code"]
-                             :response-types ["code"]
-                             :scopes         ["openid"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code"]
+                             :response-types     ["code"]
+                             :scopes             ["openid"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -182,13 +184,13 @@
 (deftest redirect-uri-missing-enforcement-test
   (testing "throws when redirect_uri is missing but was in authorization request"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code"]
-                             :response-types ["code"]
-                             :scopes         ["openid"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code"]
+                             :response-types     ["code"]
+                             :scopes             ["openid"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -210,13 +212,13 @@
 (deftest redirect-uri-mismatch-enforcement-test
   (testing "throws when redirect_uri does not match"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code"]
-                             :response-types ["code"]
-                             :scopes         ["openid"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code"]
+                             :response-types     ["code"]
+                             :scopes             ["openid"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -239,13 +241,13 @@
 (deftest handle-refresh-token-grant-test
   (testing "refreshes access token with correct stored metadata and rotates refresh token"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["refresh_token"]
-                             :response-types ["code"]
-                             :scopes         ["openid" "profile"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["refresh_token"]
+                             :response-types     ["code"]
+                             :scopes             ["openid" "profile"]}])
           token-store     (store/create-token-store)
           provider-config (make-provider-config {:rotate-refresh-tokens true})
           refresh-token   (token/generate-refresh-token)]
@@ -265,13 +267,13 @@
 (deftest grant-type-authorization-code-rejected-test
   (testing "authorization_code rejected for client without grant type"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "cc-only-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  []
-                             :grant-types    ["client_credentials"]
-                             :response-types []
-                             :scopes         ["openid"]}])
+                           [{:client-id          "cc-only-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      []
+                             :grant-types        ["client_credentials"]
+                             :response-types     []
+                             :scopes             ["openid"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -294,13 +296,13 @@
 (deftest grant-type-refresh-token-rejected-test
   (testing "refresh_token rejected for client without grant type"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "authcode-only-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code"]
-                             :response-types ["code"]
-                             :scopes         ["openid"]}])
+                           [{:client-id          "authcode-only-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code"]
+                             :response-types     ["code"]
+                             :scopes             ["openid"]}])
           token-store     (store/create-token-store)
           provider-config (make-provider-config {})
           refresh-token   (token/generate-refresh-token)]
@@ -315,13 +317,13 @@
 (deftest handle-client-credentials-grant-test
   (testing "issues token with correct stored metadata"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  []
-                             :grant-types    ["client_credentials"]
-                             :response-types []
-                             :scopes         ["api:read" "api:write"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      []
+                             :grant-types        ["client_credentials"]
+                             :response-types     []
+                             :scopes             ["api:read" "api:write"]}])
           token-store     (store/create-token-store)
           provider-config (make-provider-config {})
           response        (token-ep/handle-client-credentials-grant
@@ -341,13 +343,13 @@
           challenge       (.getValue (CodeChallenge/compute CodeChallengeMethod/S256 verifier))
           verifier-str    (.getValue verifier)
           client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code"]
-                             :response-types ["code"]
-                             :scopes         ["openid" "profile"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code"]
+                             :response-types     ["code"]
+                             :scopes             ["openid" "profile"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -377,13 +379,13 @@
           challenge       (.getValue (CodeChallenge/compute CodeChallengeMethod/S256 verifier))
           wrong-verifier  (.getValue (CodeVerifier.))
           client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code"]
-                             :response-types ["code"]
-                             :scopes         ["openid"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code"]
+                             :response-types     ["code"]
+                             :scopes             ["openid"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -409,13 +411,13 @@
     (let [verifier        (CodeVerifier.)
           challenge       (.getValue (CodeChallenge/compute CodeChallengeMethod/S256 verifier))
           client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code"]
-                             :response-types ["code"]
-                             :scopes         ["openid"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code"]
+                             :response-types     ["code"]
+                             :scopes             ["openid"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -438,13 +440,13 @@
 (deftest authorization-code-grant-pkce-unexpected-verifier-test
   (testing "rejects verifier when no challenge was stored"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code"]
-                             :response-types ["code"]
-                             :scopes         ["openid"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code"]
+                             :response-types     ["code"]
+                             :scopes             ["openid"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -468,13 +470,13 @@
 (deftest authorization-code-grant-passes-resource-to-tokens-test
   (testing "resource from auth code round-trips to tokens and response"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code"]
-                             :response-types ["code"]
-                             :scopes         ["openid" "profile"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code"]
+                             :response-types     ["code"]
+                             :scopes             ["openid" "profile"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -501,13 +503,13 @@
 (deftest authorization-code-grant-no-resource-test
   (testing "no resource in auth code means no resource in tokens or response"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code"]
-                             :response-types ["code"]
-                             :scopes         ["profile"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code"]
+                             :response-types     ["code"]
+                             :scopes             ["profile"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -532,13 +534,13 @@
 (deftest refresh-token-grant-narrows-resource-test
   (testing "requesting a subset of original resources succeeds"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["refresh_token"]
-                             :response-types ["code"]
-                             :scopes         ["openid" "profile"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["refresh_token"]
+                             :response-types     ["code"]
+                             :scopes             ["openid" "profile"]}])
           token-store     (store/create-token-store)
           provider-config (make-provider-config {:rotate-refresh-tokens true})
           refresh-token   (token/generate-refresh-token)]
@@ -559,13 +561,13 @@
 (deftest refresh-token-grant-rejects-expanded-resource-test
   (testing "requesting a resource not in original set throws invalid_target"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["refresh_token"]
-                             :response-types ["code"]
-                             :scopes         ["openid"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["refresh_token"]
+                             :response-types     ["code"]
+                             :scopes             ["openid"]}])
           token-store     (store/create-token-store)
           provider-config (make-provider-config {})
           refresh-token   (token/generate-refresh-token)]
@@ -583,13 +585,13 @@
 (deftest refresh-token-grant-preserves-resource-test
   (testing "no resource param on refresh preserves original resources"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["refresh_token"]
-                             :response-types ["code"]
-                             :scopes         ["openid"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["refresh_token"]
+                             :response-types     ["code"]
+                             :scopes             ["openid"]}])
           token-store     (store/create-token-store)
           provider-config (make-provider-config {:rotate-refresh-tokens true})
           refresh-token   (token/generate-refresh-token)]
@@ -609,13 +611,13 @@
 (deftest client-credentials-grant-with-resource-test
   (testing "resource is stored and returned in response"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  []
-                             :grant-types    ["client_credentials"]
-                             :response-types []
-                             :scopes         ["api:read"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      []
+                             :grant-types        ["client_credentials"]
+                             :response-types     []
+                             :scopes             ["api:read"]}])
           token-store     (store/create-token-store)
           provider-config (make-provider-config {})
           response        (token-ep/handle-client-credentials-grant
@@ -631,13 +633,13 @@
 (deftest handle-token-request-multi-value-resource-test
   (testing "vector resource param produces a vector in the response"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  []
-                             :grant-types    ["client_credentials"]
-                             :response-types []
-                             :scopes         ["api:read"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      []
+                             :grant-types        ["client_credentials"]
+                             :response-types     []
+                             :scopes             ["api:read"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -735,12 +737,12 @@
     (let [past-instant    (-> (Instant/now) (.minusSeconds 3600))
           fixed-clock     (Clock/fixed past-instant ZoneOffset/UTC)
           client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["refresh_token"]
-                             :response-types ["code"]
-                             :scopes         ["openid"]}])
+                           [{:client-id          "test-client"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["refresh_token"]
+                             :response-types     ["code"]
+                             :scopes             ["openid"]}])
           token-store     (store/create-token-store)
           provider-config (make-provider-config {})
           refresh-token   (token/generate-refresh-token)
@@ -759,12 +761,12 @@
     (let [future-instant  (-> (Instant/now) (.plusSeconds 3600))
           future-clock    (Clock/fixed future-instant ZoneOffset/UTC)
           client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["refresh_token"]
-                             :response-types ["code"]
-                             :scopes         ["openid" "profile"]}])
+                           [{:client-id          "test-client"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["refresh_token"]
+                             :response-types     ["code"]
+                             :scopes             ["openid" "profile"]}])
           token-store     (store/create-token-store)
           provider-config (make-provider-config {:rotate-refresh-tokens true})
           refresh-token   (token/generate-refresh-token)
@@ -783,12 +785,12 @@
 (deftest refresh-token-rotation-revokes-old-token-test
   (testing "old refresh token is revoked and new one has correct metadata"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["refresh_token"]
-                             :response-types ["code"]
-                             :scopes         ["openid" "profile"]}])
+                           [{:client-id          "test-client"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["refresh_token"]
+                             :response-types     ["code"]
+                             :scopes             ["openid" "profile"]}])
           token-store     (store/create-token-store)
           provider-config (make-provider-config {:rotate-refresh-tokens true})
           old-refresh     (token/generate-refresh-token)]
@@ -810,12 +812,12 @@
 (deftest refresh-token-rotation-disabled-test
   (testing "with rotation disabled, no new refresh token is issued and old remains valid"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["refresh_token"]
-                             :response-types ["code"]
-                             :scopes         ["openid"]}])
+                           [{:client-id          "test-client"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["refresh_token"]
+                             :response-types     ["code"]
+                             :scopes             ["openid"]}])
           token-store     (store/create-token-store)
           provider-config (make-provider-config {:rotate-refresh-tokens false})
           refresh-token   (token/generate-refresh-token)]
@@ -835,12 +837,12 @@
     (let [now-instant     (Instant/parse "2026-01-01T00:00:00Z")
           fixed-clock     (Clock/fixed now-instant ZoneOffset/UTC)
           client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["refresh_token"]
-                             :response-types ["code"]
-                             :scopes         ["openid"]}])
+                           [{:client-id          "test-client"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["refresh_token"]
+                             :response-types     ["code"]
+                             :scopes             ["openid"]}])
           token-store     (store/create-token-store)
           provider-config (make-provider-config {:refresh-token-ttl-seconds 86400
                                                  :rotate-refresh-tokens     true
@@ -861,13 +863,13 @@
 (deftest code-consumed-on-validation-failure-test
   (testing "authorization code is consumed even when exchange fails"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code"]
-                             :response-types ["code"]
-                             :scopes         ["openid"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code"]
+                             :response-types     ["code"]
+                             :scopes             ["openid"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -891,13 +893,13 @@
 (deftest code-consumed-on-successful-exchange-test
   (testing "authorization code is deleted from store after successful exchange"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code"]
-                             :response-types ["code"]
-                             :scopes         ["openid"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code"]
+                             :response-types     ["code"]
+                             :scopes             ["openid"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)
@@ -920,13 +922,13 @@
 (deftest authorization-code-grant-with-refresh-token-grant-type-test
   (testing "client with refresh_token grant type receives a refresh token"
     (let [client-store    (store/create-client-store
-                           [{:client-id      "test-client"
-                             :client-type    "confidential"
-                             :client-secret  "secret123"
-                             :redirect-uris  ["https://app.example.com/callback"]
-                             :grant-types    ["authorization_code" "refresh_token"]
-                             :response-types ["code"]
-                             :scopes         ["openid" "profile"]}])
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code" "refresh_token"]
+                             :response-types     ["code"]
+                             :scopes             ["openid" "profile"]}])
           code-store      (store/create-authorization-code-store)
           token-store     (store/create-token-store)
           claims-provider (->TestClaimsProvider)

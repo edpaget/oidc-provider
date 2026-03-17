@@ -98,33 +98,6 @@
       (is (= 405 (:status response)))
       (is (= "GET, POST" (get-in response [:headers "Allow"]))))))
 
-(deftest gated-registration-success-test
-  (testing "POST with correct initial access token succeeds"
-    (let [handler  (ring/registration-handler (store/create-client-store)
-                                              :initial-access-token "secret-token")
-          response (handler {:request-method :post
-                             :headers        {"authorization" "Bearer secret-token"}
-                             :body           (valid-request-body)})]
-      (is (= 201 (:status response))))))
-
-(deftest gated-registration-missing-token-test
-  (testing "POST without token when gated returns 401"
-    (let [handler  (ring/registration-handler (store/create-client-store)
-                                              :initial-access-token "secret-token")
-          response (handler {:request-method :post
-                             :headers        {}
-                             :body           (valid-request-body)})]
-      (is (= 401 (:status response))))))
-
-(deftest gated-registration-wrong-token-test
-  (testing "POST with wrong token when gated returns 401"
-    (let [handler  (ring/registration-handler (store/create-client-store)
-                                              :initial-access-token "secret-token")
-          response (handler {:request-method :post
-                             :headers        {"authorization" "Bearer wrong-token"}
-                             :body           (valid-request-body)})]
-      (is (= 401 (:status response))))))
-
 (deftest registration-malli-error-description-test
   (testing "Malli validation failure uses generic error_description"
     (let [handler  (ring/registration-handler (store/create-client-store))
