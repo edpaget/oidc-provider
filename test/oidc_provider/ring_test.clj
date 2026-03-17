@@ -53,25 +53,25 @@
     (let [client-store (store/create-client-store)
           handler      (ring/registration-handler client-store)
           reg-response (reg/handle-registration-request
-                        {"redirect_uris" ["https://app.example.com/callback"]}
+                        {:redirect_uris ["https://app.example.com/callback"]}
                         client-store)
-          client-id    (get reg-response "client_id")
-          token        (get reg-response "registration_access_token")
+          client-id    (:client_id reg-response)
+          token        (:registration_access_token reg-response)
           response     (handler {:request-method :get
                                  :uri            (str "/register/" client-id)
                                  :headers        {"authorization" (str "Bearer " token)}})]
       (is (= 200 (:status response)))
-      (is (= (dissoc reg-response "registration_access_token")
-             (json/parse-string (:body response)))))))
+      (is (= (dissoc reg-response :registration_access_token)
+             (json/parse-string (:body response) true))))))
 
 (deftest get-client-read-invalid-token-test
   (testing "GET with wrong Bearer token returns 401"
     (let [client-store (store/create-client-store)
           handler      (ring/registration-handler client-store)
           reg-response (reg/handle-registration-request
-                        {"redirect_uris" ["https://app.example.com/callback"]}
+                        {:redirect_uris ["https://app.example.com/callback"]}
                         client-store)
-          client-id    (get reg-response "client_id")
+          client-id    (:client_id reg-response)
           response     (handler {:request-method :get
                                  :uri            (str "/register/" client-id)
                                  :headers        {"authorization" "Bearer wrong-token"}})]
@@ -82,9 +82,9 @@
     (let [client-store (store/create-client-store)
           handler      (ring/registration-handler client-store)
           reg-response (reg/handle-registration-request
-                        {"redirect_uris" ["https://app.example.com/callback"]}
+                        {:redirect_uris ["https://app.example.com/callback"]}
                         client-store)
-          client-id    (get reg-response "client_id")
+          client-id    (:client_id reg-response)
           response     (handler {:request-method :get
                                  :uri            (str "/register/" client-id)
                                  :headers        {}})]

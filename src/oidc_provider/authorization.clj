@@ -4,9 +4,7 @@
    [clojure.string :as str]
    [malli.core :as m]
    [oidc-provider.protocol :as proto]
-   [oidc-provider.token :as token])
-  (:import
-   [java.net URLDecoder]))
+   [oidc-provider.token :as token]))
 
 (set! *warn-on-reflection* true)
 
@@ -24,7 +22,7 @@
    [:ui_locales {:optional true} :string]
    [:code_challenge {:optional true} :string]
    [:code_challenge_method {:optional true} [:enum "S256"]]
-   [:resource {:optional true} :string]])
+   [:resource {:optional true} [:or :string [:vector :string]]]])
 
 (def AuthorizationResponse
   "Malli schema for authorization response."
@@ -32,15 +30,13 @@
    [:redirect-uri :string]
    [:params :map]])
 
-(defn- parse-query-string
-  [query-string]
-  (when query-string
-    (into {}
-          (map (fn [param]
-                 (let [[k v]       (str/split param #"=" 2)
-                       ^String val (if v v "")]
-                   [(keyword k) (URLDecoder/decode val "UTF-8")])))
-          (str/split query-string #"&"))))
+(defn- normalize-resource
+  "Normalizes the `:resource` param to a vector. Ring's `wrap-params` produces a
+  string for a single value and a vector for multiples."
+  [params]
+  (if-let [r (:resource params)]
+    (assoc params :resource (if (string? r) [r] (vec r)))
+    params))
 
 (defn- validate-redirect-uri
   [client redirect-uri]
@@ -77,14 +73,6 @@
 
     :else params))
 
-(defn- extract-resource-params
-  [query-string]
-  (when query-string
-    (->> (str/split query-string #"&")
-         (filter #(str/starts-with? % "resource="))
-         (mapv #(URLDecoder/decode (subs % 9) "UTF-8"))
-         not-empty)))
-
 (defn- validate-public-client-pkce
   [client params]
   (when (and (= (:client-type client) "public")
@@ -93,32 +81,35 @@
                     {:error "invalid_request"}))))
 
 (defn parse-authorization-request
-  "Parses and validates an authorization request.
+  "Validates a pre-parsed authorization request.
 
-   Takes a URL query string from the authorization endpoint and a ClientStore
-   implementation. Parses the query parameters, validates them against the
-   AuthorizationRequest schema, looks up the client, and validates the redirect URI,
-   response type, scopes, and PKCE parameters. Returns the validated request map.
-   Throws ex-info on validation errors or if the client is unknown."
-  [query-string client-store]
-  (let [params (parse-query-string query-string)]
-    (when-not (m/validate AuthorizationRequest params)
-      (throw (ex-info "Invalid authorization request"
-                      {:errors (m/explain AuthorizationRequest params)})))
-    (let [params    (validate-pkce-params params)
-          client-id (:client_id params)
-          client    (proto/get-client client-store client-id)]
-      (when-not client
-        (throw (ex-info "Unknown client" {:client-id client-id})))
-      (validate-redirect-uri client (:redirect_uri params))
-      (validate-response-type client (:response_type params))
-      (when (:scope params)
-        (validate-scope client (:scope params)))
-      (validate-public-client-pkce client params)
-      (let [resources (extract-resource-params query-string)]
-        (when resources (proto/validate-resource-indicators resources))
-        (cond-> params
-          resources (assoc :resource resources))))))
+   Takes a `params` map with keyword keys (as produced by Ring's `wrap-params` and
+   `wrap-keyword-params` middleware) and a `client-store` implementing
+   [[oidc-provider.protocol/ClientStore]]. Validates against [[AuthorizationRequest]],
+   looks up the client, and validates the redirect URI, response type, scopes, PKCE,
+   and resource indicator parameters. Returns the validated request map.
+
+   The `:resource` parameter may be a string (single value) or a vector (multiple
+   values); it is normalized to a vector. Throws `ex-info` on validation errors or
+   if the client is unknown."
+  [params client-store]
+  (when-not (m/validate AuthorizationRequest params)
+    (throw (ex-info "Invalid authorization request"
+                    {:errors (m/explain AuthorizationRequest params)})))
+  (let [params    (validate-pkce-params params)
+        params    (normalize-resource params)
+        client-id (:client_id params)
+        client    (proto/get-client client-store client-id)]
+    (when-not client
+      (throw (ex-info "Unknown client" {:client-id client-id})))
+    (validate-redirect-uri client (:redirect_uri params))
+    (validate-response-type client (:response_type params))
+    (when (:scope params)
+      (validate-scope client (:scope params)))
+    (validate-public-client-pkce client params)
+    (when-let [resources (:resource params)]
+      (proto/validate-resource-indicators resources))
+    params))
 
 (defn handle-authorization-approval
   "Handles user approval of authorization request.

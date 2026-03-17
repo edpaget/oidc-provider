@@ -23,7 +23,7 @@
   "Parses the request body as JSON. Returns nil on missing body or parse failure."
   [request]
   (try
-    (some-> (:body request) slurp (json/parse-string))
+    (some-> (:body request) slurp (json/parse-string true))
     (catch com.fasterxml.jackson.core.JsonParseException _ nil)))
 
 (defn- json-response

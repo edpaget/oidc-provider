@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - Client authentication now requires hashed secrets via `:client-secret-hash`; plaintext `:client-secret` field removed from `ClientConfig` schema
+- **Breaking** — `handle-registration-request` and `handle-client-read` now expect and return keyword keys (e.g., `:redirect_uris`, `:client_id`) instead of string keys. Callers passing parsed JSON must use `(json/parse-string body true)` or equivalent to produce keyword maps.
+- **Breaking** — `parse-authorization-request` now accepts a pre-parsed keyword params map instead of a raw query string. Callers should use Ring's `wrap-params`/`wrap-keyword-params` middleware or equivalent to parse query parameters before passing them in. The `:resource` parameter accepts a string or vector and is normalized to a vector.
 
 ### Removed
 - `initial-access-token` option from `registration-handler`; use application-level middleware to gate registration access

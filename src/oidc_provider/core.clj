@@ -133,14 +133,14 @@
   (disco/jwks-endpoint (:provider-config provider)))
 
 (defn parse-authorization-request
-  "Parses and validates an authorization request.
+  "Validates an authorization request.
 
-   Takes a Provider instance and the query string from the authorization endpoint
-   request. Validates the request parameters against the registered client
-   configuration. Returns the validated authorization request map. Throws ex-info
-   on validation errors."
-  [provider query-string]
-  (authz/parse-authorization-request query-string (:client-store provider)))
+   Takes a Provider instance and a `params` map with keyword keys (as produced by
+   Ring's `wrap-params` and `wrap-keyword-params` middleware). Validates the request
+   parameters against the registered client configuration. Returns the validated
+   authorization request map. Throws `ex-info` on validation errors."
+  [provider params]
+  (authz/parse-authorization-request params (:client-store provider)))
 
 (defn authorize
   "Handles authorization approval after user authentication.

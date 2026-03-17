@@ -78,6 +78,11 @@ All docstrings should follow the Clojure community style guide and be written in
 - Malli schemas and important `def` forms should have docstrings
 - Describe what the schema validates or what the data represents
 
+## Handler Input Maps
+- All handler functions that accept parsed request parameters (query params, form params, JSON body) must expect **keyword keys** (e.g., `:grant_type`, `:redirect_uris`, `:client_id`)
+- Ring middleware (`wrap-keyword-params`) or JSON parsing (`json/parse-string body true`) should convert string keys to keywords at the boundary
+- Internal option/config maps use kebab-case keywords (e.g., `:client-id`, `:redirect-uris`)
+
 ## Malli
 - All public functions should use malli schemas.
 

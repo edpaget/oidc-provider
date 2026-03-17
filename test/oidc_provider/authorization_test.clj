@@ -21,8 +21,13 @@
                           :redirect-uris      ["https://app.example.com/callback"]
                           :response-types     ["code"]
                           :scopes             ["openid" "profile" "email"]}])
-          query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid+profile&state=xyz&nonce=abc"
-          request      (authz/parse-authorization-request query-string client-store)]
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid profile"
+                        :state         "xyz"
+                        :nonce         "abc"}
+          request      (authz/parse-authorization-request params client-store)]
       (is (= "code" (:response_type request)))
       (is (= "test-client" (:client_id request)))
       (is (= "https://app.example.com/callback" (:redirect_uri request)))
@@ -38,16 +43,20 @@
                           :redirect-uris      ["https://app.example.com/callback"]
                           :response-types     ["code"]
                           :scopes             ["openid"]}])
-          query-string "response_type=code&client_id=test-client&redirect_uri=https://evil.com/callback"]
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://evil.com/callback"}]
       (is (thrown-with-msg? Exception #"Invalid redirect_uri"
-                            (authz/parse-authorization-request query-string client-store))))))
+                            (authz/parse-authorization-request params client-store))))))
 
 (deftest parse-authorization-request-unknown-client-test
   (testing "throws on unknown client"
     (let [client-store (store/create-client-store [])
-          query-string "response_type=code&client_id=unknown&redirect_uri=https://app.example.com/callback"]
+          params       {:response_type "code"
+                        :client_id     "unknown"
+                        :redirect_uri  "https://app.example.com/callback"}]
       (is (thrown-with-msg? Exception #"Unknown client"
-                            (authz/parse-authorization-request query-string client-store))))))
+                            (authz/parse-authorization-request params client-store))))))
 
 (deftest handle-authorization-approval-test
   (testing "generates authorization code stored with correct metadata"
@@ -117,8 +126,13 @@
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
                           :scopes         ["openid"]}])
-          query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256"
-          request      (authz/parse-authorization-request query-string client-store)]
+          params       {:response_type         "code"
+                        :client_id             "test-client"
+                        :redirect_uri          "https://app.example.com/callback"
+                        :scope                 "openid"
+                        :code_challenge        "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+                        :code_challenge_method "S256"}
+          request      (authz/parse-authorization-request params client-store)]
       (is (= "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM" (:code_challenge request)))
       (is (= "S256" (:code_challenge_method request))))))
 
@@ -130,8 +144,12 @@
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
                           :scopes         ["openid"]}])
-          query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
-          request      (authz/parse-authorization-request query-string client-store)]
+          params       {:response_type  "code"
+                        :client_id      "test-client"
+                        :redirect_uri   "https://app.example.com/callback"
+                        :scope          "openid"
+                        :code_challenge "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"}
+          request      (authz/parse-authorization-request params client-store)]
       (is (= "S256" (:code_challenge_method request))))))
 
 (deftest parse-authorization-request-rejects-plain-method-test
@@ -142,9 +160,14 @@
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
                           :scopes         ["openid"]}])
-          query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&code_challenge=abc&code_challenge_method=plain"]
+          params       {:response_type         "code"
+                        :client_id             "test-client"
+                        :redirect_uri          "https://app.example.com/callback"
+                        :scope                 "openid"
+                        :code_challenge        "abc"
+                        :code_challenge_method "plain"}]
       (is (thrown-with-msg? Exception #"Invalid authorization request"
-                            (authz/parse-authorization-request query-string client-store))))))
+                            (authz/parse-authorization-request params client-store))))))
 
 (deftest handle-authorization-approval-stores-pkce-test
   (testing "stores code-challenge and code-challenge-method with authorization code"
@@ -173,9 +196,12 @@
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
                           :scopes         ["openid"]}])
-          query-string "response_type=code&client_id=public-client&redirect_uri=https://app.example.com/callback&scope=openid"]
+          params       {:response_type "code"
+                        :client_id     "public-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"}]
       (is (thrown-with-msg? Exception #"Public clients must use PKCE"
-                            (authz/parse-authorization-request query-string client-store))))))
+                            (authz/parse-authorization-request params client-store))))))
 
 (deftest public-client-with-pkce-succeeds-test
   (testing "public client with code_challenge succeeds"
@@ -185,8 +211,13 @@
                           :redirect-uris  ["https://app.example.com/callback"]
                           :response-types ["code"]
                           :scopes         ["openid"]}])
-          query-string "response_type=code&client_id=public-client&redirect_uri=https://app.example.com/callback&scope=openid&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256"
-          request      (authz/parse-authorization-request query-string client-store)]
+          params       {:response_type         "code"
+                        :client_id             "public-client"
+                        :redirect_uri          "https://app.example.com/callback"
+                        :scope                 "openid"
+                        :code_challenge        "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+                        :code_challenge_method "S256"}
+          request      (authz/parse-authorization-request params client-store)]
       (is (= "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM" (:code_challenge request)))
       (is (= "S256" (:code_challenge_method request))))))
 
@@ -199,8 +230,11 @@
                           :redirect-uris      ["https://app.example.com/callback"]
                           :response-types     ["code"]
                           :scopes             ["openid"]}])
-          query-string "response_type=code&client_id=conf-client&redirect_uri=https://app.example.com/callback&scope=openid"
-          request      (authz/parse-authorization-request query-string client-store)]
+          params       {:response_type "code"
+                        :client_id     "conf-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"}
+          request      (authz/parse-authorization-request params client-store)]
       (is (= "conf-client" (:client_id request))))))
 
 (deftest confidential-client-hashed-secret-no-pkce-test
@@ -212,8 +246,11 @@
                           :redirect-uris      ["https://app.example.com/callback"]
                           :response-types     ["code"]
                           :scopes             ["openid"]}])
-          query-string "response_type=code&client_id=hashed-conf&redirect_uri=https://app.example.com/callback&scope=openid"
-          request      (authz/parse-authorization-request query-string client-store)]
+          params       {:response_type "code"
+                        :client_id     "hashed-conf"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"}
+          request      (authz/parse-authorization-request params client-store)]
       (is (= "hashed-conf" (:client_id request))))))
 
 (deftest parse-authorization-request-with-resource-test
@@ -225,8 +262,12 @@
                           :redirect-uris      ["https://app.example.com/callback"]
                           :response-types     ["code"]
                           :scopes             ["openid"]}])
-          query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&resource=https%3A%2F%2Fapi.example.com"
-          request      (authz/parse-authorization-request query-string client-store)]
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"
+                        :resource      "https://api.example.com"}
+          request      (authz/parse-authorization-request params client-store)]
       (is (= ["https://api.example.com"] (:resource request))))))
 
 (deftest parse-authorization-request-with-multiple-resources-test
@@ -238,8 +279,12 @@
                           :redirect-uris      ["https://app.example.com/callback"]
                           :response-types     ["code"]
                           :scopes             ["openid"]}])
-          query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&resource=https%3A%2F%2Fapi.example.com&resource=https%3A%2F%2Fother.example.com"
-          request      (authz/parse-authorization-request query-string client-store)]
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"
+                        :resource      ["https://api.example.com" "https://other.example.com"]}
+          request      (authz/parse-authorization-request params client-store)]
       (is (= ["https://api.example.com" "https://other.example.com"] (:resource request))))))
 
 (deftest parse-authorization-request-rejects-relative-resource-test
@@ -251,9 +296,13 @@
                           :redirect-uris      ["https://app.example.com/callback"]
                           :response-types     ["code"]
                           :scopes             ["openid"]}])
-          query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&resource=%2Frelative%2Fpath"]
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"
+                        :resource      "/relative/path"}]
       (is (thrown-with-msg? Exception #"Invalid resource indicator"
-                            (authz/parse-authorization-request query-string client-store))))))
+                            (authz/parse-authorization-request params client-store))))))
 
 (deftest parse-authorization-request-rejects-fragment-resource-test
   (testing "URI with fragment resource is rejected with invalid_target"
@@ -264,9 +313,13 @@
                           :redirect-uris      ["https://app.example.com/callback"]
                           :response-types     ["code"]
                           :scopes             ["openid"]}])
-          query-string "response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&resource=https%3A%2F%2Fapi.example.com%23frag"]
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"
+                        :resource      "https://api.example.com#frag"}]
       (is (thrown-with-msg? Exception #"Invalid resource indicator"
-                            (authz/parse-authorization-request query-string client-store))))))
+                            (authz/parse-authorization-request params client-store))))))
 
 (deftest authorization-approval-nil-issuer-test
   (testing "omits :iss from response when provider-config has no :issuer"
