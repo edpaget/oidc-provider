@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- README now references the Clojars artifact with a version badge and proper `deps.edn`/Leiningen coordinates
+
 ### Fixed
 - Corrected GitHub repository URL in published JAR SCM metadata (`edpaget` instead of `edwardpaget`)
 
