@@ -8,15 +8,20 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: write
-  pull-requests: write
-
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure git
         run: |
@@ -35,6 +40,20 @@ jobs:
             exit 1
           fi
 
+      - name: Verify CI checks passed
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          SHA=$(git rev-parse HEAD)
+          for CHECK in lint format test; do
+            CONCLUSION=$(gh api "repos/${{ github.repository }}/commits/${SHA}/check-runs" \
+              --jq ".check_runs[] | select(.name == \"${CHECK}\") | .conclusion" | head -1)
+            if [ "$CONCLUSION" != "success" ]; then
+              echo "::error::Required check '${CHECK}' has not passed (status: ${CONCLUSION:-not found})"
+              exit 1
+            fi
+          done
+
       - name: Update VERSION
         run: echo "${{ inputs.version }}" > VERSION
 
@@ -43,23 +62,47 @@ jobs:
           DATE=$(date +%Y-%m-%d)
           sed -i "s/^## \[Unreleased\]/## [Unreleased]\n\n## [${{ inputs.version }}] - $DATE/" CHANGELOG.md
 
-      - name: Create release branch
+      - name: Commit release
         run: |
-          BRANCH="release/v${{ inputs.version }}"
-          git checkout -b "$BRANCH"
           git add VERSION CHANGELOG.md
           git commit -m "release: v${{ inputs.version }}"
-          git push origin "$BRANCH"
+          git push origin main
 
-      - name: Create PR
+      - name: Push tag
         run: |
-          gh pr create \
-            --title "release: v${{ inputs.version }}" \
-            --body "Automated release PR for v${{ inputs.version }}." \
-            --label "release"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git tag "v${{ inputs.version }}"
+          git push origin "v${{ inputs.version }}"
 
-      - name: Clean up branch on failure
-        if: failure()
-        run: git push origin --delete "release/v${{ inputs.version }}" || true
+      - uses: DeLaGuardo/setup-clojure@13.5
+        with:
+          cli: latest
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+            ~/.deps.clj
+          key: deps-${{ hashFiles('deps.edn') }}
+          restore-keys: deps-
+
+      - name: Build JAR
+        run: clojure -T:build jar
+
+      - name: Deploy to Clojars
+        run: clojure -X:deploy :artifact '"target/oidc-provider-${{ inputs.version }}.jar"' :pom-file '"target/classes/META-INF/maven/net.carcdr/oidc-provider/pom.xml"'
+        env:
+          CLOJARS_USERNAME: ${{ secrets.CLOJARS_USERNAME }}
+          CLOJARS_PASSWORD: ${{ secrets.CLOJARS_PASSWORD }}
+
+      - name: Bump to next snapshot
+        run: |
+          MAJOR=$(echo "${{ inputs.version }}" | cut -d. -f1)
+          MINOR=$(echo "${{ inputs.version }}" | cut -d. -f2)
+          PATCH=$(echo "${{ inputs.version }}" | cut -d. -f3)
+          NEXT_PATCH=$((PATCH + 1))
+          SNAPSHOT="${MAJOR}.${MINOR}.${NEXT_PATCH}-SNAPSHOT"
+          echo "$SNAPSHOT" > VERSION
+          git add VERSION
+          git commit -m "chore: prepare ${SNAPSHOT} for next development cycle"
+          git push origin main
