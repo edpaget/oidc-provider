@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Corrected GitHub repository URL in published JAR SCM metadata (`edpaget` instead of `edwardpaget`)
+
 ## [0.3.0] - 2026-03-17
 
 ### Changed
