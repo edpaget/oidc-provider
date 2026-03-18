@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-03-18
+
 ### Changed
 - README now references the Clojars artifact with a version badge and proper `deps.edn`/Leiningen coordinates
 
