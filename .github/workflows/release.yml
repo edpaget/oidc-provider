@@ -62,9 +62,14 @@ jobs:
           DATE=$(date +%Y-%m-%d)
           sed -i "s/^## \[Unreleased\]/## [Unreleased]\n\n## [${{ inputs.version }}] - $DATE/" CHANGELOG.md
 
+      - name: Update README.md versions
+        run: |
+          sed -i 's|net.carcdr/oidc-provider {:mvn/version "[^"]*"}|net.carcdr/oidc-provider {:mvn/version "${{ inputs.version }}"}|' README.md
+          sed -i 's|\[net.carcdr/oidc-provider "[^"]*"\]|[net.carcdr/oidc-provider "${{ inputs.version }}"]|' README.md
+
       - name: Commit release
         run: |
-          git add VERSION CHANGELOG.md
+          git add VERSION CHANGELOG.md README.md
           git commit -m "release: v${{ inputs.version }}"
           git push origin main
 
