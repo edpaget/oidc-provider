@@ -18,9 +18,9 @@
                 :version version
                 :basis @basis
                 :src-dirs ["src"]
-                :scm {:url "https://github.com/edwardpaget/oidc-provider"
-                      :connection "scm:git:git://github.com/edwardpaget/oidc-provider.git"
-                      :developerConnection "scm:git:ssh://git@github.com/edwardpaget/oidc-provider.git"
+                :scm {:url "https://github.com/edpaget/oidc-provider"
+                      :connection "scm:git:git://github.com/edpaget/oidc-provider.git"
+                      :developerConnection "scm:git:ssh://git@github.com/edpaget/oidc-provider.git"
                       :tag version}
                 :pom-data [[:licenses
                             [:license
