@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Public clients can no longer use `client_credentials` grant (RFC 6749 §4.4)
+- Metadata-backed clients now enforce strict HTTPS-only redirect URI validation (HTTP loopback no longer allowed)
+- Malformed Basic auth no longer crashes token/revocation endpoints
+- `token_endpoint_auth_method` is now enforced during client authentication, including clients without the field (defaults to `client_secret_basic` for confidential, `none` for public)
+- `client_secret_post` clients now reject requests missing `client_secret` in POST body
+- `client_secret_basic` clients now ignore redundant `client_secret` in POST params instead of rejecting
+- `verify-client-secret` returns `false` on any exception from malformed hash input
+- Redirect URI error messages truncate URIs to 200 characters in all endpoints
+- Redirect URI validation now accepts IPv6 loopback (`[::1]`) for HTTP
+- Unsupported `token_endpoint_auth_method` values now fail with `invalid_client` instead of silently bypassing authentication
+- Metadata document clients can no longer declare `client_credentials` grant type
+
 ## [0.3.1] - 2026-03-18
 
 ### Changed

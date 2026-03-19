@@ -41,6 +41,48 @@
           (assoc valid-metadata "client_id" "https://evil.example.com/client")
           test-url)))))
 
+(deftest validate-metadata-document-rejects-http-redirect-uri-test
+  (testing "throws when redirect_uris contains a non-localhost HTTP URI"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"invalid redirect URI"
+         (cm/validate-metadata-document
+          (assoc valid-metadata "redirect_uris" ["http://evil.example.com/callback"])
+          test-url)))))
+
+(deftest validate-metadata-document-rejects-http-loopback-redirect-uri-test
+  (testing "throws when redirect_uris contains HTTP loopback URIs"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"invalid redirect URI"
+         (cm/validate-metadata-document
+          (assoc valid-metadata "redirect_uris" ["http://localhost/callback"])
+          test-url)))
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"invalid redirect URI"
+         (cm/validate-metadata-document
+          (assoc valid-metadata "redirect_uris" ["http://127.0.0.1/callback"])
+          test-url)))
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"invalid redirect URI"
+         (cm/validate-metadata-document
+          (assoc valid-metadata "redirect_uris" ["http://[::1]/callback"])
+          test-url)))))
+
+(deftest validate-metadata-document-rejects-secret-based-auth-method-test
+  (testing "throws when token_endpoint_auth_method is not none"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"unsupported token_endpoint_auth_method"
+         (cm/validate-metadata-document
+          (assoc valid-metadata "token_endpoint_auth_method" "client_secret_basic")
+          test-url)))))
+
+(deftest validate-metadata-document-rejects-client-credentials-test
+  (testing "throws when grant_types includes client_credentials for public metadata client"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"client_credentials not allowed"
+         (cm/validate-metadata-document
+          (assoc valid-metadata "grant_types" ["authorization_code" "client_credentials"])
+          test-url)))))
+
 (deftest validate-metadata-document-missing-redirect-uris-test
   (testing "throws when redirect_uris is missing"
     (is (thrown? clojure.lang.ExceptionInfo

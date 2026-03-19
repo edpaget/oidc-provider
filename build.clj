@@ -1,6 +1,6 @@
 (ns build
-  (:require [clojure.tools.build.api :as b]
-            [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [clojure.tools.build.api :as b]))
 
 (def lib 'net.carcdr/oidc-provider)
 (def version (str/trim (slurp "VERSION")))
