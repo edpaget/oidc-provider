@@ -137,7 +137,6 @@
       (is (= 2 (count (.getKeys ^JWKSet key-set))))
       (is (= (.getKeyID ^RSAKey k2) (:active-signing-key-id pc))))))
 
-
 (deftest create-provider-active-key-defaults-to-first-test
   (testing "omitted :active-signing-key-id defaults to first key"
     (let [k1       (token/generate-rsa-key)
