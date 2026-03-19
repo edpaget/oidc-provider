@@ -146,15 +146,16 @@
                      :jwks-uri               "https://test.example.com/jwks"})]
       (is (= 2592000 (:refresh-token-ttl-seconds (:provider-config provider)))))))
 
-(deftest create-provider-refresh-token-ttl-none-test
-  (testing "refresh-token-ttl-seconds :none produces nil (unlimited)"
+;; can't opt out of TTL, but can provide an effectively indefinite value
+(deftest create-provider-refresh-token-ttl-indefinite-test
+  (testing "refresh-token-ttl-seconds accepts Long/MAX_VALUE for indefinite expiry"
     (let [provider (core/create-provider
                     {:issuer                    "https://test.example.com"
                      :authorization-endpoint    "https://test.example.com/authorize"
                      :token-endpoint            "https://test.example.com/token"
                      :jwks-uri                  "https://test.example.com/jwks"
-                     :refresh-token-ttl-seconds :none})]
-      (is (nil? (:refresh-token-ttl-seconds (:provider-config provider)))))))
+                     :refresh-token-ttl-seconds Long/MAX_VALUE})]
+      (is (= Long/MAX_VALUE (:refresh-token-ttl-seconds (:provider-config provider)))))))
 
 (deftest create-provider-active-key-defaults-to-first-test
   (testing "omitted :active-signing-key-id defaults to first key"

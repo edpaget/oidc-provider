@@ -35,7 +35,7 @@
    [:claims-provider {:optional true} [:fn #(satisfies? proto/ClaimsProvider %)]]
    [:registration-endpoint {:optional true} :string]
    [:revocation-endpoint {:optional true} :string]
-   [:refresh-token-ttl-seconds {:optional true} [:or pos-int? [:= :none]]]
+   [:refresh-token-ttl-seconds {:optional true} pos-int?]
    [:rotate-refresh-tokens {:optional true} :boolean]
    [:clock {:optional true} [:fn (fn [c] (instance? java.time.Clock c))]]])
 
@@ -93,10 +93,7 @@
                                  :rotate-refresh-tokens          (if (some? rotate-refresh-tokens) rotate-refresh-tokens true)
                                  :clock                          (or clock (Clock/systemUTC))}
                           :always (assoc :refresh-token-ttl-seconds
-                                         (case refresh-token-ttl-seconds
-                                           nil  default-ttl-seconds
-                                           :none nil
-                                           refresh-token-ttl-seconds)))]
+                                         (or refresh-token-ttl-seconds default-ttl-seconds)))]
     (->Provider config
                 provider-config
                 (or client-store (store/create-client-store))
