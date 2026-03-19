@@ -134,5 +134,5 @@
     (cond
       (<= max-len 0)         ""
       (<= (count s) max-len) s
-      (< max-len 3)          (subs s 0 max-len)
+      (< max-len 3)          (subs "..." 0 max-len)
       :else                  (str (subs s 0 (- max-len 3)) "..."))))

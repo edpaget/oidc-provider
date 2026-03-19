@@ -68,7 +68,7 @@
 (deftest truncate-result-within-budget-test
   (testing "result never exceeds max-len"
     (is (= "..." (util/truncate "hello" 3)))
-    (is (= "he" (util/truncate "hello" 2)))
+    (is (= ".." (util/truncate "hello" 2)))
     (is (= "" (util/truncate "hello" 0)))))
 
 (deftest truncate-nil-input-test
