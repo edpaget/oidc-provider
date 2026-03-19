@@ -53,24 +53,12 @@
     (is (false? (util/valid-redirect-uri-https-only? "/callback")))
     (is (false? (util/valid-redirect-uri-https-only? "not a uri!!")))))
 
-(deftest truncate-shorter-than-max-test
-  (testing "returns string unchanged when shorter than max-len"
-    (is (= "hi" (util/truncate "hi" 10)))))
-
-(deftest truncate-equal-to-max-test
-  (testing "returns string unchanged when equal to max-len"
-    (is (= "hello" (util/truncate "hello" 5)))))
-
-(deftest truncate-longer-than-max-test
-  (testing "truncates string to max-len when longer"
-    (is (= "hello w..." (util/truncate "hello world" 10)))))
-
-(deftest truncate-result-within-budget-test
-  (testing "result never exceeds max-len"
+(deftest truncate-test
+  (testing "truncates strings to max-len"
+    (is (= "hi" (util/truncate "hi" 10)))
+    (is (= "hello" (util/truncate "hello" 5)))
+    (is (= "hello w..." (util/truncate "hello world" 10)))
     (is (= "..." (util/truncate "hello" 3)))
     (is (= ".." (util/truncate "hello" 2)))
-    (is (= "" (util/truncate "hello" 0)))))
-
-(deftest truncate-nil-input-test
-  (testing "returns empty string for nil input"
+    (is (= "" (util/truncate "hello" 0)))
     (is (= "" (util/truncate nil 10)))))

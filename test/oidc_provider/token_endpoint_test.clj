@@ -30,58 +30,46 @@
      :email "test@example.com"
      :name  "Test User"}))
 
+(defn- test-client-store [overrides]
+  (store/create-client-store
+   [(merge {:client-id          "test-client"
+            :client-type        "confidential"
+            :client-secret-hash secret123-hash
+            :redirect-uris      ["https://app.example.com/callback"]
+            :grant-types        ["authorization_code"]
+            :response-types     ["code"]
+            :scopes             ["openid"]}
+           overrides)]))
+
+(defn- encode-basic-auth [client-id secret]
+  (str "Basic " (.encodeToString (Base64/getEncoder)
+                                 (.getBytes (str client-id ":" secret) "UTF-8"))))
+
 (deftest authenticate-client-wrong-secret-test
   (testing "rejects wrong client secret"
-    (let [client-store    (store/create-client-store
-                           [{:client-id          "test-client"
-                             :client-type        "confidential"
-                             :client-secret-hash secret123-hash
-                             :redirect-uris      ["https://app.example.com/callback"]
-                             :grant-types        ["authorization_code"]
-                             :response-types     ["code"]
-                             :scopes             ["openid"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
-          claims-provider (->TestClaimsProvider)
-          provider-config (make-provider-config {})
-          basic-header    (str "Basic " (.encodeToString (Base64/getEncoder)
-                                                         (.getBytes "test-client:wrong-secret" "UTF-8")))]
-      (is (thrown-with-msg? Exception #"Invalid client credentials"
-                            (token-ep/handle-token-request
-                             {:grant_type "authorization_code"
-                              :code       "some-code"}
-                             basic-header
-                             provider-config
-                             client-store
-                             code-store
-                             token-store
-                             claims-provider))))))
+    (is (thrown-with-msg?
+         Exception #"Invalid client credentials"
+         (token-ep/handle-token-request
+          {:grant_type "authorization_code" :code "some-code"}
+          (encode-basic-auth "test-client" "wrong-secret")
+          (make-provider-config {})
+          (test-client-store {})
+          (store/create-authorization-code-store)
+          (store/create-token-store)
+          (->TestClaimsProvider))))))
 
 (deftest authenticate-client-missing-secret-test
   (testing "rejects missing client secret when required"
-    (let [client-store    (store/create-client-store
-                           [{:client-id          "test-client"
-                             :client-type        "confidential"
-                             :client-secret-hash secret123-hash
-                             :redirect-uris      ["https://app.example.com/callback"]
-                             :grant-types        ["authorization_code"]
-                             :response-types     ["code"]
-                             :scopes             ["openid"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
-          claims-provider (->TestClaimsProvider)
-          provider-config (make-provider-config {})]
-      (is (thrown-with-msg? Exception #"Client requires Basic authentication"
-                            (token-ep/handle-token-request
-                             {:grant_type "authorization_code"
-                              :client_id  "test-client"
-                              :code       "some-code"}
-                             nil
-                             provider-config
-                             client-store
-                             code-store
-                             token-store
-                             claims-provider))))))
+    (is (thrown-with-msg?
+         Exception #"Client requires Basic authentication"
+         (token-ep/handle-token-request
+          {:grant_type "authorization_code" :client_id "test-client" :code "some-code"}
+          nil
+          (make-provider-config {})
+          (test-client-store {})
+          (store/create-authorization-code-store)
+          (store/create-token-store)
+          (->TestClaimsProvider))))))
 
 (deftest handle-authorization-code-grant-test
   (testing "exchanges authorization code for tokens stored with correct metadata"
@@ -632,149 +620,114 @@
 
 (deftest handle-token-request-multi-value-resource-test
   (testing "vector resource param produces a vector in the response"
-    (let [client-store    (store/create-client-store
-                           [{:client-id          "test-client"
-                             :client-type        "confidential"
-                             :client-secret-hash secret123-hash
-                             :redirect-uris      []
-                             :grant-types        ["client_credentials"]
-                             :response-types     []
-                             :scopes             ["api:read"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
-          claims-provider (->TestClaimsProvider)
-          provider-config (make-provider-config {})
-          basic-header    (str "Basic " (.encodeToString (Base64/getEncoder)
-                                                         (.getBytes "test-client:secret123" "UTF-8")))
-          response        (token-ep/handle-token-request
-                           {:grant_type "client_credentials"
-                            :scope      "api:read"
-                            :resource   ["https://api.example.com" "https://data.example.com"]}
-                           basic-header
-                           provider-config
-                           client-store
-                           code-store
-                           token-store
-                           claims-provider)
-          access-data     (proto/get-access-token token-store (:access_token response))]
+    (let [client-store (test-client-store {:grant-types    ["client_credentials"]
+                                           :redirect-uris  []
+                                           :response-types []
+                                           :scopes         ["api:read"]})
+          token-store  (store/create-token-store)
+          response     (token-ep/handle-token-request
+                        {:grant_type "client_credentials"
+                         :scope      "api:read"
+                         :resource   ["https://api.example.com" "https://data.example.com"]}
+                        (encode-basic-auth "test-client" "secret123")
+                        (make-provider-config {}) client-store
+                        (store/create-authorization-code-store) token-store
+                        (->TestClaimsProvider))
+          access-data  (proto/get-access-token token-store (:access_token response))]
       (is (= ["https://api.example.com" "https://data.example.com"] (:resource response)))
       (is (= ["https://api.example.com" "https://data.example.com"] (:resource access-data))))))
 
 (deftest authenticate-client-hashed-secret-test
   (testing "authenticates with correct secret against hashed store"
-    (let [secret          "my-secret"
-          hashed          (util/hash-client-secret secret)
-          client-store    (store/create-client-store
-                           [{:client-id          "hashed-client"
-                             :client-type        "confidential"
-                             :client-secret-hash hashed
-                             :redirect-uris      ["https://app.example.com/callback"]
-                             :grant-types        ["client_credentials"]
-                             :response-types     []
-                             :scopes             ["api:read"]}])
-          token-store     (store/create-token-store)
-          code-store      (store/create-authorization-code-store)
-          claims-provider (->TestClaimsProvider)
-          provider-config (make-provider-config {})
-          basic-header    (str "Basic " (.encodeToString (Base64/getEncoder)
-                                                         (.getBytes (str "hashed-client:" secret) "UTF-8")))
-          response        (token-ep/handle-token-request
-                           {:grant_type "client_credentials"
-                            :scope      "api:read"}
-                           basic-header
-                           provider-config client-store code-store token-store claims-provider)]
+    (let [secret   "my-secret"
+          response (token-ep/handle-token-request
+                    {:grant_type "client_credentials" :scope "api:read"}
+                    (encode-basic-auth "hashed-client" secret)
+                    (make-provider-config {})
+                    (test-client-store {:client-id          "hashed-client"
+                                        :client-secret-hash (util/hash-client-secret secret)
+                                        :grant-types        ["client_credentials"]
+                                        :redirect-uris      []
+                                        :response-types     []
+                                        :scopes             ["api:read"]})
+                    (store/create-authorization-code-store)
+                    (store/create-token-store)
+                    (->TestClaimsProvider))]
       (is (= "Bearer" (:token_type response)))
       (is (= "api:read" (:scope response))))))
 
 (deftest authenticate-client-hashed-secret-wrong-test
   (testing "rejects wrong secret against hashed store"
-    (let [hashed          (util/hash-client-secret "correct-secret")
-          client-store    (store/create-client-store
-                           [{:client-id          "hashed-client"
-                             :client-type        "confidential"
-                             :client-secret-hash hashed
-                             :redirect-uris      ["https://app.example.com/callback"]
-                             :grant-types        ["client_credentials"]
-                             :response-types     []
-                             :scopes             ["api:read"]}])
-          token-store     (store/create-token-store)
-          code-store      (store/create-authorization-code-store)
-          claims-provider (->TestClaimsProvider)
-          provider-config (make-provider-config {})
-          basic-header    (str "Basic " (.encodeToString (Base64/getEncoder)
-                                                         (.getBytes "hashed-client:wrong-secret" "UTF-8")))]
-      (is (thrown-with-msg? Exception #"Invalid client credentials"
-                            (token-ep/handle-token-request
-                             {:grant_type "client_credentials"
-                              :scope      "api:read"}
-                             basic-header
-                             provider-config client-store code-store token-store claims-provider))))))
+    (is (thrown-with-msg?
+         Exception #"Invalid client credentials"
+         (token-ep/handle-token-request
+          {:grant_type "client_credentials" :scope "api:read"}
+          (encode-basic-auth "hashed-client" "wrong-secret")
+          (make-provider-config {})
+          (test-client-store {:client-id          "hashed-client"
+                              :client-secret-hash (util/hash-client-secret "correct-secret")
+                              :grant-types        ["client_credentials"]
+                              :redirect-uris      []
+                              :response-types     []
+                              :scopes             ["api:read"]})
+          (store/create-authorization-code-store)
+          (store/create-token-store)
+          (->TestClaimsProvider))))))
 
 (deftest confidential-client-no-credentials-test
   (testing "rejects confidential client with no stored secret or hash"
-    (let [client-store    (store/create-client-store
-                           [{:client-id      "misconfigured"
-                             :client-type    "confidential"
-                             :redirect-uris  []
-                             :grant-types    ["client_credentials"]
-                             :response-types []
-                             :scopes         ["api:read"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
-          claims-provider (->TestClaimsProvider)
-          provider-config (make-provider-config {})
-          basic-header    (str "Basic " (.encodeToString (Base64/getEncoder)
-                                                         (.getBytes "misconfigured:any-secret" "UTF-8")))]
-      (is (thrown-with-msg? Exception #"Client configured for secret-based auth has no stored credentials"
-                            (token-ep/handle-token-request
-                             {:grant_type "client_credentials"
-                              :scope      "api:read"}
-                             basic-header
-                             provider-config client-store code-store token-store claims-provider))))))
+    (is (thrown-with-msg?
+         Exception #"Client configured for secret-based auth has no stored credentials"
+         (token-ep/handle-token-request
+          {:grant_type "client_credentials" :scope "api:read"}
+          (encode-basic-auth "misconfigured" "any-secret")
+          (make-provider-config {})
+          (test-client-store {:client-id          "misconfigured"
+                              :client-secret-hash nil
+                              :grant-types        ["client_credentials"]
+                              :redirect-uris      []
+                              :response-types     []})
+          (store/create-authorization-code-store)
+          (store/create-token-store)
+          (->TestClaimsProvider))))))
 
-(deftest client-secret-basic-no-credentials-test
-  (testing "rejects client with explicit client_secret_basic but no stored secret"
-    (let [client-store    (store/create-client-store
-                           [{:client-id                  "basic-no-secret"
-                             :token-endpoint-auth-method "client_secret_basic"
-                             :redirect-uris              []
-                             :grant-types                ["client_credentials"]
-                             :response-types             []
-                             :scopes                     ["api:read"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
-          claims-provider (->TestClaimsProvider)
-          provider-config (make-provider-config {})
-          basic-header    (str "Basic " (.encodeToString (Base64/getEncoder)
-                                                         (.getBytes "basic-no-secret:any-secret" "UTF-8")))]
-      (is (thrown-with-msg? Exception #"Client configured for secret-based auth has no stored credentials"
-                            (token-ep/handle-token-request
-                             {:grant_type "client_credentials"
-                              :scope      "api:read"}
-                             basic-header
-                             provider-config client-store code-store token-store claims-provider))))))
-
-(deftest client-secret-post-no-credentials-test
-  (testing "rejects client with explicit client_secret_post but no stored secret"
-    (let [client-store    (store/create-client-store
-                           [{:client-id                  "post-no-secret"
-                             :token-endpoint-auth-method "client_secret_post"
-                             :redirect-uris              []
-                             :grant-types                ["client_credentials"]
-                             :response-types             []
-                             :scopes                     ["api:read"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
-          claims-provider (->TestClaimsProvider)
-          provider-config (make-provider-config {})]
-      (is (thrown-with-msg? Exception #"Client configured for secret-based auth has no stored credentials"
-                            (token-ep/handle-token-request
-                             {:grant_type    "client_credentials"
-                              :scope         "api:read"
-                              :client_id     "post-no-secret"
-                              :client_secret "any-secret"}
-                             nil
-                             provider-config client-store code-store token-store claims-provider))))))
+(deftest explicit-auth-method-no-credentials-test
+  (testing "rejects client with explicit auth method but no stored secret"
+    (is (thrown-with-msg?
+         Exception #"Client configured for secret-based auth has no stored credentials"
+         (token-ep/handle-token-request
+          {:grant_type "client_credentials" :scope "api:read"}
+          (encode-basic-auth "basic-no-secret" "any-secret")
+          (make-provider-config {})
+          (test-client-store {:client-id                  "basic-no-secret"
+                              :client-type                nil
+                              :client-secret-hash         nil
+                              :token-endpoint-auth-method "client_secret_basic"
+                              :grant-types                ["client_credentials"]
+                              :redirect-uris              []
+                              :response-types             []
+                              :scopes                     ["api:read"]})
+          (store/create-authorization-code-store)
+          (store/create-token-store)
+          (->TestClaimsProvider))))
+    (is (thrown-with-msg?
+         Exception #"Client configured for secret-based auth has no stored credentials"
+         (token-ep/handle-token-request
+          {:grant_type "client_credentials" :scope         "api:read"
+           :client_id  "post-no-secret"     :client_secret "any-secret"}
+          nil
+          (make-provider-config {})
+          (test-client-store {:client-id                  "post-no-secret"
+                              :client-type                nil
+                              :client-secret-hash         nil
+                              :token-endpoint-auth-method "client_secret_post"
+                              :grant-types                ["client_credentials"]
+                              :redirect-uris              []
+                              :response-types             []
+                              :scopes                     ["api:read"]})
+          (store/create-authorization-code-store)
+          (store/create-token-store)
+          (->TestClaimsProvider))))))
 
 (deftest refresh-token-expired-rejection-test
   (testing "rejects an expired refresh token"
@@ -1039,285 +992,183 @@
 
 (deftest client-credentials-rejects-public-client-test
   (testing "client_credentials grant throws for public clients"
-    (let [client-store    (store/create-client-store
-                           [{:client-id     "public-cc"
-                             :client-type   "public"
-                             :redirect-uris ["https://app.example.com/callback"]
-                             :grant-types   ["client_credentials"]
-                             :scopes        ["read"]}])
-          token-store     (store/create-token-store)
+    (let [token-store     (store/create-token-store)
           provider-config (make-provider-config {})]
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo #"client_credentials grant requires a confidential client"
            (token-ep/handle-client-credentials-grant
-            {:scope "read"} (proto/get-client client-store "public-cc")
+            {:scope "read"}
+            (proto/get-client (test-client-store {:client-id          "public-cc"
+                                                  :client-type        "public"
+                                                  :client-secret-hash nil
+                                                  :grant-types        ["client_credentials"]
+                                                  :scopes             ["read"]})
+                              "public-cc")
             provider-config token-store))))))
 
 (deftest authenticate-client-rejects-basic-for-post-client-test
-  (testing "client_secret_post client is rejected when authenticating via Basic"
-    (let [client-store (store/create-client-store
-                        [{:client-id                  "post-client"
-                          :client-type                "confidential"
-                          :client-secret-hash         secret123-hash
-                          :redirect-uris              ["https://app.example.com/callback"]
-                          :grant-types                ["authorization_code"]
-                          :response-types             ["code"]
-                          :scopes                     ["openid"]
-                          :token-endpoint-auth-method "client_secret_post"}])
-          basic-header (str "Basic " (.encodeToString (Base64/getEncoder)
-                                                      (.getBytes "post-client:secret123" "UTF-8")))]
+  (testing "client_secret_post client is rejected when authenticating via any Basic header"
+    (let [cs (test-client-store {:client-id                  "post-client"
+                                 :token-endpoint-auth-method "client_secret_post"})]
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo #"Client requires POST body authentication"
-           (token-ep/authenticate-client {:client_id "post-client"} basic-header client-store))))))
-
-(deftest authenticate-client-rejects-malformed-basic-for-post-client-test
-  (testing "client_secret_post client is rejected when request has malformed Basic header"
-    (let [client-store (store/create-client-store
-                        [{:client-id                  "post-client"
-                          :client-type                "confidential"
-                          :client-secret-hash         secret123-hash
-                          :redirect-uris              ["https://app.example.com/callback"]
-                          :grant-types                ["authorization_code"]
-                          :response-types             ["code"]
-                          :scopes                     ["openid"]
-                          :token-endpoint-auth-method "client_secret_post"}])]
+           (token-ep/authenticate-client {:client_id "post-client"}
+                                         (encode-basic-auth "post-client" "secret123") cs)))
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo #"Client requires POST body authentication"
-           (token-ep/authenticate-client {:client_id "post-client"} "Basic !!!" client-store))))))
+           (token-ep/authenticate-client {:client_id "post-client"} "Basic !!!" cs))))))
 
 (deftest authenticate-client-rejects-missing-secret-for-post-client-test
   (testing "client_secret_post client is rejected when no client_secret in params"
-    (let [client-store (store/create-client-store
-                        [{:client-id                  "post-client"
-                          :client-type                "confidential"
-                          :client-secret-hash         secret123-hash
-                          :redirect-uris              ["https://app.example.com/callback"]
-                          :grant-types                ["authorization_code"]
-                          :response-types             ["code"]
-                          :scopes                     ["openid"]
-                          :token-endpoint-auth-method "client_secret_post"}])]
-      (is (thrown-with-msg?
-           clojure.lang.ExceptionInfo #"Client requires POST body authentication with client_secret"
-           (token-ep/authenticate-client {:client_id "post-client"} nil client-store))))))
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"Client requires POST body authentication with client_secret"
+         (token-ep/authenticate-client
+          {:client_id "post-client"} nil
+          (test-client-store {:client-id                  "post-client"
+                              :token-endpoint-auth-method "client_secret_post"}))))))
 
 (deftest authenticate-client-succeeds-for-post-client-test
   (testing "client_secret_post client authenticates successfully via POST body"
-    (let [client-store (store/create-client-store
-                        [{:client-id                  "post-client"
-                          :client-type                "confidential"
-                          :client-secret-hash         secret123-hash
-                          :redirect-uris              ["https://app.example.com/callback"]
-                          :grant-types                ["authorization_code"]
-                          :response-types             ["code"]
-                          :scopes                     ["openid"]
-                          :token-endpoint-auth-method "client_secret_post"}])
-          result       (token-ep/authenticate-client {:client_id "post-client" :client_secret "secret123"}
-                                                     nil client-store)]
+    (let [result (token-ep/authenticate-client
+                  {:client_id "post-client" :client_secret "secret123"} nil
+                  (test-client-store {:client-id                  "post-client"
+                                      :token-endpoint-auth-method "client_secret_post"}))]
       (is (= "post-client" (:client-id result))))))
 
 (deftest authenticate-client-ignores-redundant-post-params-for-basic-client-test
   (testing "client_secret_basic client succeeds via Basic auth even with redundant POST body credentials"
-    (let [client-store (store/create-client-store
-                        [{:client-id                  "basic-client"
-                          :client-type                "confidential"
-                          :client-secret-hash         secret123-hash
-                          :redirect-uris              ["https://app.example.com/callback"]
-                          :grant-types                ["authorization_code"]
-                          :response-types             ["code"]
-                          :scopes                     ["openid"]
-                          :token-endpoint-auth-method "client_secret_basic"}])
-          basic-header (str "Basic " (.encodeToString (Base64/getEncoder)
-                                                      (.getBytes "basic-client:secret123" "UTF-8")))
-          result       (token-ep/authenticate-client {:client_id "basic-client" :client_secret "secret123"}
-                                                     basic-header client-store)]
+    (let [result (token-ep/authenticate-client
+                  {:client_id "basic-client" :client_secret "secret123"}
+                  (encode-basic-auth "basic-client" "secret123")
+                  (test-client-store {:client-id                  "basic-client"
+                                      :token-endpoint-auth-method "client_secret_basic"}))]
       (is (= "basic-client" (:client-id result))))))
 
 (deftest authenticate-client-defaults-confidential-to-basic-test
   (testing "confidential client without auth method defaults to client_secret_basic"
-    (let [client-store (store/create-client-store
-                        [{:client-id          "legacy-client"
-                          :client-type        "confidential"
-                          :client-secret-hash secret123-hash
-                          :redirect-uris      ["https://app.example.com/callback"]
-                          :grant-types        ["authorization_code"]
-                          :response-types     ["code"]
-                          :scopes             ["openid"]}])
-          basic-header (str "Basic " (.encodeToString (Base64/getEncoder)
-                                                      (.getBytes "legacy-client:secret123" "UTF-8")))
-          result       (token-ep/authenticate-client {} basic-header client-store)]
+    (let [result (token-ep/authenticate-client
+                  {} (encode-basic-auth "legacy-client" "secret123")
+                  (test-client-store {:client-id "legacy-client"}))]
       (is (= "legacy-client" (:client-id result))))))
 
 (deftest authenticate-client-defaults-confidential-rejects-post-test
   (testing "confidential client without auth method rejects POST-only authentication"
-    (let [client-store (store/create-client-store
-                        [{:client-id          "legacy-client"
-                          :client-type        "confidential"
-                          :client-secret-hash secret123-hash
-                          :redirect-uris      ["https://app.example.com/callback"]
-                          :grant-types        ["authorization_code"]
-                          :response-types     ["code"]
-                          :scopes             ["openid"]}])]
-      (is (thrown-with-msg?
-           clojure.lang.ExceptionInfo #"Client requires Basic authentication"
-           (token-ep/authenticate-client {:client_id "legacy-client" :client_secret "secret123"}
-                                         nil client-store))))))
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"Client requires Basic authentication"
+         (token-ep/authenticate-client
+          {:client_id "legacy-client" :client_secret "secret123"} nil
+          (test-client-store {:client-id "legacy-client"}))))))
 
 (deftest authenticate-client-defaults-public-to-none-test
   (testing "public client without auth method defaults to none and rejects client_secret"
-    (let [client-store (store/create-client-store
-                        [{:client-id      "legacy-public"
-                          :client-type    "public"
-                          :redirect-uris  ["https://app.example.com/callback"]
-                          :grant-types    ["authorization_code"]
-                          :response-types ["code"]
-                          :scopes         ["openid"]}])]
-      (is (thrown-with-msg?
-           clojure.lang.ExceptionInfo #"Public client must not provide a client_secret"
-           (token-ep/authenticate-client {:client_id "legacy-public" :client_secret "some-secret"}
-                                         nil client-store))))))
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"Public client must not provide a client_secret"
+         (token-ep/authenticate-client
+          {:client_id "legacy-public" :client_secret "some-secret"} nil
+          (test-client-store {:client-id          "legacy-public"
+                              :client-type        "public"
+                              :client-secret-hash nil}))))))
 
 (deftest authenticate-client-public-rejects-basic-header-test
-  (testing "public client rejects request with Basic auth header"
-    (let [client-store (store/create-client-store
-                        [{:client-id      "public-basic"
-                          :client-type    "public"
-                          :redirect-uris  ["https://app.example.com/callback"]
-                          :grant-types    ["authorization_code"]
-                          :response-types ["code"]
-                          :scopes         ["openid"]}])
-          basic-header (str "Basic " (.encodeToString (Base64/getEncoder)
-                                                      (.getBytes "public-basic:" "UTF-8")))]
+  (testing "public client rejects request with any Basic auth header"
+    (let [cs (test-client-store {:client-id          "public-basic"
+                                 :client-type        "public"
+                                 :client-secret-hash nil})]
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo #"Public client must not provide a client_secret"
            (token-ep/authenticate-client {:client_id "public-basic"}
-                                         basic-header client-store))))))
-
-(deftest authenticate-client-public-rejects-malformed-basic-header-test
-  (testing "public client rejects request with malformed Basic auth header"
-    (let [client-store (store/create-client-store
-                        [{:client-id      "public-basic"
-                          :client-type    "public"
-                          :redirect-uris  ["https://app.example.com/callback"]
-                          :grant-types    ["authorization_code"]
-                          :response-types ["code"]
-                          :scopes         ["openid"]}])]
+                                         (encode-basic-auth "public-basic" "") cs)))
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo #"Public client must not provide a client_secret"
            (token-ep/authenticate-client {:client_id "public-basic"}
-                                         "Basic not-valid-base64!" client-store))))))
+                                         "Basic not-valid-base64!" cs))))))
 
 (deftest authenticate-client-legacy-no-client-type-with-secret-test
   (testing "client without :client-type but with secret hash defaults to client_secret_basic"
-    (let [client-store (store/create-client-store
-                        [{:client-id          "pre-type-client"
-                          :client-secret-hash secret123-hash
-                          :redirect-uris      ["https://app.example.com/callback"]
-                          :grant-types        ["authorization_code"]
-                          :response-types     ["code"]
-                          :scopes             ["openid"]}])
-          basic-header (str "Basic " (.encodeToString (Base64/getEncoder)
-                                                      (.getBytes "pre-type-client:secret123" "UTF-8")))
-          result       (token-ep/authenticate-client {} basic-header client-store)]
+    (let [result (token-ep/authenticate-client
+                  {} (encode-basic-auth "pre-type-client" "secret123")
+                  (test-client-store {:client-id   "pre-type-client"
+                                      :client-type nil}))]
       (is (= "pre-type-client" (:client-id result))))))
 
 (deftest authenticate-client-legacy-no-client-type-without-secret-test
   (testing "client without :client-type and without secret hash defaults to none"
-    (let [client-store (store/create-client-store
-                        [{:client-id      "pre-type-public"
-                          :redirect-uris  ["https://app.example.com/callback"]
-                          :grant-types    ["authorization_code"]
-                          :response-types ["code"]
-                          :scopes         ["openid"]}])]
-      (is (thrown-with-msg?
-           clojure.lang.ExceptionInfo #"Public client must not provide a client_secret"
-           (token-ep/authenticate-client {:client_id "pre-type-public" :client_secret "some-secret"}
-                                         nil client-store))))))
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"Public client must not provide a client_secret"
+         (token-ep/authenticate-client
+          {:client_id "pre-type-public" :client_secret "some-secret"} nil
+          (test-client-store {:client-id          "pre-type-public"
+                              :client-type        nil
+                              :client-secret-hash nil}))))))
 
 (deftest client-credentials-rejects-untyped-client-without-secret-test
   (testing "client_credentials grant rejects client with nil :client-type and no secret"
-    (let [client-store    (store/create-client-store
-                           [{:client-id     "untyped-no-secret"
-                             :redirect-uris ["https://app.example.com/callback"]
-                             :grant-types   ["client_credentials"]
-                             :scopes        ["read"]}])
-          token-store     (store/create-token-store)
-          provider-config (make-provider-config {})]
-      (is (thrown-with-msg?
-           clojure.lang.ExceptionInfo #"client_credentials grant requires a confidential client"
-           (token-ep/handle-client-credentials-grant
-            {:scope "read"} (proto/get-client client-store "untyped-no-secret")
-            provider-config token-store))))))
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"client_credentials grant requires a confidential client"
+         (token-ep/handle-client-credentials-grant
+          {:scope "read"}
+          (proto/get-client (test-client-store {:client-id          "untyped-no-secret"
+                                                :client-type        nil
+                                                :client-secret-hash nil
+                                                :grant-types        ["client_credentials"]
+                                                :scopes             ["read"]})
+                            "untyped-no-secret")
+          (make-provider-config {}) (store/create-token-store))))))
 
 (deftest client-credentials-succeeds-for-untyped-client-with-secret-test
   (testing "client_credentials grant succeeds for client with nil :client-type but valid secret hash"
-    (let [client-store    (store/create-client-store
-                           [{:client-id          "untyped-with-secret"
-                             :client-secret-hash secret123-hash
-                             :redirect-uris      ["https://app.example.com/callback"]
-                             :grant-types        ["client_credentials"]
-                             :scopes             ["read"]}])
-          token-store     (store/create-token-store)
-          provider-config (make-provider-config {})
-          response        (token-ep/handle-client-credentials-grant
-                           {:scope "read"}
-                           (proto/get-client client-store "untyped-with-secret")
-                           provider-config token-store)]
+    (let [token-store (store/create-token-store)
+          response    (token-ep/handle-client-credentials-grant
+                       {:scope "read"}
+                       (proto/get-client (test-client-store {:client-id   "untyped-with-secret"
+                                                             :client-type nil
+                                                             :grant-types ["client_credentials"]
+                                                             :scopes      ["read"]})
+                                         "untyped-with-secret")
+                       (make-provider-config {}) token-store)]
       (is (= "Bearer" (:token_type response)))
       (is (some? (proto/get-access-token token-store (:access_token response)))))))
 
-(deftest confidential-client-auth-method-none-rejected-test
-  (testing "rejects confidential client with token-endpoint-auth-method set to none"
-    (let [client-store (store/create-client-store
-                        [{:client-id                  "confused-client"
-                          :client-type                "confidential"
-                          :client-secret-hash         secret123-hash
-                          :token-endpoint-auth-method "none"
-                          :redirect-uris              []
-                          :grant-types                ["client_credentials"]
-                          :response-types             []
-                          :scopes                     ["api:read"]}])]
-      (is (thrown-with-msg?
-           clojure.lang.ExceptionInfo #"Confidential client must not use auth method 'none'"
-           (token-ep/authenticate-client {:client_id "confused-client"} nil client-store))))))
-
-(deftest untyped-client-with-secret-auth-method-none-rejected-test
-  (testing "rejects untyped client with stored secret hash and auth method none"
-    (let [client-store (store/create-client-store
-                        [{:client-id                  "migrated-client"
-                          :client-secret-hash         secret123-hash
-                          :token-endpoint-auth-method "none"
-                          :redirect-uris              []
-                          :grant-types                ["client_credentials"]
-                          :response-types             []
-                          :scopes                     ["api:read"]}])]
-      (is (thrown-with-msg?
-           clojure.lang.ExceptionInfo #"Confidential client must not use auth method 'none'"
-           (token-ep/authenticate-client {:client_id "migrated-client"} nil client-store))))))
+(deftest auth-method-none-rejected-for-confidential-test
+  (testing "rejects confidential clients with token-endpoint-auth-method set to none"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"Confidential client must not use auth method 'none'"
+         (token-ep/authenticate-client
+          {:client_id "confused-client"} nil
+          (test-client-store {:client-id                  "confused-client"
+                              :token-endpoint-auth-method "none"
+                              :grant-types                ["client_credentials"]
+                              :redirect-uris              []
+                              :response-types             []}))))
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"Confidential client must not use auth method 'none'"
+         (token-ep/authenticate-client
+          {:client_id "migrated-client"} nil
+          (test-client-store {:client-id                  "migrated-client"
+                              :client-type                nil
+                              :token-endpoint-auth-method "none"
+                              :grant-types                ["client_credentials"]
+                              :redirect-uris              []
+                              :response-types             []}))))))
 
 (deftest authenticate-client-bearer-header-not-treated-as-basic-test
   (testing "non-Basic Authorization header is not treated as Basic auth"
-    (let [client-store (store/create-client-store
-                        [{:client-id      "public-client"
-                          :client-type    "public"
-                          :redirect-uris  ["https://app.example.com/callback"]
-                          :grant-types    ["authorization_code"]
-                          :response-types ["code"]
-                          :scopes         ["openid"]}])
-          result       (token-ep/authenticate-client {:client_id "public-client"}
-                                                     "Bearer some-access-token" client-store)]
+    (let [result (token-ep/authenticate-client
+                  {:client_id "public-client"}
+                  "Bearer some-access-token"
+                  (test-client-store {:client-id          "public-client"
+                                      :client-type        "public"
+                                      :client-secret-hash nil}))]
       (is (= "public-client" (:client-id result))))))
 
 (deftest authenticate-client-rejects-unsupported-auth-method-test
   (testing "rejects client with unsupported token-endpoint-auth-method"
-    (let [client-store (store/create-client-store
-                        [{:client-id                  "custom-auth-client"
-                          :client-type                "confidential"
-                          :client-secret-hash         secret123-hash
-                          :token-endpoint-auth-method "private_key_jwt"
-                          :redirect-uris              []
-                          :grant-types                ["client_credentials"]
-                          :response-types             []
-                          :scopes                     ["api:read"]}])]
-      (is (thrown-with-msg?
-           clojure.lang.ExceptionInfo #"Unsupported token_endpoint_auth_method"
-           (token-ep/authenticate-client {:client_id "custom-auth-client"} nil client-store))))))
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"Unsupported token_endpoint_auth_method"
+         (token-ep/authenticate-client
+          {:client_id "custom-auth-client"} nil
+          (test-client-store {:client-id                  "custom-auth-client"
+                              :token-endpoint-auth-method "private_key_jwt"
+                              :grant-types                ["client_credentials"]
+                              :redirect-uris              []
+                              :response-types             []}))))))
