@@ -55,20 +55,6 @@
     (not (:response_types request))             (assoc :response_types ["code"])
     (not (:token_endpoint_auth_method request)) (assoc :token_endpoint_auth_method "none")))
 
-(defn- valid-redirect-uri?
-  "Returns true when `uri-str` is an absolute URI with HTTPS, or HTTP on localhost/127.0.0.1."
-  [uri-str]
-  (try
-    (let [uri    (URI. ^String uri-str)
-          scheme (some-> (.getScheme uri) str/lower-case)
-          host   (some-> (.getHost uri) str/lower-case)]
-      (and (.isAbsolute uri)
-           (some? host)
-           (or (= scheme "https")
-               (and (= scheme "http")
-                    (or (= host "localhost") (= host "127.0.0.1"))))))
-    (catch URISyntaxException _ false)))
-
 (defn- valid-https-uri?
   "Returns true when `uri-str` is an absolute HTTPS URI."
   [uri-str]
@@ -85,19 +71,19 @@
   (when-let [client-uri (:client_uri request)]
     (when-not (valid-https-uri? client-uri)
       (throw (ex-info "invalid_client_metadata"
-                      {:error_description (str "Invalid client_uri: " client-uri)}))))
+                      {:error_description (str "Invalid client_uri: " (util/truncate client-uri 200))}))))
   (when-let [logo-uri (:logo_uri request)]
     (when-not (valid-https-uri? logo-uri)
       (throw (ex-info "invalid_client_metadata"
-                      {:error_description (str "Invalid logo_uri: " logo-uri)})))))
+                      {:error_description (str "Invalid logo_uri: " (util/truncate logo-uri 200))})))))
 
 (defn- validate-redirect-uris
   "Validates that all `redirect_uris` are absolute HTTPS URIs (or HTTP on localhost)."
   [request]
   (doseq [uri (:redirect_uris request)]
-    (when-not (valid-redirect-uri? uri)
+    (when-not (util/valid-redirect-uri? uri)
       (throw (ex-info "invalid_client_metadata"
-                      {:error_description (str "Invalid redirect URI: " uri)})))))
+                      {:error_description (str "Invalid redirect URI: " (util/truncate uri 200))})))))
 
 (defn- validate-grant-response-consistency
   "Validates that `grant_types` and `response_types` are consistent per RFC 7591."

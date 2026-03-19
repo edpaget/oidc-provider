@@ -2,12 +2,15 @@
   "Shared utility functions for the OIDC provider.
 
   Includes [[constant-time-eq?]] for timing-safe string comparison,
-  and [[hash-client-secret]] / [[verify-client-secret]] for PBKDF2-based
-  client secret hashing suitable for production deployments."
+  [[hash-client-secret]] / [[verify-client-secret]] for PBKDF2-based
+  client secret hashing, and [[valid-redirect-uri?]] for redirect URI
+  validation suitable for production deployments."
   (:require
+   [clojure.string :as str]
    [malli.core :as m])
   (:import
    (com.nimbusds.oauth2.sdk.auth Secret)
+   (java.net URI URISyntaxException)
    (java.security MessageDigest SecureRandom)
    (java.util Base64 UUID)
    (javax.crypto SecretKeyFactory)
@@ -75,12 +78,61 @@
 
   Parses the encoded `algorithm:iterations:salt:hash` format, re-derives the key
   with the same parameters, and compares in constant time. Returns `true` if the
-  secret matches, `false` otherwise."
+  secret matches, `false` otherwise. Returns `false` on malformed hash input."
   [^String secret ^String hashed]
-  (let [[algorithm iterations-str salt-b64 hash-b64] (.split hashed ":" 4)
-        salt                                         (.decode b64-decoder ^String salt-b64)
-        expected                                     (.decode b64-decoder ^String hash-b64)
-        iterations                                   (Integer/parseInt iterations-str)
-        spec                                         (PBEKeySpec. (.toCharArray secret) salt iterations key-length-bits)
-        actual                                       (.getEncoded (.generateSecret (SecretKeyFactory/getInstance algorithm) spec))]
-    (MessageDigest/isEqual expected actual)))
+  (try
+    (let [[algorithm iterations-str salt-b64 hash-b64] (.split hashed ":" 4)
+          salt                                         (.decode b64-decoder ^String salt-b64)
+          expected                                     (.decode b64-decoder ^String hash-b64)
+          iterations                                   (Integer/parseInt iterations-str)
+          spec                                         (PBEKeySpec. (.toCharArray secret) salt iterations key-length-bits)
+          actual                                       (.getEncoded (.generateSecret (SecretKeyFactory/getInstance algorithm) spec))]
+      (MessageDigest/isEqual expected actual))
+    (catch Exception _ false)))
+
+(m/=> valid-redirect-uri? [:=> [:cat :string] :boolean])
+
+(defn valid-redirect-uri?
+  "Returns true when `uri-str` is an absolute URI with HTTPS, or HTTP on localhost/127.0.0.1/[::1]."
+  [uri-str]
+  (try
+    (let [uri    (URI. ^String uri-str)
+          scheme (some-> (.getScheme uri) str/lower-case)
+          host   (some-> (.getHost uri) str/lower-case)]
+      (and (.isAbsolute uri)
+           (some? host)
+           (or (= scheme "https")
+               (and (= scheme "http")
+                    (or (= host "localhost")
+                        (= host "127.0.0.1")
+                        (contains? #{"[::1]" "::1"} host))))))
+    (catch URISyntaxException _ false)))
+
+(m/=> valid-redirect-uri-https-only? [:=> [:cat :string] :boolean])
+
+(defn valid-redirect-uri-https-only?
+  "Returns true when `uri-str` is an absolute URI with HTTPS scheme only.
+  Unlike [[valid-redirect-uri?]], this rejects HTTP even on loopback addresses.
+  Intended for metadata-document clients where HTTPS is strictly required."
+  [uri-str]
+  (try
+    (let [uri    (URI. ^String uri-str)
+          scheme (some-> (.getScheme uri) str/lower-case)]
+      (and (.isAbsolute uri)
+           (some? (.getHost uri))
+           (= scheme "https")))
+    (catch URISyntaxException _ false)))
+
+(m/=> truncate [:=> [:cat [:maybe :string] :int] :string])
+
+(defn truncate
+  "Returns `s` truncated to at most `max-len` characters, appending `\"...\"`
+  when truncation occurs."
+  [s max-len]
+  (if (nil? s)
+    ""
+    (cond
+      (<= max-len 0)         ""
+      (<= (count s) max-len) s
+      (< max-len 3)          (subs s 0 max-len)
+      :else                  (str (subs s 0 (- max-len 3)) "..."))))

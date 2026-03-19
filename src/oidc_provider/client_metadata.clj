@@ -13,7 +13,8 @@
    [cheshire.core :as json]
    [clojure.string :as str]
    [malli.core :as m]
-   [oidc-provider.protocol :as proto])
+   [oidc-provider.protocol :as proto]
+   [oidc-provider.util :as util])
   (:import
    (java.io ByteArrayOutputStream InputStream)
    (java.net InetAddress URI)
@@ -61,6 +62,19 @@
     (throw (ex-info "invalid metadata document"
                     {:error  "invalid_client_metadata"
                      :errors (m/explain ClientMetadataDocument document)})))
+  (doseq [uri (get document "redirect_uris")]
+    (when-not (util/valid-redirect-uri-https-only? uri)
+      (throw (ex-info "invalid redirect URI"
+                      {:error             "invalid_client_metadata"
+                       :error_description (str "Invalid redirect URI: " (util/truncate uri 200))}))))
+  (when-not (= (or (get document "token_endpoint_auth_method") "none") "none")
+    (throw (ex-info "unsupported token_endpoint_auth_method"
+                    {:error             "invalid_client_metadata"
+                     :error_description "Metadata documents only support token_endpoint_auth_method \"none\""})))
+  (when (some #{"client_credentials"} (get document "grant_types"))
+    (throw (ex-info "client_credentials not allowed for metadata document clients"
+                    {:error             "invalid_client_metadata"
+                     :error_description "Metadata document clients are public and cannot use client_credentials grant"})))
   (when (not= (get document "client_id") fetch-url)
     (throw (ex-info "client_id mismatch"
                     {:error    "invalid_client_metadata"

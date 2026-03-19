@@ -132,6 +132,14 @@
         (is (= 200 (:status result)))
         (is (nil? (proto/get-refresh-token token-store "rt-wrong")))))))
 
+(deftest revoke-malformed-basic-auth-test
+  (testing "returns 401 for malformed Basic auth instead of 500"
+    (let [{:keys [client-store token-store]} (make-fixtures)
+          result                             (revocation/handle-revocation-request
+                                              {:token "at-123" :client_id "test-client"}
+                                              "Basic !!!" client-store token-store)]
+      (is (= 401 (:status result))))))
+
 (deftest revoke-unauthenticated-test
   (testing "returns 401 when client authentication fails"
     (let [{:keys [client-store token-store]} (make-fixtures)

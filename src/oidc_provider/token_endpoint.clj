@@ -50,20 +50,82 @@
     (string? resource) [resource]
     :else              nil))
 
+(defn- has-basic-scheme?
+  "Returns true when `authorization-header` begins with the Basic scheme,
+  regardless of whether the remainder is valid Base64 or well-formed
+  `client_id:client_secret` content."
+  [authorization-header]
+  (when authorization-header
+    (let [[scheme] (str/split authorization-header #" " 2)]
+      (boolean (and scheme (.equalsIgnoreCase ^String scheme "Basic"))))))
+
 (defn parse-basic-auth
   "Parses an HTTP Basic Authorization header into client credentials.
 
   Decodes the Base64-encoded `client_id:client_secret` pair from the header
   value. Returns a map with `:client-id` and `:client-secret` keys, or `nil`
-  when the header is absent or not a Basic scheme."
+  when the header is absent, not a Basic scheme, or malformed."
   [authorization-header]
-  (when (and authorization-header (str/starts-with? authorization-header "Basic "))
-    (let [encoded (subs authorization-header 6)
-          decoded (String. (.decode (Base64/getDecoder) encoded))]
-      (when (str/includes? decoded ":")
-        (let [[client-id client-secret] (str/split decoded #":" 2)]
-          {:client-id     (URLDecoder/decode ^String client-id "UTF-8")
-           :client-secret (URLDecoder/decode ^String client-secret "UTF-8")})))))
+  (try
+    (when authorization-header
+      (let [[scheme encoded] (str/split authorization-header #" " 2)]
+        ;; .equalsIgnoreCase is locale-independent and avoids allocating a lowercase copy
+        (when (and encoded (.equalsIgnoreCase ^String scheme "Basic"))
+          (let [decoded (String. (.decode (Base64/getDecoder) encoded))]
+            (when (str/includes? decoded ":")
+              (let [[client-id client-secret] (str/split decoded #":" 2)]
+                {:client-id     (URLDecoder/decode ^String client-id "UTF-8")
+                 :client-secret (URLDecoder/decode ^String client-secret "UTF-8")}))))))
+    (catch Exception _ nil)))
+
+(defn- resolve-auth-method
+  "Determines the effective `token_endpoint_auth_method` for a client.
+  Uses the explicit setting if present, otherwise defaults to `client_secret_basic`
+  for confidential clients (or those with a stored secret) and `none` for public clients."
+  [client]
+  (or (:token-endpoint-auth-method client)
+      (if (or (= (:client-type client) "confidential")
+              (and (nil? (:client-type client))
+                   (:client-secret-hash client)))
+        "client_secret_basic"
+        "none")))
+
+(defn- validate-auth-method
+  "Validates that the resolved `auth-method` is consistent with the client
+  configuration and the credentials provided in `basic-auth` and `params`.
+  Throws `ex-info` on any mismatch."
+  [auth-method client basic-auth params client-secret has-basic-header]
+  (let [client-id (:client-id client)]
+    (when-not (#{"none" "client_secret_basic" "client_secret_post"} auth-method)
+      (throw (ex-info "Unsupported token_endpoint_auth_method"
+                      {:client-id client-id :auth-method auth-method})))
+    (when (and (= auth-method "none")
+               (or (= (:client-type client) "confidential")
+                   (:client-secret-hash client)))
+      (throw (ex-info "Confidential client must not use auth method 'none'"
+                      {:client-id client-id})))
+    (when (= auth-method "client_secret_basic")
+      (when-not basic-auth
+        (throw (ex-info "Client requires Basic authentication"
+                        {:client-id client-id}))))
+    (when (= auth-method "client_secret_post")
+      (when has-basic-header
+        (throw (ex-info "Client requires POST body authentication"
+                        {:client-id client-id})))
+      (when-not (:client_secret params)
+        (throw (ex-info "Client requires POST body authentication with client_secret"
+                        {:client-id client-id}))))
+    (when (and (= auth-method "none") (or client-secret has-basic-header))
+      (throw (ex-info "Public client must not provide a client_secret"
+                      {:client-id client-id})))
+    (when (and (#{"client_secret_basic" "client_secret_post"} auth-method)
+               (not (:client-secret-hash client)))
+      (throw (ex-info "Client configured for secret-based auth has no stored credentials"
+                      {:client-id client-id})))
+    (when (and (#{"client_secret_basic" "client_secret_post"} auth-method)
+               (:client-secret-hash client))
+      (when-not (util/verify-client-secret (or client-secret "") (:client-secret-hash client))
+        (throw (ex-info "Invalid client credentials" {:client-id client-id}))))))
 
 (defn authenticate-client
   "Authenticates an OAuth2 client from request parameters or Basic auth header.
@@ -73,20 +135,21 @@
   `client-store`, and verifies credentials. Returns the client config map on
   success. Throws `ex-info` on missing, unknown, or mismatched credentials."
   [params authorization-header client-store]
-  (let [basic-auth    (parse-basic-auth authorization-header)
-        client-id     (or (:client-id basic-auth) (:client_id params))
-        client-secret (or (:client-secret basic-auth) (:client_secret params))]
+  (let [has-basic  (has-basic-scheme? authorization-header)
+        basic-auth (parse-basic-auth authorization-header)
+        client-id  (or (:client-id basic-auth) (:client_id params))]
     (when-not client-id
       (throw (ex-info "Missing client_id" {})))
-    (let [client (proto/get-client client-store client-id)]
-      (when-not client
-        (throw (ex-info "Unknown client" {:client-id client-id})))
-      (when (and (= (:client-type client) "confidential")
-                 (not (:client-secret-hash client)))
-        (throw (ex-info "Confidential client has no stored credentials" {:client-id client-id})))
-      (when (:client-secret-hash client)
-        (when-not (util/verify-client-secret (or client-secret "") (:client-secret-hash client))
-          (throw (ex-info "Invalid client credentials" {:client-id client-id}))))
+    (let [client        (proto/get-client client-store client-id)
+          _             (when-not client
+                          (throw (ex-info "Unknown client" {:client-id client-id})))
+          auth-method   (resolve-auth-method client)
+          client-secret (case auth-method
+                          "client_secret_basic" (:client-secret basic-auth)
+                          "client_secret_post"  (:client_secret params)
+                          "none"                (or (:client-secret basic-auth) (:client_secret params))
+                          nil)]
+      (validate-auth-method auth-method client basic-auth params client-secret has-basic)
       client)))
 
 (defn- verify-pkce
@@ -248,6 +311,11 @@
   [{:keys [scope resource]} client provider-config token-store]
   (when-not (some #{"client_credentials"} (:grant-types client))
     (throw (ex-info "Client not authorized for client_credentials grant"
+                    {:client-id (:client-id client)})))
+  (when-not (or (= (:client-type client) "confidential")
+                (and (nil? (:client-type client))
+                     (:client-secret-hash client)))
+    (throw (ex-info "client_credentials grant requires a confidential client"
                     {:client-id (:client-id client)})))
   (let [requested-scope (if scope (vec (str/split scope #" ")) [])
         client-scope    (:scopes client)

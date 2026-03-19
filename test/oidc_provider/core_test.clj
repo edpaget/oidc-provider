@@ -137,6 +137,25 @@
       (is (= 2 (count (.getKeys ^JWKSet key-set))))
       (is (= (.getKeyID ^RSAKey k2) (:active-signing-key-id pc))))))
 
+(deftest create-provider-default-refresh-token-ttl-test
+  (testing "refresh-token-ttl-seconds defaults to 30 days"
+    (let [provider (core/create-provider
+                    {:issuer                 "https://test.example.com"
+                     :authorization-endpoint "https://test.example.com/authorize"
+                     :token-endpoint         "https://test.example.com/token"
+                     :jwks-uri               "https://test.example.com/jwks"})]
+      (is (= 2592000 (:refresh-token-ttl-seconds (:provider-config provider)))))))
+
+(deftest create-provider-refresh-token-ttl-none-test
+  (testing "refresh-token-ttl-seconds :none produces nil (unlimited)"
+    (let [provider (core/create-provider
+                    {:issuer                    "https://test.example.com"
+                     :authorization-endpoint    "https://test.example.com/authorize"
+                     :token-endpoint            "https://test.example.com/token"
+                     :jwks-uri                  "https://test.example.com/jwks"
+                     :refresh-token-ttl-seconds :none})]
+      (is (nil? (:refresh-token-ttl-seconds (:provider-config provider)))))))
+
 (deftest create-provider-active-key-defaults-to-first-test
   (testing "omitted :active-signing-key-id defaults to first key"
     (let [k1       (token/generate-rsa-key)
