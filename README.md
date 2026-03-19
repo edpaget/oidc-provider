@@ -22,13 +22,13 @@ A flexible, protocol-based OpenID Connect Provider implementation for the JVM us
 Add to your `deps.edn`:
 
 ```clojure
-{:deps {net.carcdr/oidc-provider {:mvn/version "0.3.1"}}}
+{:deps {net.carcdr/oidc-provider {:mvn/version "0.4.0"}}}
 ```
 
 Or for Leiningen:
 
 ```clojure
-[net.carcdr/oidc-provider "0.3.1"]
+[net.carcdr/oidc-provider "0.4.0"]
 ```
 
 ## Quick Start

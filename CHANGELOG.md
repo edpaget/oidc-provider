@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-03-19
+
 ### Fixed
 - Public clients can no longer use `client_credentials` grant (RFC 6749 §4.4)
 - Metadata-backed clients now enforce strict HTTPS-only redirect URI validation (HTTP loopback no longer allowed)
