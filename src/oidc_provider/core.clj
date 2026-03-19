@@ -39,8 +39,6 @@
    [:rotate-refresh-tokens {:optional true} :boolean]
    [:clock {:optional true} [:fn (fn [c] (instance? java.time.Clock c))]]])
 
-(def ^:private default-ttl-seconds (* 30 24 60 60))
-
 (defrecord Provider [config
                      provider-config
                      client-store
@@ -92,8 +90,7 @@
                                  :authorization-code-ttl-seconds (or authorization-code-ttl-seconds 600)
                                  :rotate-refresh-tokens          (if (some? rotate-refresh-tokens) rotate-refresh-tokens true)
                                  :clock                          (or clock (Clock/systemUTC))}
-                          :always (assoc :refresh-token-ttl-seconds
-                                         (or refresh-token-ttl-seconds default-ttl-seconds)))]
+                          refresh-token-ttl-seconds (assoc :refresh-token-ttl-seconds refresh-token-ttl-seconds))]
     (->Provider config
                 provider-config
                 (or client-store (store/create-client-store))

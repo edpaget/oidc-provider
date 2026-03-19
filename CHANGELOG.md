@@ -20,9 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Unsupported `token_endpoint_auth_method` values now fail with `invalid_client` instead of silently bypassing authentication
 - Metadata document clients can no longer declare `client_credentials` grant type
 
-### Changed
-- **Breaking** — Refresh token TTL now defaults to 30 days when not configured (previously unlimited). Pass `:refresh-token-ttl-seconds :none` to preserve unlimited lifetime
-
 ## [0.3.1] - 2026-03-18
 
 ### Changed
