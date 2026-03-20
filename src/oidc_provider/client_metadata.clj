@@ -24,18 +24,18 @@
 (set! *warn-on-reflection* true)
 
 (def ClientMetadataDocument
-  "Malli schema for a Client ID Metadata Document (wire format, string keys)."
+  "Malli schema for a Client ID Metadata Document."
   [:map
-   ["client_id" :string]
-   ["redirect_uris" [:vector {:min 1} :string]]
-   ["grant_types" {:optional true} [:vector [:enum "authorization_code" "refresh_token" "client_credentials"]]]
-   ["response_types" {:optional true} [:vector [:enum "code" "token" "id_token"]]]
-   ["client_name" {:optional true} :string]
-   ["token_endpoint_auth_method" {:optional true} [:enum "client_secret_basic" "client_secret_post" "none"]]
-   ["scope" {:optional true} :string]
-   ["client_uri" {:optional true} :string]
-   ["logo_uri" {:optional true} :string]
-   ["contacts" {:optional true} [:vector :string]]])
+   [:client_id :string]
+   [:redirect_uris [:vector {:min 1} :string]]
+   [:grant_types {:optional true} [:vector [:enum "authorization_code" "refresh_token" "client_credentials"]]]
+   [:response_types {:optional true} [:vector [:enum "code" "token" "id_token"]]]
+   [:client_name {:optional true} :string]
+   [:token_endpoint_auth_method {:optional true} [:enum "client_secret_basic" "client_secret_post" "none"]]
+   [:scope {:optional true} :string]
+   [:client_uri {:optional true} :string]
+   [:logo_uri {:optional true} :string]
+   [:contacts {:optional true} [:vector :string]]])
 
 (m/=> url-client-id? [:=> [:cat :string] :boolean])
 
@@ -49,7 +49,7 @@
            (and (.isAbsolute uri) (some? (.getHost uri))))
          (catch Exception _ false))))
 
-(m/=> validate-metadata-document [:=> [:cat [:map-of :string :any] :string] [:map-of :string :any]])
+(m/=> validate-metadata-document [:=> [:cat :map :string] :map])
 
 (defn validate-metadata-document
   "Validates a metadata document against [[ClientMetadataDocument]] schema and verifies
@@ -62,27 +62,27 @@
     (throw (ex-info "invalid metadata document"
                     {:error  "invalid_client_metadata"
                      :errors (m/explain ClientMetadataDocument document)})))
-  (doseq [uri (get document "redirect_uris")]
+  (doseq [uri (:redirect_uris document)]
     (when-not (util/valid-redirect-uri-https-only? uri)
       (throw (ex-info "invalid redirect URI"
                       {:error             "invalid_client_metadata"
                        :error_description (str "Invalid redirect URI: " (util/truncate uri 200))}))))
-  (when-not (= (or (get document "token_endpoint_auth_method") "none") "none")
+  (when-not (= (or (:token_endpoint_auth_method document) "none") "none")
     (throw (ex-info "unsupported token_endpoint_auth_method"
                     {:error             "invalid_client_metadata"
                      :error_description "Metadata documents only support token_endpoint_auth_method \"none\""})))
-  (when (some #{"client_credentials"} (get document "grant_types"))
+  (when (some #{"client_credentials"} (:grant_types document))
     (throw (ex-info "client_credentials not allowed for metadata document clients"
                     {:error             "invalid_client_metadata"
                      :error_description "Metadata document clients are public and cannot use client_credentials grant"})))
-  (when (not= (get document "client_id") fetch-url)
+  (when (not= (:client_id document) fetch-url)
     (throw (ex-info "client_id mismatch"
                     {:error    "invalid_client_metadata"
                      :expected fetch-url
-                     :actual   (get document "client_id")})))
+                     :actual   (:client_id document)})))
   document)
 
-(m/=> metadata-document->client-config [:=> [:cat [:map-of :string :any]] :map])
+(m/=> metadata-document->client-config [:=> [:cat :map] :map])
 
 (defn metadata-document->client-config
   "Converts a wire-format metadata document to a kebab-case `ClientConfig` map.
@@ -91,19 +91,19 @@
   have a `client_secret`. Applies RFC 7591 defaults for missing `grant_types`,
   `response_types`, and `token_endpoint_auth_method`."
   [document]
-  (let [scope-str (get document "scope")
+  (let [scope-str (:scope document)
         scopes    (if scope-str (vec (str/split scope-str #" ")) [])]
-    (cond-> {:client-id                  (get document "client_id")
+    (cond-> {:client-id                  (:client_id document)
              :client-type                "public"
-             :redirect-uris              (get document "redirect_uris")
-             :grant-types                (or (get document "grant_types") ["authorization_code"])
-             :response-types             (or (get document "response_types") ["code"])
+             :redirect-uris              (:redirect_uris document)
+             :grant-types                (or (:grant_types document) ["authorization_code"])
+             :response-types             (or (:response_types document) ["code"])
              :scopes                     scopes
-             :token-endpoint-auth-method (or (get document "token_endpoint_auth_method") "none")}
-      (get document "client_name") (assoc :client-name (get document "client_name"))
-      (get document "client_uri")  (assoc :client-uri (get document "client_uri"))
-      (get document "logo_uri")    (assoc :logo-uri (get document "logo_uri"))
-      (get document "contacts")    (assoc :contacts (get document "contacts")))))
+             :token-endpoint-auth-method (or (:token_endpoint_auth_method document) "none")}
+      (:client_name document) (assoc :client-name (:client_name document))
+      (:client_uri document)  (assoc :client-uri (:client_uri document))
+      (:logo_uri document)    (assoc :logo-uri (:logo_uri document))
+      (:contacts document)    (assoc :contacts (:contacts document)))))
 
 (defn cache-get
   "Returns the cached `ClientConfig` for `url` if present and not expired, else nil."
@@ -163,7 +163,7 @@
       (finally
         (.close input-stream)))))
 
-(m/=> fetch-metadata-document [:=> [:cat :string :map] [:maybe [:map-of :string :any]]])
+(m/=> fetch-metadata-document [:=> [:cat :string :map] [:maybe :map]])
 
 (defn fetch-metadata-document
   "Fetches a Client ID Metadata Document from `url` via HTTP GET.
@@ -194,7 +194,7 @@
     (when (not= 200 (.statusCode response))
       (throw (ex-info "metadata fetch failed"
                       {:status (.statusCode response) :url url})))
-    (json/parse-string (read-bounded (.body response) max-body-bytes url))))
+    (json/parse-string (read-bounded (.body response) max-body-bytes url) true)))
 
 (defn- resolve-client-metadata
   "Resolves a URL-based client ID to a `ClientConfig`.

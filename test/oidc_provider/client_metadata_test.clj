@@ -11,11 +11,11 @@
 (def ^:private test-url "https://app.example.com/.well-known/oauth-client")
 
 (def ^:private valid-metadata
-  {"client_id"      test-url
-   "redirect_uris"  ["https://app.example.com/callback"]
-   "client_name"    "Example App"
-   "grant_types"    ["authorization_code"]
-   "response_types" ["code"]})
+  {:client_id      test-url
+   :redirect_uris  ["https://app.example.com/callback"]
+   :client_name    "Example App"
+   :grant_types    ["authorization_code"]
+   :response_types ["code"]})
 
 (deftest url-client-id-recognizes-https-test
   (testing "HTTPS URLs are recognized as URL client IDs"
@@ -38,7 +38,7 @@
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo #"client_id mismatch"
          (cm/validate-metadata-document
-          (assoc valid-metadata "client_id" "https://evil.example.com/client")
+          (assoc valid-metadata :client_id "https://evil.example.com/client")
           test-url)))))
 
 (deftest validate-metadata-document-rejects-http-redirect-uri-test
@@ -46,7 +46,7 @@
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo #"invalid redirect URI"
          (cm/validate-metadata-document
-          (assoc valid-metadata "redirect_uris" ["http://evil.example.com/callback"])
+          (assoc valid-metadata :redirect_uris ["http://evil.example.com/callback"])
           test-url)))))
 
 (deftest validate-metadata-document-rejects-http-loopback-redirect-uri-test
@@ -54,17 +54,17 @@
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo #"invalid redirect URI"
          (cm/validate-metadata-document
-          (assoc valid-metadata "redirect_uris" ["http://localhost/callback"])
+          (assoc valid-metadata :redirect_uris ["http://localhost/callback"])
           test-url)))
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo #"invalid redirect URI"
          (cm/validate-metadata-document
-          (assoc valid-metadata "redirect_uris" ["http://127.0.0.1/callback"])
+          (assoc valid-metadata :redirect_uris ["http://127.0.0.1/callback"])
           test-url)))
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo #"invalid redirect URI"
          (cm/validate-metadata-document
-          (assoc valid-metadata "redirect_uris" ["http://[::1]/callback"])
+          (assoc valid-metadata :redirect_uris ["http://[::1]/callback"])
           test-url)))))
 
 (deftest validate-metadata-document-rejects-secret-based-auth-method-test
@@ -72,7 +72,7 @@
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo #"unsupported token_endpoint_auth_method"
          (cm/validate-metadata-document
-          (assoc valid-metadata "token_endpoint_auth_method" "client_secret_basic")
+          (assoc valid-metadata :token_endpoint_auth_method "client_secret_basic")
           test-url)))))
 
 (deftest validate-metadata-document-rejects-client-credentials-test
@@ -80,24 +80,24 @@
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo #"client_credentials not allowed"
          (cm/validate-metadata-document
-          (assoc valid-metadata "grant_types" ["authorization_code" "client_credentials"])
+          (assoc valid-metadata :grant_types ["authorization_code" "client_credentials"])
           test-url)))))
 
 (deftest validate-metadata-document-missing-redirect-uris-test
   (testing "throws when redirect_uris is missing"
     (is (thrown? clojure.lang.ExceptionInfo
                  (cm/validate-metadata-document
-                  (dissoc valid-metadata "redirect_uris")
+                  (dissoc valid-metadata :redirect_uris)
                   test-url)))))
 
 (deftest metadata-document->client-config-maps-fields-test
   (testing "converts wire format to kebab-case ClientConfig with all fields"
     (let [doc    (assoc valid-metadata
-                        "scope" "openid profile"
-                        "client_uri" "https://app.example.com"
-                        "logo_uri" "https://app.example.com/logo.png"
-                        "contacts" ["admin@example.com"]
-                        "token_endpoint_auth_method" "none")
+                        :scope "openid profile"
+                        :client_uri "https://app.example.com"
+                        :logo_uri "https://app.example.com/logo.png"
+                        :contacts ["admin@example.com"]
+                        :token_endpoint_auth_method "none")
           config (cm/metadata-document->client-config doc)]
       (is (= test-url (:client-id config)))
       (is (= "public" (:client-type config)))
@@ -108,8 +108,8 @@
 
 (deftest metadata-document->client-config-defaults-test
   (testing "applies RFC 7591 defaults for missing grant_types and response_types"
-    (let [doc    {"client_id"     test-url
-                  "redirect_uris" ["https://app.example.com/callback"]}
+    (let [doc    {:client_id     test-url
+                  :redirect_uris ["https://app.example.com/callback"]}
           config (cm/metadata-document->client-config doc)]
       (is (= ["authorization_code"] (:grant-types config)))
       (is (= ["code"] (:response-types config)))
@@ -117,7 +117,7 @@
 
 (deftest metadata-document->client-config-always-public-test
   (testing "client-type is always public regardless of auth method in document"
-    (let [doc    (assoc valid-metadata "token_endpoint_auth_method" "client_secret_basic")
+    (let [doc    (assoc valid-metadata :token_endpoint_auth_method "client_secret_basic")
           config (cm/metadata-document->client-config doc)]
       (is (= "public" (:client-type config))))))
 
@@ -303,9 +303,9 @@
                             (.GET)
                             (.build))
               response  (.send client request (java.net.http.HttpResponse$BodyHandlers/ofInputStream))
-              result    (json/parse-string (#'cm/read-bounded (.body response) 524288 local-url))]
-          (is (= test-url (get result "client_id")))
-          (is (= ["https://app.example.com/callback"] (get result "redirect_uris"))))
+              result    (json/parse-string (#'cm/read-bounded (.body response) 524288 local-url) true)]
+          (is (= test-url (:client_id result)))
+          (is (= ["https://app.example.com/callback"] (:redirect_uris result))))
         (finally
           (.stop server 0))))))
 
@@ -336,7 +336,7 @@
                                              (.GET)
                                              (.build))
                                 response (.send client request (java.net.http.HttpResponse$BodyHandlers/ofString))]
-                            (json/parse-string (.body response))))
+                            (json/parse-string (.body response) true)))
               mstore    (cm/create-metadata-resolving-store
                          inner
                          {:fetch-fn fetch-fn :clock fixed-clock})
