@@ -29,7 +29,8 @@
    [:scope {:optional true} :string]
    [:client_uri {:optional true} :string]
    [:logo_uri {:optional true} :string]
-   [:contacts {:optional true} [:vector :string]]])
+   [:contacts {:optional true} [:vector :string]]
+   [:application_type {:optional true} [:enum "web" "native"]]])
 
 (def RegistrationResponse
   "Malli schema for an RFC 7591 client registration response."
@@ -45,7 +46,8 @@
    [:token_endpoint_auth_method :string]
    [:client_uri {:optional true} :string]
    [:logo_uri {:optional true} :string]
-   [:contacts {:optional true} [:vector :string]]])
+   [:contacts {:optional true} [:vector :string]]
+   [:application_type :string]])
 
 (defn- apply-defaults
   "Merges RFC 7591 defaults into a registration request."
@@ -53,7 +55,8 @@
   (cond-> request
     (not (:grant_types request))                (assoc :grant_types ["authorization_code"])
     (not (:response_types request))             (assoc :response_types ["code"])
-    (not (:token_endpoint_auth_method request)) (assoc :token_endpoint_auth_method "none")))
+    (not (:token_endpoint_auth_method request)) (assoc :token_endpoint_auth_method "none")
+    (not (:application_type request))           (assoc :application_type "web")))
 
 (defn- valid-https-uri?
   "Returns true when `uri-str` is an absolute HTTPS URI."
@@ -78,12 +81,16 @@
                       {:error_description (str "Invalid logo_uri: " (util/truncate logo-uri 200))})))))
 
 (defn- validate-redirect-uris
-  "Validates that all `redirect_uris` are absolute HTTPS URIs (or HTTP on localhost)."
+  "Validates redirect URIs based on `application_type`: `\"web\"` requires HTTPS only,
+  `\"native\"` allows HTTPS, HTTP on loopback, or custom URI schemes."
   [request]
-  (doseq [uri (:redirect_uris request)]
-    (when-not (util/valid-redirect-uri? uri)
-      (throw (ex-info "invalid_client_metadata"
-                      {:error_description (str "Invalid redirect URI: " (util/truncate uri 200))})))))
+  (let [validator (if (= "native" (:application_type request))
+                    util/valid-native-redirect-uri?
+                    util/valid-web-redirect-uri?)]
+    (doseq [uri (:redirect_uris request)]
+      (when-not (validator uri)
+        (throw (ex-info "invalid_client_metadata"
+                        {:error_description (str "Invalid redirect URI: " (util/truncate uri 200))}))))))
 
 (defn- validate-grant-response-consistency
   "Validates that `grant_types` and `response_types` are consistent per RFC 7591."
@@ -124,6 +131,7 @@
              :response-types             (:response_types request)
              :scopes                     scopes
              :token-endpoint-auth-method auth-method
+             :application-type           (:application_type request)
              :registration-access-token  (token/generate-access-token)}
 
       (:client_name request) (assoc :client-name (:client_name request))
@@ -138,7 +146,8 @@
            :redirect_uris              (:redirect-uris client)
            :grant_types                (:grant-types client)
            :response_types             (:response-types client)
-           :token_endpoint_auth_method (:token-endpoint-auth-method client)}
+           :token_endpoint_auth_method (:token-endpoint-auth-method client)
+           :application_type           (:application-type client)}
     (:client-name client)   (assoc :client_name (:client-name client))
     (seq (:scopes client))  (assoc :scope (str/join " " (:scopes client)))
     (:client-uri client)    (assoc :client_uri (:client-uri client))

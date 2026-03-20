@@ -88,16 +88,18 @@
                            (store/create-client-store))))))
 
 (deftest register-http-localhost-redirect-test
-  (testing "http://localhost redirect URI is accepted"
+  (testing "http://localhost redirect URI is accepted for native clients"
     (let [response (reg/handle-registration-request
-                    {:redirect_uris ["http://localhost:3000/callback"]}
+                    {:redirect_uris    ["http://localhost:3000/callback"]
+                     :application_type "native"}
                     (store/create-client-store))]
       (is (= ["http://localhost:3000/callback"] (:redirect_uris response))))))
 
 (deftest register-http-127-redirect-test
-  (testing "http://127.0.0.1 redirect URI is accepted"
+  (testing "http://127.0.0.1 redirect URI is accepted for native clients"
     (let [response (reg/handle-registration-request
-                    {:redirect_uris ["http://127.0.0.1:8080/callback"]}
+                    {:redirect_uris    ["http://127.0.0.1:8080/callback"]
+                     :application_type "native"}
                     (store/create-client-store))]
       (is (= ["http://127.0.0.1:8080/callback"] (:redirect_uris response))))))
 
@@ -243,3 +245,50 @@
           read-result  (reg/handle-client-read client-store "nonexistent-id" "any-token")]
       (is (= 401 (:status read-result)))
       (is (= {:error "invalid_token"} (:body read-result))))))
+
+(deftest register-native-client-custom-scheme-test
+  (testing "native client with custom URI scheme succeeds"
+    (let [response (reg/handle-registration-request
+                    {:redirect_uris    ["cursor://callback"]
+                     :application_type "native"}
+                    (store/create-client-store))]
+      (is (= ["cursor://callback"] (:redirect_uris response)))
+      (is (= "native" (:application_type response))))))
+
+(deftest register-native-client-loopback-test
+  (testing "native client with HTTP loopback URI succeeds"
+    (let [response (reg/handle-registration-request
+                    {:redirect_uris    ["http://localhost:9090/callback"]
+                     :application_type "native"}
+                    (store/create-client-store))]
+      (is (= ["http://localhost:9090/callback"] (:redirect_uris response))))))
+
+(deftest register-web-client-rejects-loopback-test
+  (testing "web client (default) rejects HTTP loopback URI"
+    (is (thrown-with-msg? Exception #"invalid_client_metadata"
+                          (reg/handle-registration-request
+                           {:redirect_uris ["http://localhost:3000/callback"]}
+                           (store/create-client-store))))))
+
+(deftest register-web-client-rejects-custom-scheme-test
+  (testing "web client rejects custom URI scheme"
+    (is (thrown-with-msg? Exception #"invalid_client_metadata"
+                          (reg/handle-registration-request
+                           {:redirect_uris    ["cursor://callback"]
+                            :application_type "web"}
+                           (store/create-client-store))))))
+
+(deftest register-native-client-rejects-fragment-test
+  (testing "native client rejects custom scheme URI with fragment"
+    (is (thrown-with-msg? Exception #"invalid_client_metadata"
+                          (reg/handle-registration-request
+                           {:redirect_uris    ["cursor://callback#frag"]
+                            :application_type "native"}
+                           (store/create-client-store))))))
+
+(deftest register-defaults-application-type-to-web-test
+  (testing "omitting application_type defaults to web in response"
+    (let [response (reg/handle-registration-request
+                    {:redirect_uris ["https://app.example.com/callback"]}
+                    (store/create-client-store))]
+      (is (= "web" (:application_type response))))))

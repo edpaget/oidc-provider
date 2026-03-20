@@ -3,8 +3,9 @@
 
   Includes [[constant-time-eq?]] for timing-safe string comparison,
   [[hash-client-secret]] / [[verify-client-secret]] for PBKDF2-based
-  client secret hashing, and [[valid-redirect-uri?]] for redirect URI
-  validation suitable for production deployments."
+  client secret hashing, and [[valid-web-redirect-uri?]] /
+  [[valid-native-redirect-uri?]] for redirect URI validation split by
+  `application_type` per OpenID Connect Dynamic Client Registration 1.0."
   (:require
    [clojure.string :as str]
    [malli.core :as m])
@@ -90,29 +91,60 @@
       (MessageDigest/isEqual expected actual))
     (catch Exception _ false)))
 
-(m/=> valid-redirect-uri? [:=> [:cat :string] :boolean])
+(defn- loopback-host?
+  "Returns true when `host` is a loopback address: localhost, 127.0.0.1, or [::1]."
+  [^String host]
+  (or (= host "localhost")
+      (= host "127.0.0.1")
+      (contains? #{"[::1]" "::1"} host)))
 
-(defn valid-redirect-uri?
-  "Returns true when `uri-str` is an absolute URI with HTTPS, or HTTP on localhost/127.0.0.1/[::1]."
+(defn- custom-scheme-uri?
+  "Returns true when `uri` uses a non-HTTP/HTTPS scheme, is absolute, and has no fragment."
+  [^URI uri ^String scheme]
+  (and (not (contains? #{"http" "https"} scheme))
+       (.isAbsolute uri)
+       (nil? (.getFragment uri))))
+
+(m/=> valid-web-redirect-uri? [:=> [:cat :string] :boolean])
+
+(defn valid-web-redirect-uri?
+  "Returns true when `uri-str` is an absolute HTTPS URI with a host.
+  For `application_type` `\"web\"` clients per OpenID Connect Dynamic Client Registration."
+  [uri-str]
+  (try
+    (let [uri    (URI. ^String uri-str)
+          scheme (some-> (.getScheme uri) str/lower-case)]
+      (and (.isAbsolute uri)
+           (some? (.getHost uri))
+           (= scheme "https")))
+    (catch URISyntaxException _ false)))
+
+(m/=> valid-native-redirect-uri? [:=> [:cat :string] :boolean])
+
+(defn valid-native-redirect-uri?
+  "Returns true when `uri-str` is a valid redirect URI for `application_type` `\"native\"` clients.
+  Accepts HTTPS, HTTP on loopback (localhost/127.0.0.1/[::1]), or custom URI schemes
+  (e.g., `cursor://callback`) per RFC 8252 Section 7.1. Rejects URIs with fragments per
+  RFC 6749 Section 3.1.2."
   [uri-str]
   (try
     (let [uri    (URI. ^String uri-str)
           scheme (some-> (.getScheme uri) str/lower-case)
           host   (some-> (.getHost uri) str/lower-case)]
-      (and (.isAbsolute uri)
-           (some? host)
-           (or (= scheme "https")
-               (and (= scheme "http")
-                    (or (= host "localhost")
-                        (= host "127.0.0.1")
-                        (contains? #{"[::1]" "::1"} host))))))
+      (or (and (= scheme "https")
+               (.isAbsolute uri)
+               (some? host))
+          (and (= scheme "http")
+               (loopback-host? host)
+               (.isAbsolute uri))
+          (custom-scheme-uri? uri scheme)))
     (catch URISyntaxException _ false)))
 
 (m/=> valid-redirect-uri-https-only? [:=> [:cat :string] :boolean])
 
 (defn valid-redirect-uri-https-only?
   "Returns true when `uri-str` is an absolute URI with HTTPS scheme only.
-  Unlike [[valid-redirect-uri?]], this rejects HTTP even on loopback addresses.
+  Unlike [[valid-native-redirect-uri?]], this rejects HTTP even on loopback addresses.
   Intended for metadata-document clients where HTTPS is strictly required."
   [uri-str]
   (try

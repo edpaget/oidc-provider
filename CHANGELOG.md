@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `application_type` field in client registration (`web` or `native`, defaults to `web`) per OpenID Connect Dynamic Client Registration 1.0
+- Custom URI schemes (e.g., `cursor://`, `com.example.app://`) accepted as redirect URIs for `native` clients per RFC 8252 Section 7.1
+
+### Changed
+- **Breaking:** Web clients (default `application_type`) no longer accept HTTP loopback redirect URIs. Set `application_type` to `native` for loopback redirects.
+
 ## [0.4.0] - 2026-03-19
 
 ### Fixed

@@ -345,6 +345,15 @@
       (is (= "access_denied" (get-in response [:params :error])))
       (is (not (contains? (:params response) :iss))))))
 
+(deftest build-redirect-url-custom-scheme-test
+  (testing "builds redirect URL with query params for custom URI scheme"
+    (let [response {:redirect-uri "cursor://callback"
+                    :params       {:code "abc123" :state "xyz"}}
+          url      (authz/build-redirect-url response)]
+      (is (str/starts-with? url "cursor://callback?"))
+      (is (str/includes? url "code=abc123"))
+      (is (str/includes? url "state=xyz")))))
+
 (deftest handle-authorization-approval-stores-resource-test
   (testing "resource indicators round-trip through code store"
     (let [code-store      (store/create-authorization-code-store)
