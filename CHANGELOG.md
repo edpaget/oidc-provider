@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-03-20
+
 ### Added
 - `application_type` field in client registration (`web` or `native`, defaults to `web`) per OpenID Connect Dynamic Client Registration 1.0
 - Custom URI schemes (e.g., `cursor://`, `com.example.app://`) accepted as redirect URIs for `native` clients per RFC 8252 Section 7.1
