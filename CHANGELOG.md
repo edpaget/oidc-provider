@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-03-24
+
 ### Security
 - Access tokens, refresh tokens, and authorization codes are now SHA-256 hashed before storage, preventing plaintext token exposure if the store is compromised
 
