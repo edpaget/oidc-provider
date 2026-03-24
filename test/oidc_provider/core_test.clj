@@ -149,3 +149,33 @@
                      :signing-keys           [k1 k2]})
           pc       (:provider-config provider)]
       (is (= (.getKeyID ^RSAKey k1) (:active-signing-key-id pc))))))
+
+(deftest create-provider-without-oidc-test
+  (testing "creates provider without jwks-uri or signing keys"
+    (let [provider (core/create-provider
+                    {:issuer                 "https://test.example.com"
+                     :authorization-endpoint "https://test.example.com/authorize"
+                     :token-endpoint         "https://test.example.com/token"})
+          pc       (:provider-config provider)]
+      (is (nil? (:key-set pc)))
+      (is (nil? (:active-signing-key-id pc)))
+      (is (= 3600 (:access-token-ttl-seconds pc))))))
+
+(deftest jwks-empty-without-signing-keys-test
+  (testing "jwks returns empty keys when no signing key configured"
+    (let [provider (core/create-provider
+                    {:issuer                 "https://test.example.com"
+                     :authorization-endpoint "https://test.example.com/authorize"
+                     :token-endpoint         "https://test.example.com/token"})
+          jwks     (core/jwks provider)]
+      (is (= {:keys []} jwks)))))
+
+(deftest discovery-omits-jwks-uri-without-oidc-test
+  (testing "discovery metadata omits jwks_uri when not configured"
+    (let [provider (core/create-provider
+                    {:issuer                 "https://test.example.com"
+                     :authorization-endpoint "https://test.example.com/authorize"
+                     :token-endpoint         "https://test.example.com/token"})
+          metadata (core/discovery-metadata provider)]
+      (is (nil? (:jwks_uri metadata)))
+      (is (= "https://test.example.com" (:issuer metadata))))))

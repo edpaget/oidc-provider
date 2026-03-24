@@ -22,7 +22,7 @@
    [:issuer :string]
    [:authorization-endpoint :string]
    [:token-endpoint :string]
-   [:jwks-uri :string]
+   [:jwks-uri {:optional true} :string]
    [:signing-key {:optional true} [:fn (fn [k] (instance? com.nimbusds.jose.jwk.RSAKey k))]]
    [:signing-keys {:optional true} [:vector [:fn (fn [k] (instance? com.nimbusds.jose.jwk.RSAKey k))]]]
    [:active-signing-key-id {:optional true} :string]
@@ -50,8 +50,9 @@
   "Creates an OIDC provider instance.
 
    Takes a configuration map containing required keys `:issuer` (provider issuer URL),
-   `:authorization-endpoint`, `:token-endpoint`, and `:jwks-uri`. Optional keys include
-   `:signing-key` (RSAKey for signing tokens, generated if not provided),
+   `:authorization-endpoint`, and `:token-endpoint`. Optional keys include
+   `:jwks-uri` (required for OIDC; omit for plain OAuth2),
+   `:signing-key` (RSAKey for signing tokens, generated if `:jwks-uri` is provided),
    `:access-token-ttl-seconds` (defaults to 3600), `:id-token-ttl-seconds` (defaults to
    3600), `:authorization-code-ttl-seconds` (defaults to 600), `:client-store`,
    `:code-store`, `:token-store` (all three store implementations created in-memory if
@@ -74,22 +75,25 @@
            token-store
            claims-provider]               :as config}]
   {:pre [(m/validate ProviderSetup config)]}
-  (let [key-set         (cond
-                          signing-keys (token/normalize-to-jwk-set
-                                        (com.nimbusds.jose.jwk.JWKSet.
-                                         ^java.util.List (java.util.ArrayList. ^java.util.Collection signing-keys)))
-                          signing-key  (token/normalize-to-jwk-set signing-key)
-                          :else        (token/normalize-to-jwk-set (token/generate-rsa-key)))
-        active-kid      (or active-signing-key-id
-                            (.getKeyID ^RSAKey (first (.getKeys ^com.nimbusds.jose.jwk.JWKSet key-set))))
+  (let [oidc?           (or signing-key signing-keys (:jwks-uri config))
+        key-set         (when oidc?
+                          (cond
+                            signing-keys (token/normalize-to-jwk-set
+                                          (com.nimbusds.jose.jwk.JWKSet.
+                                           ^java.util.List (java.util.ArrayList. ^java.util.Collection signing-keys)))
+                            signing-key  (token/normalize-to-jwk-set signing-key)
+                            :else        (token/normalize-to-jwk-set (token/generate-rsa-key))))
+        active-kid      (when key-set
+                          (or active-signing-key-id
+                              (.getKeyID ^RSAKey (first (.getKeys ^com.nimbusds.jose.jwk.JWKSet key-set)))))
         provider-config (cond-> {:issuer                         issuer
-                                 :key-set                        key-set
-                                 :active-signing-key-id          active-kid
                                  :access-token-ttl-seconds       (or access-token-ttl-seconds 3600)
                                  :id-token-ttl-seconds           (or id-token-ttl-seconds 3600)
                                  :authorization-code-ttl-seconds (or authorization-code-ttl-seconds 600)
                                  :rotate-refresh-tokens          (if (some? rotate-refresh-tokens) rotate-refresh-tokens true)
                                  :clock                          (or clock (Clock/systemUTC))}
+                          key-set                   (assoc :key-set key-set)
+                          active-kid                (assoc :active-signing-key-id active-kid)
                           refresh-token-ttl-seconds (assoc :refresh-token-ttl-seconds refresh-token-ttl-seconds))]
     (->Provider config
                 provider-config

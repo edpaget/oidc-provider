@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Signing key and `jwks-uri` are now optional — the provider can be used as a plain OAuth2 server without OpenID Connect
+
 ## [0.6.1] - 2026-03-24
 
 ## [0.6.0] - 2026-03-24

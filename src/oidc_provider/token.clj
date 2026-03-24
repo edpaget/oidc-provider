@@ -23,8 +23,8 @@
   "Malli schema for OIDC provider configuration."
   [:map
    [:issuer :string]
-   [:key-set [:fn (fn [ks] (instance? JWKSet ks))]]
-   [:active-signing-key-id :string]
+   [:key-set {:optional true} [:fn (fn [ks] (instance? JWKSet ks))]]
+   [:active-signing-key-id {:optional true} :string]
    [:access-token-ttl-seconds {:optional true} pos-int?]
    [:id-token-ttl-seconds {:optional true} pos-int?]
    [:authorization-code-ttl-seconds {:optional true} pos-int?]
@@ -92,6 +92,8 @@
    user-id client-id claims
    {:keys [nonce auth-time]}]
   {:pre [(m/validate ProviderConfig config)]}
+  (when-not key-set
+    (throw (ex-info "Signing key required for ID token generation; configure :signing-key or :signing-keys" {})))
   (let [ttl                           (or id-token-ttl-seconds 3600)
         ^JWTClaimsSet$Builder builder (JWTClaimsSet$Builder.)]
     (doto builder
@@ -151,6 +153,8 @@
     ex-info on validation failure"
   [{:keys [issuer key-set clock] :as config} token expected-client-id]
   {:pre [(m/validate ProviderConfig config)]}
+  (when-not key-set
+    (throw (ex-info "Signing key required for ID token validation; configure :signing-key or :signing-keys" {})))
   (let [^DefaultJWTProcessor processor (DefaultJWTProcessor.)
         key-selector                   (JWSVerificationKeySelector.
                                         JWSAlgorithm/RS256
@@ -190,7 +194,9 @@
     Map with :keys vector containing public key in JWK format"
   [{:keys [key-set] :as config}]
   {:pre [(m/validate ProviderConfig config)]}
-  {:keys (->> (.getKeys ^JWKSet key-set)
-              (mapv (fn [k] (json/parse-string
-                             (.toJSONString (.toPublicJWK ^RSAKey k))
-                             true))))})
+  (if key-set
+    {:keys (->> (.getKeys ^JWKSet key-set)
+                (mapv (fn [k] (json/parse-string
+                               (.toJSONString (.toPublicJWK ^RSAKey k))
+                               true))))}
+    {:keys []}))

@@ -12,7 +12,7 @@
    [:issuer :string]
    [:authorization-endpoint :string]
    [:token-endpoint :string]
-   [:jwks-uri :string]
+   [:jwks-uri {:optional true} :string]
    [:userinfo-endpoint {:optional true} :string]
    [:scopes-supported {:optional true} [:vector :string]]
    [:response-types-supported {:optional true} [:vector :string]]
@@ -56,7 +56,6 @@
   (cond-> {:issuer                                issuer
            :authorization_endpoint                authorization-endpoint
            :token_endpoint                        token-endpoint
-           :jwks_uri                              jwks-uri
            :response_types_supported              (or response-types-supported ["code"])
            :subject_types_supported               (or subject-types-supported ["public"])
            :id_token_signing_alg_values_supported (or id-token-signing-alg-values-supported ["RS256"])
@@ -68,6 +67,7 @@
            :resource_indicators_supported         (if (some? resource-indicators-supported)
                                                     resource-indicators-supported
                                                     true)}
+    jwks-uri (assoc :jwks_uri jwks-uri)
     userinfo-endpoint (assoc :userinfo_endpoint userinfo-endpoint)
     claims-supported (assoc :claims_supported claims-supported)
     registration-endpoint (assoc :registration_endpoint registration-endpoint)
