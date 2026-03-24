@@ -155,6 +155,21 @@
            (= scheme "https")))
     (catch URISyntaxException _ false)))
 
+(m/=> hash-token [:=> [:cat :string] :string])
+
+(defn hash-token
+  "Computes a SHA-256 digest of `token` and returns it as a base64url string
+  without padding.
+
+  Intended for hashing high-entropy opaque tokens (access tokens, refresh
+  tokens, authorization codes) before storage. Unlike [[hash-client-secret]],
+  no salt or key-stretching is needed because the input is already 256-bit
+  random."
+  [^String token]
+  (.encodeToString (.withoutPadding (Base64/getUrlEncoder))
+                   (.digest (MessageDigest/getInstance "SHA-256")
+                            (.getBytes token "UTF-8"))))
+
 (m/=> truncate [:=> [:cat [:maybe :string] :int] :string])
 
 (defn truncate

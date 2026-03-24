@@ -64,7 +64,12 @@
     if the client does not exist."))
 
 (defprotocol AuthorizationCodeStore
-  "Protocol for storing and retrieving authorization codes."
+  "Protocol for storing and retrieving authorization codes.
+
+  Callers should use the hashing wrapper functions in [[oidc-provider.store]]
+  (e.g. `store/save-authorization-code`) rather than invoking these methods
+  directly. The wrappers SHA-256 hash the code before delegation, ensuring
+  every implementation stores hashed keys rather than plaintext codes."
   (save-authorization-code [this code user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource]
     "Saves an authorization code with associated metadata.
 
@@ -99,7 +104,12 @@
     same code before either deletes it."))
 
 (defprotocol TokenStore
-  "Protocol for managing access and refresh tokens."
+  "Protocol for managing access and refresh tokens.
+
+  Callers should use the hashing wrapper functions in [[oidc-provider.store]]
+  (e.g. `store/save-access-token`) rather than invoking these methods directly.
+  The wrappers SHA-256 hash the token before delegation, ensuring every
+  implementation stores hashed keys rather than plaintext secrets."
   (save-access-token [this token user-id client-id scope expiry resource]
     "Saves an access token.
 

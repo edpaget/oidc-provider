@@ -3,7 +3,6 @@
    [clojure.string :as str]
    [clojure.test :refer [deftest is testing]]
    [oidc-provider.authorization :as authz]
-   [oidc-provider.protocol :as proto]
    [oidc-provider.store :as store]
    [oidc-provider.util :as util])
   (:import
@@ -76,7 +75,7 @@
                            provider-config
                            code-store)
           code            (get-in response [:params :code])
-          code-data       (proto/get-authorization-code code-store code)]
+          code-data       (store/get-authorization-code code-store code)]
       (is (= "https://app.example.com/callback" (:redirect-uri response)))
       (is (= "xyz" (get-in response [:params :state])))
       (is (= "https://test.example.com" (get-in response [:params :iss])))
@@ -184,7 +183,7 @@
           response        (authz/handle-authorization-approval
                            request "user-123" provider-config code-store)
           code            (get-in response [:params :code])
-          code-data       (proto/get-authorization-code code-store code)]
+          code-data       (store/get-authorization-code code-store code)]
       (is (= "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM" (:code-challenge code-data)))
       (is (= "S256" (:code-challenge-method code-data))))))
 
@@ -368,5 +367,5 @@
           response        (authz/handle-authorization-approval
                            request "user-123" provider-config code-store)
           code            (get-in response [:params :code])
-          code-data       (proto/get-authorization-code code-store code)]
+          code-data       (store/get-authorization-code code-store code)]
       (is (= ["https://api.example.com" "https://other.example.com"] (:resource code-data))))))

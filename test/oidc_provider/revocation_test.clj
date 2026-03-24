@@ -1,7 +1,6 @@
 (ns oidc-provider.revocation-test
   (:require
    [clojure.test :refer [deftest is testing]]
-   [oidc-provider.protocol :as proto]
    [oidc-provider.revocation :as revocation]
    [oidc-provider.store :as store]
    [oidc-provider.util :as util]))
@@ -26,22 +25,22 @@
 (deftest revoke-access-token-test
   (testing "revokes an access token and returns 200"
     (let [{:keys [client-store token-store auth-header]} (make-fixtures)]
-      (proto/save-access-token token-store "at-123" "user-1" "test-client" ["openid"] 999999999999 nil)
+      (store/save-access-token token-store "at-123" "user-1" "test-client" ["openid"] 999999999999 nil)
       (let [result (revocation/handle-revocation-request
                     {:token "at-123" :client_id "test-client"}
                     auth-header client-store token-store)]
         (is (= 200 (:status result)))
-        (is (nil? (proto/get-access-token token-store "at-123")))))))
+        (is (nil? (store/get-access-token token-store "at-123")))))))
 
 (deftest revoke-refresh-token-test
   (testing "revokes a refresh token and returns 200"
     (let [{:keys [client-store token-store auth-header]} (make-fixtures)]
-      (proto/save-refresh-token token-store "rt-123" "user-1" "test-client" ["openid"] nil nil)
+      (store/save-refresh-token token-store "rt-123" "user-1" "test-client" ["openid"] nil nil)
       (let [result (revocation/handle-revocation-request
                     {:token "rt-123" :client_id "test-client"}
                     auth-header client-store token-store)]
         (is (= 200 (:status result)))
-        (is (nil? (proto/get-refresh-token token-store "rt-123")))))))
+        (is (nil? (store/get-refresh-token token-store "rt-123")))))))
 
 (deftest revoke-unknown-token-test
   (testing "returns 200 for unknown token per RFC 7009"
@@ -62,22 +61,22 @@
 (deftest revoke-other-clients-access-token-test
   (testing "cannot revoke another client's access token"
     (let [{:keys [client-store token-store auth-header]} (make-fixtures)]
-      (proto/save-access-token token-store "at-other" "user-1" "other-client" ["openid"] 999999999999 nil)
+      (store/save-access-token token-store "at-other" "user-1" "other-client" ["openid"] 999999999999 nil)
       (let [result (revocation/handle-revocation-request
                     {:token "at-other" :client_id "test-client"}
                     auth-header client-store token-store)]
         (is (= 200 (:status result)))
-        (is (some? (proto/get-access-token token-store "at-other")))))))
+        (is (some? (store/get-access-token token-store "at-other")))))))
 
 (deftest revoke-other-clients-refresh-token-test
   (testing "cannot revoke another client's refresh token"
     (let [{:keys [client-store token-store auth-header]} (make-fixtures)]
-      (proto/save-refresh-token token-store "rt-other" "user-1" "other-client" ["openid"] nil nil)
+      (store/save-refresh-token token-store "rt-other" "user-1" "other-client" ["openid"] nil nil)
       (let [result (revocation/handle-revocation-request
                     {:token "rt-other" :client_id "test-client"}
                     auth-header client-store token-store)]
         (is (= 200 (:status result)))
-        (is (some? (proto/get-refresh-token token-store "rt-other")))))))
+        (is (some? (store/get-refresh-token token-store "rt-other")))))))
 
 (deftest revoke-missing-token-error-body-test
   (testing "400 response includes error body and cache-control headers"
@@ -105,32 +104,32 @@
 (deftest revoke-with-access-token-hint-test
   (testing "hint access_token revokes access token successfully"
     (let [{:keys [client-store token-store auth-header]} (make-fixtures)]
-      (proto/save-access-token token-store "at-hint" "user-1" "test-client" ["openid"] 999999999999 nil)
+      (store/save-access-token token-store "at-hint" "user-1" "test-client" ["openid"] 999999999999 nil)
       (let [result (revocation/handle-revocation-request
                     {:token "at-hint" :token_type_hint "access_token" :client_id "test-client"}
                     auth-header client-store token-store)]
         (is (= 200 (:status result)))
-        (is (nil? (proto/get-access-token token-store "at-hint")))))))
+        (is (nil? (store/get-access-token token-store "at-hint")))))))
 
 (deftest revoke-with-refresh-token-hint-test
   (testing "hint refresh_token revokes refresh token successfully"
     (let [{:keys [client-store token-store auth-header]} (make-fixtures)]
-      (proto/save-refresh-token token-store "rt-hint" "user-1" "test-client" ["openid"] nil nil)
+      (store/save-refresh-token token-store "rt-hint" "user-1" "test-client" ["openid"] nil nil)
       (let [result (revocation/handle-revocation-request
                     {:token "rt-hint" :token_type_hint "refresh_token" :client_id "test-client"}
                     auth-header client-store token-store)]
         (is (= 200 (:status result)))
-        (is (nil? (proto/get-refresh-token token-store "rt-hint")))))))
+        (is (nil? (store/get-refresh-token token-store "rt-hint")))))))
 
 (deftest revoke-with-wrong-hint-test
   (testing "wrong hint still revokes via fallback lookup"
     (let [{:keys [client-store token-store auth-header]} (make-fixtures)]
-      (proto/save-refresh-token token-store "rt-wrong" "user-1" "test-client" ["openid"] nil nil)
+      (store/save-refresh-token token-store "rt-wrong" "user-1" "test-client" ["openid"] nil nil)
       (let [result (revocation/handle-revocation-request
                     {:token "rt-wrong" :token_type_hint "access_token" :client_id "test-client"}
                     auth-header client-store token-store)]
         (is (= 200 (:status result)))
-        (is (nil? (proto/get-refresh-token token-store "rt-wrong")))))))
+        (is (nil? (store/get-refresh-token token-store "rt-wrong")))))))
 
 (deftest revoke-malformed-basic-auth-test
   (testing "returns 401 for malformed Basic auth instead of 500"

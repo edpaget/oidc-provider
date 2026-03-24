@@ -49,33 +49,33 @@
   (testing "returns code data and removes code from store"
     (let [code-store (store/create-authorization-code-store)
           expiry     (+ (System/currentTimeMillis) 60000)]
-      (proto/save-authorization-code code-store "code-1" "user-1" "client-1"
+      (store/save-authorization-code code-store "code-1" "user-1" "client-1"
                                      "https://app.example.com/cb" ["openid"] nil expiry nil nil nil)
-      (let [data (proto/consume-authorization-code code-store "code-1")]
+      (let [data (store/consume-authorization-code code-store "code-1")]
         (is (= "user-1" (:user-id data)))
         (is (= "client-1" (:client-id data)))
-        (is (nil? (proto/get-authorization-code code-store "code-1")))))))
+        (is (nil? (store/get-authorization-code code-store "code-1")))))))
 
 (deftest consume-authorization-code-missing-test
   (testing "returns nil for nonexistent code"
     (let [code-store (store/create-authorization-code-store)]
-      (is (nil? (proto/consume-authorization-code code-store "nonexistent"))))))
+      (is (nil? (store/consume-authorization-code code-store "nonexistent"))))))
 
 (deftest consume-authorization-code-idempotent-test
   (testing "second consume returns nil"
     (let [code-store (store/create-authorization-code-store)
           expiry     (+ (System/currentTimeMillis) 60000)]
-      (proto/save-authorization-code code-store "code-1" "user-1" "client-1"
+      (store/save-authorization-code code-store "code-1" "user-1" "client-1"
                                      "https://app.example.com/cb" ["openid"] nil expiry nil nil nil)
-      (is (some? (proto/consume-authorization-code code-store "code-1")))
-      (is (nil? (proto/consume-authorization-code code-store "code-1"))))))
+      (is (some? (store/consume-authorization-code code-store "code-1")))
+      (is (nil? (store/consume-authorization-code code-store "code-1"))))))
 
 (deftest save-refresh-token-with-expiry-test
   (testing "stores and retrieves expiry on a refresh token"
     (let [token-store (store/create-token-store)
           expiry      (+ (System/currentTimeMillis) 60000)]
-      (proto/save-refresh-token token-store "rt-1" "user-1" "client-1" ["openid"] expiry nil)
-      (let [data (proto/get-refresh-token token-store "rt-1")]
+      (store/save-refresh-token token-store "rt-1" "user-1" "client-1" ["openid"] expiry nil)
+      (let [data (store/get-refresh-token token-store "rt-1")]
         (is (= expiry (:expiry data)))
         (is (= "user-1" (:user-id data)))
         (is (= ["openid"] (:scope data)))))))
@@ -83,7 +83,30 @@
 (deftest save-refresh-token-without-expiry-test
   (testing "nil expiry means no :expiry key in stored data"
     (let [token-store (store/create-token-store)]
-      (proto/save-refresh-token token-store "rt-2" "user-1" "client-1" ["openid"] nil nil)
-      (let [data (proto/get-refresh-token token-store "rt-2")]
+      (store/save-refresh-token token-store "rt-2" "user-1" "client-1" ["openid"] nil nil)
+      (let [data (store/get-refresh-token token-store "rt-2")]
         (is (not (contains? data :expiry)))
         (is (= "user-1" (:user-id data)))))))
+
+(deftest access-token-stored-as-hash-test
+  (testing "plaintext token is not a key in the internal atom"
+    (let [token-store (store/create-token-store)]
+      (store/save-access-token token-store "at-plaintext" "user-1" "client-1" ["openid"] 999999999999 nil)
+      (is (some? (store/get-access-token token-store "at-plaintext")))
+      (is (not (contains? @(.access-tokens token-store) "at-plaintext"))))))
+
+(deftest refresh-token-stored-as-hash-test
+  (testing "plaintext refresh token is not a key in the internal atom"
+    (let [token-store (store/create-token-store)]
+      (store/save-refresh-token token-store "rt-plaintext" "user-1" "client-1" ["openid"] nil nil)
+      (is (some? (store/get-refresh-token token-store "rt-plaintext")))
+      (is (not (contains? @(.refresh-tokens token-store) "rt-plaintext"))))))
+
+(deftest authorization-code-stored-as-hash-test
+  (testing "plaintext code is not a key in the internal atom"
+    (let [code-store (store/create-authorization-code-store)
+          expiry     (+ (System/currentTimeMillis) 60000)]
+      (store/save-authorization-code code-store "code-plain" "user-1" "client-1"
+                                     "https://app.example.com/cb" ["openid"] nil expiry nil nil nil)
+      (is (some? (store/get-authorization-code code-store "code-plain")))
+      (is (not (contains? @(.codes code-store) "code-plain"))))))

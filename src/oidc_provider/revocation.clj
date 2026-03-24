@@ -5,7 +5,7 @@
   The endpoint always returns 200 on successful authentication, even for unknown
   tokens, to prevent token-scanning attacks per RFC 7009 §2.2."
   (:require
-   [oidc-provider.protocol :as proto]
+   [oidc-provider.store :as store]
    [oidc-provider.token-endpoint :as token-ep]))
 
 (def ^:private no-cache-headers
@@ -27,10 +27,10 @@
   otherwise checks access tokens first. Always falls back to the other store."
   [token-store token hint]
   (if (= hint "refresh_token")
-    (or (proto/get-refresh-token token-store token)
-        (proto/get-access-token token-store token))
-    (or (proto/get-access-token token-store token)
-        (proto/get-refresh-token token-store token))))
+    (or (store/get-refresh-token token-store token)
+        (store/get-access-token token-store token))
+    (or (store/get-access-token token-store token)
+        (store/get-refresh-token token-store token))))
 
 (defn handle-revocation-request
   "Processes an RFC 7009 token revocation request.
@@ -50,7 +50,7 @@
         (let [token      (:token params)
               token-data (lookup-token token-store token (:token_type_hint params))]
           (when (and token-data (= (:client-id token-data) (:client-id client)))
-            (proto/revoke-token token-store token))
+            (store/revoke-token token-store token))
           {:status 200})))
     (catch clojure.lang.ExceptionInfo _
       {:status  401

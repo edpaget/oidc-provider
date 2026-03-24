@@ -4,6 +4,7 @@
    [clojure.string :as str]
    [malli.core :as m]
    [oidc-provider.protocol :as proto]
+   [oidc-provider.store :as store]
    [oidc-provider.token :as token]))
 
 (set! *warn-on-reflection* true)
@@ -132,7 +133,7 @@
           expiry (+ (.millis ^java.time.Clock (:clock provider-config))
                     (* 1000 (or (:authorization-code-ttl-seconds provider-config) 600)))
           scopes (when scope (vec (str/split scope #" ")))]
-      (proto/save-authorization-code code-store code user-id client_id
+      (store/save-authorization-code code-store code user-id client_id
                                      redirect_uri scopes nonce expiry
                                      code_challenge code_challenge_method resource)
       {:redirect-uri redirect_uri

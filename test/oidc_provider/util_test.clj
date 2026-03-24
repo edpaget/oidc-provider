@@ -67,6 +67,23 @@
     (is (false? (util/valid-redirect-uri-https-only? "/callback")))
     (is (false? (util/valid-redirect-uri-https-only? "not a uri!!")))))
 
+(deftest hash-token-deterministic-test
+  (testing "same input always produces the same hash"
+    (let [token "abc123"
+          hash1 (util/hash-token token)
+          hash2 (util/hash-token token)]
+      (is (= hash1 hash2)))))
+
+(deftest hash-token-different-inputs-test
+  (testing "different inputs produce different hashes"
+    (is (not= (util/hash-token "token-a") (util/hash-token "token-b")))))
+
+(deftest hash-token-base64url-format-test
+  (testing "output is base64url without padding"
+    (let [h (util/hash-token "some-random-token")]
+      (is (not (re-find #"[+/=]" h)))
+      (is (re-matches #"[A-Za-z0-9_-]+" h)))))
+
 (deftest truncate-test
   (testing "truncates strings to max-len"
     (is (= "hi" (util/truncate "hi" 10)))
