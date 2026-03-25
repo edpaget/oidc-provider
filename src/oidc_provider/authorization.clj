@@ -97,8 +97,7 @@
   (when-not (m/validate AuthorizationRequest params)
     (throw (ex-info "Invalid authorization request"
                     {:errors (m/explain AuthorizationRequest params)})))
-  (let [params    (validate-pkce-params params)
-        params    (normalize-resource params)
+  (let [params    (-> params validate-pkce-params normalize-resource)
         client-id (:client_id params)
         client    (proto/get-client client-store client-id)]
     (when-not client
@@ -133,8 +132,7 @@
    user-id
    provider-config
    code-store]
-  (cond
-    (= response_type "code")
+  (if (= response_type "code")
     (let [code   (token/generate-authorization-code)
           expiry (+ (.millis ^java.time.Clock (:clock provider-config))
                     (* 1000 (or (:authorization-code-ttl-seconds provider-config) 600)))
@@ -146,8 +144,6 @@
        :params       (cond-> {:code code}
                        (:issuer provider-config) (assoc :iss (:issuer provider-config))
                        state (assoc :state state))})
-
-    :else
     (throw (ex-info "Unsupported response_type"
                     {:response-type response_type}))))
 

@@ -62,7 +62,7 @@
   [authorization-header]
   (when authorization-header
     (let [[scheme] (str/split authorization-header #" " 2)]
-      (boolean (and scheme (.equalsIgnoreCase ^String scheme "Basic"))))))
+      (boolean (and scheme (= (str/lower-case scheme) "basic"))))))
 
 (defn parse-basic-auth
   "Parses an HTTP Basic Authorization header into client credentials.
@@ -74,8 +74,7 @@
   (try
     (when authorization-header
       (let [[scheme encoded] (str/split authorization-header #" " 2)]
-        ;; .equalsIgnoreCase is locale-independent and avoids allocating a lowercase copy
-        (when (and encoded (.equalsIgnoreCase ^String scheme "Basic"))
+        (when (and encoded (= (str/lower-case scheme) "basic"))
           (let [decoded (String. (.decode (Base64/getDecoder) encoded))]
             (when (str/includes? decoded ":")
               (let [[client-id client-secret] (str/split decoded #":" 2)]
