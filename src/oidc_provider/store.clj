@@ -107,6 +107,30 @@
   []
   (->InMemoryTokenStore (atom {}) (atom {})))
 
+(defrecord HashingTokenStore [inner]
+  proto/TokenStore
+  (save-access-token [_ token user-id client-id scope expiry resource]
+    (proto/save-access-token inner (util/hash-token token) user-id client-id scope expiry resource))
+  (get-access-token [_ token]
+    (proto/get-access-token inner (util/hash-token token)))
+  (save-refresh-token [_ token user-id client-id scope expiry resource]
+    (proto/save-refresh-token inner (util/hash-token token) user-id client-id scope expiry resource))
+  (get-refresh-token [_ token]
+    (proto/get-refresh-token inner (util/hash-token token)))
+  (revoke-token [_ token]
+    (proto/revoke-token inner (util/hash-token token))))
+
+(defrecord HashingAuthorizationCodeStore [inner]
+  proto/AuthorizationCodeStore
+  (save-authorization-code [_ code user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource]
+    (proto/save-authorization-code inner (util/hash-token code) user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource))
+  (get-authorization-code [_ code]
+    (proto/get-authorization-code inner (util/hash-token code)))
+  (delete-authorization-code [_ code]
+    (proto/delete-authorization-code inner (util/hash-token code)))
+  (consume-authorization-code [_ code]
+    (proto/consume-authorization-code inner (util/hash-token code))))
+
 ;; ---------------------------------------------------------------------------
 ;; Hashing wrapper functions
 ;;

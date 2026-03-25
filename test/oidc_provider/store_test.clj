@@ -110,3 +110,55 @@
                                      "https://app.example.com/cb" ["openid"] nil expiry nil nil nil)
       (is (some? (store/get-authorization-code code-store "code-plain")))
       (is (not (contains? @(.codes code-store) "code-plain"))))))
+
+(deftest hashing-token-store-access-token-test
+  (testing "HashingTokenStore hashes access tokens before storing in inner store"
+    (let [inner     (store/create-token-store)
+          decorator (store/->HashingTokenStore inner)]
+      (proto/save-access-token decorator "at-plain" "user-1" "client-1" ["openid"] 999999999999 nil)
+      (is (= "user-1" (:user-id (proto/get-access-token decorator "at-plain"))))
+      (is (not (contains? @(.access-tokens inner) "at-plain"))))))
+
+(deftest hashing-token-store-refresh-token-test
+  (testing "HashingTokenStore hashes refresh tokens before storing in inner store"
+    (let [inner     (store/create-token-store)
+          decorator (store/->HashingTokenStore inner)]
+      (proto/save-refresh-token decorator "rt-plain" "user-1" "client-1" ["openid"] nil nil)
+      (is (= "user-1" (:user-id (proto/get-refresh-token decorator "rt-plain"))))
+      (is (not (contains? @(.refresh-tokens inner) "rt-plain"))))))
+
+(deftest hashing-token-store-revoke-access-token-test
+  (testing "HashingTokenStore revokes access token by hashed key"
+    (let [inner     (store/create-token-store)
+          decorator (store/->HashingTokenStore inner)]
+      (proto/save-access-token decorator "at-revoke" "user-1" "client-1" ["openid"] 999999999999 nil)
+      (proto/revoke-token decorator "at-revoke")
+      (is (nil? (proto/get-access-token decorator "at-revoke"))))))
+
+(deftest hashing-token-store-revoke-refresh-token-test
+  (testing "HashingTokenStore revokes refresh token by hashed key"
+    (let [inner     (store/create-token-store)
+          decorator (store/->HashingTokenStore inner)]
+      (proto/save-refresh-token decorator "rt-revoke" "user-1" "client-1" ["openid"] nil nil)
+      (proto/revoke-token decorator "rt-revoke")
+      (is (nil? (proto/get-refresh-token decorator "rt-revoke"))))))
+
+(deftest hashing-authorization-code-store-test
+  (testing "HashingAuthorizationCodeStore hashes codes before storing in inner store"
+    (let [inner     (store/create-authorization-code-store)
+          decorator (store/->HashingAuthorizationCodeStore inner)
+          expiry    (+ (System/currentTimeMillis) 60000)]
+      (proto/save-authorization-code decorator "code-plain" "user-1" "client-1"
+                                     "https://app.example.com/cb" ["openid"] nil expiry nil nil nil)
+      (is (= "user-1" (:user-id (proto/get-authorization-code decorator "code-plain"))))
+      (is (not (contains? @(.codes inner) "code-plain"))))))
+
+(deftest hashing-authorization-code-store-consume-test
+  (testing "HashingAuthorizationCodeStore consume hashes and atomically removes"
+    (let [inner     (store/create-authorization-code-store)
+          decorator (store/->HashingAuthorizationCodeStore inner)
+          expiry    (+ (System/currentTimeMillis) 60000)]
+      (proto/save-authorization-code decorator "code-consume" "user-1" "client-1"
+                                     "https://app.example.com/cb" ["openid"] nil expiry nil nil nil)
+      (is (= "user-1" (:user-id (proto/consume-authorization-code decorator "code-consume"))))
+      (is (nil? (proto/get-authorization-code decorator "code-consume"))))))
