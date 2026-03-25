@@ -245,3 +245,31 @@
                                                                    "authorization" auth-header}
                                                   :params         {:token "nonexistent" :client_id "test-client"}})]
       (is (= 200 (:status response))))))
+
+(deftest revocation-auth-failure-response-format-test
+  (testing "401 returns JSON error body with WWW-Authenticate header"
+    (let [{:keys [handler]} (revocation-fixtures)
+          bad-auth          (str "Basic " (.encodeToString
+                                           (java.util.Base64/getEncoder)
+                                           (.getBytes "test-client:wrong" "UTF-8")))
+          response          (handler {:request-method :post
+                                      :headers        {"content-type"  "application/x-www-form-urlencoded"
+                                                       "authorization" bad-auth}
+                                      :params         {:token "at-123" :client_id "test-client"}})
+          body              (json/parse-string (:body response) true)]
+      (is (= 401 (:status response)))
+      (is (= {:error "invalid_client"} body))
+      (is (= "application/json" (get-in response [:headers "Content-Type"])))
+      (is (= "Bearer" (get-in response [:headers "WWW-Authenticate"]))))))
+
+(deftest revocation-missing-token-response-format-test
+  (testing "400 returns JSON error body with Content-Type header"
+    (let [{:keys [handler auth-header]} (revocation-fixtures)
+          response                      (handler {:request-method :post
+                                                  :headers        {"content-type"  "application/x-www-form-urlencoded"
+                                                                   "authorization" auth-header}
+                                                  :params         {:client_id "test-client"}})
+          body                          (json/parse-string (:body response) true)]
+      (is (= 400 (:status response)))
+      (is (= "invalid_request" (:error body)))
+      (is (= "application/json" (get-in response [:headers "Content-Type"]))))))

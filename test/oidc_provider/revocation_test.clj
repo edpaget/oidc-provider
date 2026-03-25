@@ -99,7 +99,8 @@
                                               bad-auth client-store token-store)]
       (is (= 401 (:status result)))
       (is (= {:error "invalid_client"} (:body result)))
-      (is (= "no-store" (get-in result [:headers "Cache-Control"]))))))
+      (is (= "no-store" (get-in result [:headers "Cache-Control"])))
+      (is (= "Bearer" (get-in result [:headers "WWW-Authenticate"]))))))
 
 (deftest revoke-with-access-token-hint-test
   (testing "hint access_token revokes access token successfully"

@@ -13,6 +13,9 @@
    "Cache-Control" "no-store"
    "Pragma"        "no-cache"})
 
+(def ^:private auth-failure-headers
+  (assoc no-cache-headers "WWW-Authenticate" "Bearer"))
+
 (set! *warn-on-reflection* true)
 
 (def RevocationRequest
@@ -54,5 +57,5 @@
           {:status 200})))
     (catch clojure.lang.ExceptionInfo _
       {:status  401
-       :headers no-cache-headers
+       :headers auth-failure-headers
        :body    {:error "invalid_client"}})))
