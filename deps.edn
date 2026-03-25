@@ -47,4 +47,10 @@
   :deploy
   {:extra-deps {slipset/deps-deploy {:mvn/version "0.2.2"}}
    :exec-fn    deps-deploy.deps-deploy/deploy
-   :exec-args  {:installer :remote}}}}
+   :exec-args  {:installer :remote}}
+
+  :dev
+  {:extra-paths ["dev"]
+   :extra-deps  {ring/ring-jetty-adapter {:mvn/version "1.13.0"}
+                 ring/ring-core          {:mvn/version "1.13.0"}}
+   :main-opts   ["-m" "oidc-provider.dev-server"]}}}
