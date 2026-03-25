@@ -59,3 +59,62 @@
                   :client-id-metadata-document-supported true}
           result (discovery/openid-configuration config)]
       (is (= true (:client_id_metadata_document_supported result))))))
+
+(deftest discovery-includes-subject-types-supported-test
+  (testing "default config includes subject_types_supported with public"
+    (let [config {:issuer                 "https://test.example.com"
+                  :authorization-endpoint "https://test.example.com/authorize"
+                  :token-endpoint         "https://test.example.com/token"
+                  :jwks-uri               "https://test.example.com/jwks"}
+          result (discovery/openid-configuration config)]
+      (is (= ["public"] (:subject_types_supported result))))))
+
+(deftest discovery-includes-id-token-signing-alg-values-supported-test
+  (testing "default config includes id_token_signing_alg_values_supported with RS256"
+    (let [config {:issuer                 "https://test.example.com"
+                  :authorization-endpoint "https://test.example.com/authorize"
+                  :token-endpoint         "https://test.example.com/token"
+                  :jwks-uri               "https://test.example.com/jwks"}
+          result (discovery/openid-configuration config)]
+      (is (= ["RS256"] (:id_token_signing_alg_values_supported result))))))
+
+(deftest discovery-includes-token-endpoint-auth-methods-supported-test
+  (testing "default config includes token_endpoint_auth_methods_supported"
+    (let [config {:issuer                 "https://test.example.com"
+                  :authorization-endpoint "https://test.example.com/authorize"
+                  :token-endpoint         "https://test.example.com/token"
+                  :jwks-uri               "https://test.example.com/jwks"}
+          result (discovery/openid-configuration config)]
+      (is (= ["client_secret_basic" "client_secret_post" "none"]
+             (:token_endpoint_auth_methods_supported result))))))
+
+(deftest discovery-required-fields-present-test
+  (testing "all OIDC Discovery section 3 REQUIRED fields are present"
+    (let [config {:issuer                 "https://test.example.com"
+                  :authorization-endpoint "https://test.example.com/authorize"
+                  :token-endpoint         "https://test.example.com/token"
+                  :jwks-uri               "https://test.example.com/jwks"}
+          result (discovery/openid-configuration config)]
+      (is (= "https://test.example.com" (:issuer result)))
+      (is (= "https://test.example.com/authorize" (:authorization_endpoint result)))
+      (is (= "https://test.example.com/token" (:token_endpoint result)))
+      (is (= ["code"] (:response_types_supported result)))
+      (is (= ["public"] (:subject_types_supported result))))))
+
+(deftest discovery-required-fields-id-token-signing-alg-test
+  (testing "id_token_signing_alg_values_supported is REQUIRED per OIDC Discovery section 3"
+    (let [config {:issuer                 "https://test.example.com"
+                  :authorization-endpoint "https://test.example.com/authorize"
+                  :token-endpoint         "https://test.example.com/token"
+                  :jwks-uri               "https://test.example.com/jwks"}
+          result (discovery/openid-configuration config)]
+      (is (= ["RS256"] (:id_token_signing_alg_values_supported result))))))
+
+(deftest discovery-jwks-uri-present-when-configured-test
+  (testing "jwks_uri is included when provided in config"
+    (let [config {:issuer                 "https://test.example.com"
+                  :authorization-endpoint "https://test.example.com/authorize"
+                  :token-endpoint         "https://test.example.com/token"
+                  :jwks-uri               "https://test.example.com/jwks"}
+          result (discovery/openid-configuration config)]
+      (is (= "https://test.example.com/jwks" (:jwks_uri result))))))
