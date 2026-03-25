@@ -9,7 +9,8 @@
    [oidc-provider.ring :as ring-handlers]
    [oidc-provider.store :as store]
    [oidc-provider.token :as token]
-   [oidc-provider.token-endpoint :as token-ep])
+   [oidc-provider.token-endpoint :as token-ep]
+   [oidc-provider.util :as util])
   (:import
    [com.nimbusds.jose.jwk RSAKey]
    [java.time Clock]))
@@ -37,6 +38,7 @@
    [:revocation-endpoint {:optional true} :string]
    [:refresh-token-ttl-seconds {:optional true} pos-int?]
    [:rotate-refresh-tokens {:optional true} :boolean]
+   [:allow-http-issuer {:optional true} :boolean]
    [:clock {:optional true} [:fn (fn [c] (instance? java.time.Clock c))]]])
 
 (defrecord Provider [config
@@ -58,6 +60,10 @@
    `:code-store`, `:token-store` (all three store implementations created in-memory if
    not provided), and `:claims-provider` (required for ID token claims).
 
+   The issuer URL is validated per RFC 8414 §2: it must use HTTPS with no query or
+   fragment component. Set `:allow-http-issuer` to `true` to permit HTTP issuers
+   during local development.
+
    Validates the configuration and returns a Provider instance with all stores and
    settings initialized."
   [{:keys [issuer
@@ -73,8 +79,10 @@
            client-store
            code-store
            token-store
-           claims-provider]               :as config}]
+           claims-provider
+           allow-http-issuer]             :as config}]
   {:pre [(m/validate ProviderSetup config)]}
+  (util/validate-issuer issuer (boolean allow-http-issuer))
   (let [oidc?           (or signing-key signing-keys (:jwks-uri config))
         key-set         (when oidc?
                           (cond

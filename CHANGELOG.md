@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Issuer URL validation per RFC 8414 §2 — HTTPS required, no query or fragment components
+- `:allow-http-issuer` option for development use with HTTP issuers
+
 ### Fixed
 - Discovery `grant_types_supported` now includes `client_credentials` in the default set
 - Discovery response now explicitly includes `request_uri_parameter_supported`, `request_parameter_supported`, and `claims_parameter_supported` boolean flags per OIDC Discovery §3

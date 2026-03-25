@@ -56,13 +56,17 @@
   (testing "rejects HTTP on non-loopback hosts"
     (is (false? (util/valid-native-redirect-uri? "http://evil.com/callback")))))
 
-(deftest valid-redirect-uri-https-only-test
+(deftest valid-redirect-uri-https-only-accepts-https-test
   (testing "accepts HTTPS URIs"
-    (is (true? (util/valid-redirect-uri-https-only? "https://example.com/callback"))))
+    (is (true? (util/valid-redirect-uri-https-only? "https://example.com/callback")))))
+
+(deftest valid-redirect-uri-https-only-rejects-http-loopback-test
   (testing "rejects HTTP even on loopback addresses"
     (is (false? (util/valid-redirect-uri-https-only? "http://localhost/callback")))
     (is (false? (util/valid-redirect-uri-https-only? "http://127.0.0.1/callback")))
-    (is (false? (util/valid-redirect-uri-https-only? "http://[::1]/callback"))))
+    (is (false? (util/valid-redirect-uri-https-only? "http://[::1]/callback")))))
+
+(deftest valid-redirect-uri-https-only-rejects-relative-test
   (testing "rejects relative URIs and malformed strings"
     (is (false? (util/valid-redirect-uri-https-only? "/callback")))
     (is (false? (util/valid-redirect-uri-https-only? "not a uri!!")))))
@@ -93,3 +97,57 @@
     (is (= ".." (util/truncate "hello" 2)))
     (is (= "" (util/truncate "hello" 0)))
     (is (= "" (util/truncate nil 10)))))
+
+(deftest validate-issuer-accepts-https-test
+  (testing "valid HTTPS issuer passes"
+    (is (nil? (util/validate-issuer "https://example.com" false)))))
+
+(deftest validate-issuer-accepts-https-with-path-test
+  (testing "HTTPS issuer with path passes"
+    (is (nil? (util/validate-issuer "https://example.com/tenant/123" false)))))
+
+(deftest validate-issuer-rejects-http-test
+  (testing "HTTP issuer is rejected by default"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"https scheme"
+         (util/validate-issuer "http://example.com" false)))))
+
+(deftest validate-issuer-rejects-query-test
+  (testing "issuer with query component is rejected"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"query component"
+         (util/validate-issuer "https://example.com?q=1" false)))))
+
+(deftest validate-issuer-rejects-fragment-test
+  (testing "issuer with fragment component is rejected"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"fragment component"
+         (util/validate-issuer "https://example.com#frag" false)))))
+
+(deftest validate-issuer-rejects-malformed-uri-test
+  (testing "malformed URI is rejected"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"not a valid URI"
+         (util/validate-issuer ":/not valid" false)))))
+
+(deftest validate-issuer-rejects-relative-uri-test
+  (testing "relative URI is rejected"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"absolute URI"
+         (util/validate-issuer "example.com" false)))))
+
+(deftest validate-issuer-rejects-ftp-scheme-test
+  (testing "non-http/https scheme is rejected"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"https scheme"
+         (util/validate-issuer "ftp://example.com" false)))))
+
+(deftest validate-issuer-allows-http-when-opted-in-test
+  (testing "HTTP issuer passes with allow-http? true"
+    (is (nil? (util/validate-issuer "http://localhost" true)))))
+
+(deftest validate-issuer-rejects-ftp-even-with-allow-http-test
+  (testing "non-http/https scheme is rejected even with allow-http?"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"https scheme"
+         (util/validate-issuer "ftp://example.com" true)))))

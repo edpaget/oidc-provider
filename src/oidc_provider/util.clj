@@ -155,6 +155,32 @@
            (= scheme "https")))
     (catch URISyntaxException _ false)))
 
+(m/=> validate-issuer [:=> [:cat :string :boolean] :nil])
+
+(defn validate-issuer
+  "Validates that `issuer-str` is a well-formed issuer identifier per RFC 8414 §2.
+  The issuer must be an absolute HTTPS URL with a host and no query or fragment
+  component. When `allow-http?` is true, HTTP scheme is also accepted (useful for
+  local development). Throws `ex-info` with an `:invalid-issuer` error on failure."
+  [issuer-str allow-http?]
+  (try
+    (let [uri    (URI. ^String issuer-str)
+          scheme (some-> (.getScheme uri) str/lower-case)]
+      (when-not (.isAbsolute uri)
+        (throw (ex-info "Issuer must be an absolute URI" {:issuer issuer-str :error :invalid-issuer})))
+      (when-not (some? (.getHost uri))
+        (throw (ex-info "Issuer must have a host" {:issuer issuer-str :error :invalid-issuer})))
+      (when (some? (.getQuery uri))
+        (throw (ex-info "Issuer must not contain a query component" {:issuer issuer-str :error :invalid-issuer})))
+      (when (some? (.getFragment uri))
+        (throw (ex-info "Issuer must not contain a fragment component" {:issuer issuer-str :error :invalid-issuer})))
+      (when-not (if allow-http?
+                  (contains? #{"http" "https"} scheme)
+                  (= scheme "https"))
+        (throw (ex-info "Issuer must use the https scheme" {:issuer issuer-str :error :invalid-issuer}))))
+    (catch URISyntaxException _
+      (throw (ex-info "Issuer is not a valid URI" {:issuer issuer-str :error :invalid-issuer})))))
+
 (m/=> hash-token [:=> [:cat :string] :string])
 
 (defn hash-token

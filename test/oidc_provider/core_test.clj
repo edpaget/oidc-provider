@@ -179,3 +179,47 @@
           metadata (core/discovery-metadata provider)]
       (is (nil? (:jwks_uri metadata)))
       (is (= "https://test.example.com" (:issuer metadata))))))
+
+(deftest create-provider-validates-https-issuer-test
+  (testing "HTTPS issuer passes validation"
+    (let [provider (core/create-provider
+                    {:issuer                 "https://example.com"
+                     :authorization-endpoint "https://example.com/authorize"
+                     :token-endpoint         "https://example.com/token"})]
+      (is (= "https://example.com" (get-in provider [:config :issuer]))))))
+
+(deftest create-provider-rejects-http-issuer-test
+  (testing "HTTP issuer is rejected by default"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"https scheme"
+         (core/create-provider
+          {:issuer                 "http://example.com"
+           :authorization-endpoint "http://example.com/authorize"
+           :token-endpoint         "http://example.com/token"})))))
+
+(deftest create-provider-rejects-query-in-issuer-test
+  (testing "issuer with query component is rejected"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"query component"
+         (core/create-provider
+          {:issuer                 "https://example.com?q=1"
+           :authorization-endpoint "https://example.com/authorize"
+           :token-endpoint         "https://example.com/token"})))))
+
+(deftest create-provider-rejects-fragment-in-issuer-test
+  (testing "issuer with fragment component is rejected"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"fragment component"
+         (core/create-provider
+          {:issuer                 "https://example.com#frag"
+           :authorization-endpoint "https://example.com/authorize"
+           :token-endpoint         "https://example.com/token"})))))
+
+(deftest create-provider-allows-http-with-option-test
+  (testing "HTTP issuer passes with :allow-http-issuer true"
+    (let [provider (core/create-provider
+                    {:issuer                 "http://localhost"
+                     :authorization-endpoint "http://localhost/authorize"
+                     :token-endpoint         "http://localhost/token"
+                     :allow-http-issuer      true})]
+      (is (= "http://localhost" (get-in provider [:config :issuer]))))))
