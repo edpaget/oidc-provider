@@ -104,12 +104,18 @@
     (when-not client
       (throw (ex-info "Unknown client" {:client-id client-id})))
     (validate-redirect-uri client (:redirect_uri params))
-    (validate-response-type client (:response_type params))
-    (when (:scope params)
-      (validate-scope client (:scope params)))
-    (validate-public-client-pkce client params)
-    (when-let [resources (:resource params)]
-      (proto/validate-resource-indicators resources))
+    (try
+      (validate-response-type client (:response_type params))
+      (when (:scope params)
+        (validate-scope client (:scope params)))
+      (validate-public-client-pkce client params)
+      (when-let [resources (:resource params)]
+        (proto/validate-resource-indicators resources))
+      (catch clojure.lang.ExceptionInfo e
+        (throw (ex-info (ex-message e)
+                        (cond-> (assoc (ex-data e)
+                                       :redirect_uri (:redirect_uri params))
+                          (:state params) (assoc :state (:state params)))))))
     params))
 
 (defn handle-authorization-approval

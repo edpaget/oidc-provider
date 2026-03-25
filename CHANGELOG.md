@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Discovery `grant_types_supported` now includes `client_credentials` in the default set
 - Discovery response now explicitly includes `request_uri_parameter_supported`, `request_parameter_supported`, and `claims_parameter_supported` boolean flags per OIDC Discovery §3
 - Revocation 401 responses now include `WWW-Authenticate: Bearer` header per RFC 6750 §3
+- Redirectable authorization errors now include `:state` and `:redirect_uri` in `ex-data` per RFC 6749 §4.1.2.1
 
 ## [0.6.2] - 2026-03-24
 

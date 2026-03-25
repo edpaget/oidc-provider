@@ -57,6 +57,109 @@
       (is (thrown-with-msg? Exception #"Unknown client"
                             (authz/parse-authorization-request params client-store))))))
 
+(defn- make-client-store
+  "Creates a client store with a single test client."
+  [& {:keys [response-types scopes]
+      :or   {response-types ["code"] scopes ["openid" "profile"]}}]
+  (store/create-client-store
+   [{:client-id          "test-client"
+     :client-type        "confidential"
+     :client-secret-hash secret-hash
+     :redirect-uris      ["https://app.example.com/callback"]
+     :response-types     response-types
+     :scopes             scopes}]))
+
+(deftest redirectable-error-includes-state-test
+  (testing "unsupported response_type includes state and redirect_uri in ex-data"
+    (let [client-store (make-client-store :response-types ["code"])
+          params       {:response_type "token"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :state         "abc123"}]
+      (try
+        (authz/parse-authorization-request params client-store)
+        (is false "expected exception")
+        (catch clojure.lang.ExceptionInfo e
+          (is (= "abc123" (:state (ex-data e))))
+          (is (= "https://app.example.com/callback" (:redirect_uri (ex-data e))))
+          (is (= ["code"] (:supported (ex-data e)))))))))
+
+(deftest redirectable-scope-error-includes-state-test
+  (testing "invalid scope includes state and redirect_uri in ex-data"
+    (let [client-store (make-client-store :scopes ["openid"])
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "admin"
+                        :state         "def456"}]
+      (try
+        (authz/parse-authorization-request params client-store)
+        (is false "expected exception")
+        (catch clojure.lang.ExceptionInfo e
+          (is (= "def456" (:state (ex-data e))))
+          (is (= "https://app.example.com/callback" (:redirect_uri (ex-data e))))
+          (is (= ["openid"] (:allowed (ex-data e)))))))))
+
+(deftest redirectable-pkce-error-includes-state-test
+  (testing "public client without PKCE includes state and redirect_uri in ex-data"
+    (let [client-store (store/create-client-store
+                        [{:client-id      "pub-client"
+                          :client-type    "public"
+                          :redirect-uris  ["https://app.example.com/callback"]
+                          :response-types ["code"]
+                          :scopes         ["openid"]}])
+          params       {:response_type "code"
+                        :client_id     "pub-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :state         "pkce-state"}]
+      (try
+        (authz/parse-authorization-request params client-store)
+        (is false "expected exception")
+        (catch clojure.lang.ExceptionInfo e
+          (is (= "pkce-state" (:state (ex-data e))))
+          (is (= "https://app.example.com/callback" (:redirect_uri (ex-data e))))
+          (is (= "invalid_request" (:error (ex-data e)))))))))
+
+(deftest redirectable-error-without-state-test
+  (testing "redirectable error omits state when client did not send one"
+    (let [client-store (make-client-store :response-types ["code"])
+          params       {:response_type "token"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"}]
+      (try
+        (authz/parse-authorization-request params client-store)
+        (is false "expected exception")
+        (catch clojure.lang.ExceptionInfo e
+          (is (nil? (:state (ex-data e))))
+          (is (= "https://app.example.com/callback" (:redirect_uri (ex-data e)))))))))
+
+(deftest non-redirectable-error-excludes-state-test
+  (testing "unknown client error does not include state"
+    (let [client-store (store/create-client-store [])
+          params       {:response_type "code"
+                        :client_id     "unknown"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :state         "xyz"}]
+      (try
+        (authz/parse-authorization-request params client-store)
+        (is false "expected exception")
+        (catch clojure.lang.ExceptionInfo e
+          (is (nil? (:state (ex-data e))))
+          (is (nil? (:redirect_uri (ex-data e)))))))))
+
+(deftest invalid-redirect-uri-excludes-state-test
+  (testing "invalid redirect_uri error does not include state"
+    (let [client-store (make-client-store)
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://evil.com/callback"
+                        :state         "xyz"}]
+      (try
+        (authz/parse-authorization-request params client-store)
+        (is false "expected exception")
+        (catch clojure.lang.ExceptionInfo e
+          (is (nil? (:state (ex-data e)))))))))
+
 (deftest handle-authorization-approval-test
   (testing "generates authorization code stored with correct metadata"
     (let [code-store      (store/create-authorization-code-store)
