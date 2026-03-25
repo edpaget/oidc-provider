@@ -2,6 +2,7 @@
   (:require
    [cheshire.core :as json]
    [clojure.test :refer [deftest is testing]]
+   [oidc-provider.core :as core]
    [oidc-provider.registration :as reg]
    [oidc-provider.ring :as ring]
    [oidc-provider.store :as store]
@@ -124,6 +125,83 @@
           body     (json/parse-string (:body response))]
       (is (= 400 (:status response)))
       (is (= #{"error" "error_description"} (set (keys body)))))))
+
+(defn- token-fixtures []
+  (let [provider    (core/create-provider
+                     {:issuer                 "https://test.example.com"
+                      :authorization-endpoint "https://test.example.com/authorize"
+                      :token-endpoint         "https://test.example.com/token"
+                      :client-store           (store/create-client-store
+                                               [{:client-id          "cc-client"
+                                                 :client-type        "confidential"
+                                                 :client-secret-hash (util/hash-client-secret "secret123")
+                                                 :redirect-uris      []
+                                                 :grant-types        ["client_credentials"]
+                                                 :response-types     []
+                                                 :scopes             ["api:read"]}])})
+        auth-header (str "Basic " (.encodeToString
+                                   (java.util.Base64/getEncoder)
+                                   (.getBytes "cc-client:secret123" "UTF-8")))]
+    {:handler     (ring/token-handler provider)
+     :auth-header auth-header}))
+
+(deftest token-handler-success-cache-headers-test
+  (testing "success response includes Cache-Control and Pragma headers"
+    (let [{:keys [handler auth-header]} (token-fixtures)
+          response                      (handler {:request-method :post
+                                                  :headers        {"content-type"  "application/x-www-form-urlencoded"
+                                                                   "authorization" auth-header}
+                                                  :params         {:grant_type "client_credentials"
+                                                                   :scope      "api:read"}})]
+      (is (= 200 (:status response)))
+      (is (= "no-store" (get-in response [:headers "Cache-Control"])))
+      (is (= "no-cache" (get-in response [:headers "Pragma"]))))))
+
+(deftest token-handler-error-cache-headers-test
+  (testing "error response includes Cache-Control and Pragma headers"
+    (let [{:keys [handler]} (token-fixtures)
+          response          (handler {:request-method :post
+                                      :headers        {"content-type"  "application/x-www-form-urlencoded"
+                                                       "authorization" "Basic bad"}
+                                      :params         {:grant_type "client_credentials"}})]
+      (is (= 400 (:status response)))
+      (is (= "no-store" (get-in response [:headers "Cache-Control"])))
+      (is (= "no-cache" (get-in response [:headers "Pragma"]))))))
+
+(deftest token-handler-method-not-allowed-test
+  (testing "GET returns 405 with Allow header"
+    (let [{:keys [handler]} (token-fixtures)
+          response          (handler {:request-method :get})]
+      (is (= 405 (:status response)))
+      (is (= "POST" (get-in response [:headers "Allow"]))))))
+
+(deftest token-handler-wrong-content-type-test
+  (testing "POST with application/json returns 415"
+    (let [{:keys [handler auth-header]} (token-fixtures)
+          response                      (handler {:request-method :post
+                                                  :headers        {"content-type"  "application/json"
+                                                                   "authorization" auth-header}
+                                                  :params         {:grant_type "client_credentials"}})]
+      (is (= 415 (:status response))))))
+
+(deftest token-handler-missing-content-type-test
+  (testing "POST with no content-type returns 415"
+    (let [{:keys [handler auth-header]} (token-fixtures)
+          response                      (handler {:request-method :post
+                                                  :headers        {"authorization" auth-header}
+                                                  :params         {:grant_type "client_credentials"}})]
+      (is (= 415 (:status response))))))
+
+(deftest token-handler-unsupported-grant-type-test
+  (testing "POST with unsupported grant_type returns 400 with error"
+    (let [{:keys [handler auth-header]} (token-fixtures)
+          response                      (handler {:request-method :post
+                                                  :headers        {"content-type"  "application/x-www-form-urlencoded"
+                                                                   "authorization" auth-header}
+                                                  :params         {:grant_type "urn:unsupported"}})
+          body                          (json/parse-string (:body response) true)]
+      (is (= 400 (:status response)))
+      (is (string? (:error body))))))
 
 (defn- revocation-fixtures []
   (let [client-store (store/create-client-store

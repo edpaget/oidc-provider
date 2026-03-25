@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - Issuer URL validation per RFC 8414 §2 — HTTPS required, no query or fragment components
 - `:allow-http-issuer` option for development use with HTTP issuers
+- Ring `token-handler` for the token endpoint with RFC 6749 §5.1 compliant `Cache-Control: no-store` and `Pragma: no-cache` headers on all success and error responses
 
 ### Fixed
 - Discovery `grant_types_supported` now includes `client_credentials` in the default set

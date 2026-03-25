@@ -1,14 +1,15 @@
 (ns oidc-provider.ring
-  "Ring handlers for OAuth2 Dynamic Client Registration (RFC 7591/7592) and
-  Token Revocation (RFC 7009).
+  "Ring handlers for OAuth2 endpoints.
 
-  Provides [[registration-handler]] for client registration and
-  [[revocation-handler]] for token revocation."
+  Provides [[token-handler]] for the token endpoint (RFC 6749 §3.2),
+  [[registration-handler]] for dynamic client registration (RFC 7591/7592),
+  and [[revocation-handler]] for token revocation (RFC 7009)."
   (:require
    [cheshire.core :as json]
    [clojure.string :as str]
    [oidc-provider.registration :as reg]
-   [oidc-provider.revocation :as revocation]))
+   [oidc-provider.revocation :as revocation]
+   [oidc-provider.token-endpoint :as token-ep]))
 
 (set! *warn-on-reflection* true)
 
@@ -105,3 +106,37 @@
                              client-store token-store)]
             (cond-> result
               (:body result) (update :body json/generate-string))))))))
+
+(defn token-handler
+  "Creates a Ring handler for the OAuth2 token endpoint (RFC 6749 §3.2).
+
+  Takes a `provider` instance created by [[oidc-provider.core/create-provider]].
+  Only accepts POST requests with `application/x-www-form-urlencoded` content
+  type. Success responses include `Cache-Control: no-store` and `Pragma: no-cache`
+  headers per RFC 6749 §5.1."
+  [provider]
+  (let [{:keys [provider-config client-store code-store
+                token-store claims-provider]}           provider]
+    (fn [request]
+      (if (not= :post (:request-method request))
+        {:status  405
+         :headers {"Allow" "POST" "Content-Type" "application/json"}
+         :body    (json/generate-string {"error" "method_not_allowed"})}
+        (let [content-type (get-in request [:headers "content-type"])]
+          (if-not (and content-type (str/starts-with? content-type "application/x-www-form-urlencoded"))
+            {:status  415
+             :headers {"Content-Type" "application/json"
+                       "Accept"       "application/x-www-form-urlencoded"}
+             :body    (json/generate-string {"error"             "invalid_request"
+                                             "error_description" "Content-Type must be application/x-www-form-urlencoded"})}
+            (try
+              (let [auth-header (get-in request [:headers "authorization"])
+                    result      (token-ep/handle-token-request
+                                 (:params request) auth-header
+                                 provider-config client-store
+                                 code-store token-store claims-provider)]
+                (token-ep/token-success-response result))
+              (catch clojure.lang.ExceptionInfo e
+                (token-ep/token-error-response
+                 (or (:error (ex-data e)) "invalid_request")
+                 (ex-message e))))))))))
