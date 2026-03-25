@@ -30,13 +30,9 @@
           merged)))))
 
 (defn create-client-store
-  "Creates an in-memory client store.
-
-  Args:
-    initial-clients: Optional vector of client configurations to pre-populate
-
-  Returns:
-    InMemoryClientStore instance"
+  "Creates an in-memory [[InMemoryClientStore]]. When called with an
+  `initial-clients` vector, pre-populates the store with those client
+  configurations keyed by `:client-id`."
   ([]
    (create-client-store []))
   ([initial-clients]
@@ -72,10 +68,7 @@
       @result)))
 
 (defn create-authorization-code-store
-  "Creates an in-memory authorization code store.
-
-  Returns:
-    InMemoryAuthorizationCodeStore instance"
+  "Creates an in-memory [[InMemoryAuthorizationCodeStore]] backed by an atom."
   []
   (->InMemoryAuthorizationCodeStore (atom {})))
 
@@ -109,10 +102,8 @@
     true))
 
 (defn create-token-store
-  "Creates an in-memory token store.
-
-  Returns:
-    InMemoryTokenStore instance"
+  "Creates an in-memory [[InMemoryTokenStore]] with separate atoms for access
+  tokens and refresh tokens."
   []
   (->InMemoryTokenStore (atom {}) (atom {})))
 

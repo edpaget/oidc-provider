@@ -33,13 +33,9 @@
    [:clock [:fn (fn [c] (instance? Clock c))]]])
 
 (defn generate-rsa-key
-  "Generates an RSA key pair for signing tokens.
-
-  Args:
-    key-size: Key size in bits (default 2048)
-
-  Returns:
-    RSAKey instance"
+  "Generates an RSA key pair for signing tokens. The `key-size` parameter
+  specifies the key size in bits and defaults to 2048 when called with no
+  arguments. Returns an `RSAKey` instance configured for signature use."
   ([]
    (generate-rsa-key 2048))
   ([key-size]
@@ -75,19 +71,11 @@
   (Date/from (.plusSeconds (Instant/now clock) seconds)))
 
 (defn generate-id-token
-  "Generates a signed OIDC ID token.
-
-  Args:
-    provider-config: Provider configuration map matching ProviderConfig schema
-    user-id: User identifier (becomes 'sub' claim)
-    client-id: OAuth2 client identifier (becomes 'aud' claim)
-    claims: Additional claims map to include in the token
-    opts: Optional parameters
-      - :nonce - Nonce value for replay protection
-      - :auth-time - Authentication timestamp
-
-  Returns:
-    Signed JWT string"
+  "Generates a signed OIDC ID token as a JWT string. Takes a `provider-config`
+  map (matching the `ProviderConfig` schema), a `user-id` (set as the `sub`
+  claim), a `client-id` (set as the `aud` claim), a `claims` map of additional
+  claims to include, and an `opts` map supporting `:nonce` for replay protection
+  and `:auth-time` for the authentication timestamp."
   [{:keys [issuer key-set active-signing-key-id id-token-ttl-seconds clock] :as config}
    user-id client-id claims
    {:keys [nonce auth-time]}]
@@ -119,10 +107,7 @@
       (.serialize signed-jwt))))
 
 (defn generate-access-token
-  "Generates a bearer access token.
-
-  Returns:
-    String token value"
+  "Generates a bearer access token and returns its string value."
   []
   (.getValue (BearerAccessToken.)))
 
@@ -139,18 +124,11 @@
   (.getValue (AuthorizationCode.)))
 
 (defn validate-id-token
-  "Validates an ID token signature and claims.
-
-  Args:
-    provider-config: Provider configuration map
-    token: ID token string
-    expected-client-id: Expected audience (client-id)
-
-  Returns:
-    Validated claims map
-
-  Throws:
-    ex-info on validation failure"
+  "Validates an ID token's signature and claims against the given
+  `provider-config`. Verifies that the `token` string was signed with a key from
+  the provider's key set, that the issuer matches, that `expected-client-id`
+  appears in the audience, and that the token has not expired. Returns the
+  validated claims as a keyword map, or throws `ex-info` on failure."
   [{:keys [issuer key-set clock] :as config} token expected-client-id]
   {:pre [(m/validate ProviderConfig config)]}
   (when-not key-set
@@ -185,13 +163,9 @@
             (.getClaims claims)))))
 
 (defn jwks
-  "Returns JWKS (JSON Web Key Set) for token validation.
-
-  Args:
-    provider-config: Provider configuration map
-
-  Returns:
-    Map with :keys vector containing public key in JWK format"
+  "Returns the JWKS (JSON Web Key Set) for the given `provider-config` as a map
+  with a `:keys` vector containing the public keys in JWK format, suitable for
+  exposing at the `jwks_uri` discovery endpoint."
   [{:keys [key-set] :as config}]
   {:pre [(m/validate ProviderConfig config)]}
   (if key-set
