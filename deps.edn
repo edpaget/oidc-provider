@@ -51,6 +51,6 @@
 
   :dev
   {:extra-paths ["dev"]
-   :extra-deps  {ring/ring-jetty-adapter {:mvn/version "1.13.0"}
+   :extra-deps  {ring/ring-jetty-adapter {:mvn/version "1.15.3"}
                  ring/ring-core          {:mvn/version "1.15.3"}}
    :main-opts   ["-m" "oidc-provider.dev-server"]}}}
