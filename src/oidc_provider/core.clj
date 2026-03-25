@@ -34,6 +34,7 @@
    [:code-store {:optional true} [:fn #(satisfies? proto/AuthorizationCodeStore %)]]
    [:token-store {:optional true} [:fn #(satisfies? proto/TokenStore %)]]
    [:claims-provider {:optional true} [:fn #(satisfies? proto/ClaimsProvider %)]]
+   [:userinfo-endpoint {:optional true} :string]
    [:registration-endpoint {:optional true} :string]
    [:revocation-endpoint {:optional true} :string]
    [:refresh-token-ttl-seconds {:optional true} pos-int?]
@@ -261,3 +262,15 @@
   (ring-handlers/revocation-handler
    (:client-store provider)
    (:token-store provider)))
+
+(defn userinfo-handler
+  "Creates a Ring handler for the OIDC UserInfo endpoint (OIDC Core §5.3).
+
+   Takes a Provider instance and returns a Ring handler that accepts GET
+   and POST requests with a Bearer token. Returns user claims as JSON,
+   filtered by the access token's scope."
+  [provider]
+  (ring-handlers/userinfo-handler
+   (:token-store provider)
+   (:claims-provider provider)
+   (get-in provider [:provider-config :clock])))

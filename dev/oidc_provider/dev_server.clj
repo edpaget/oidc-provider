@@ -61,10 +61,12 @@
       :authorization-endpoint (str base-url "/authorize")
       :token-endpoint         (str base-url "/token")
       :jwks-uri               (str base-url "/jwks")
+      :userinfo-endpoint      (str base-url "/userinfo")
       :registration-endpoint  (str base-url "/register")
       :revocation-endpoint    (str base-url "/revoke")
       :signing-key            rsa-key
-      :claims-provider        (->TestClaimsProvider)})))
+      :claims-provider        (->TestClaimsProvider)
+      :allow-http-issuer      true})))
 
 (defn- token-handler
   "Handles POST /token requests."
@@ -101,8 +103,9 @@
 (defn- routes
   "Creates a Ring handler dispatching to OIDC endpoints."
   [provider]
-  (let [reg-handler    (provider/registration-handler provider)
-        revoke-handler (provider/revocation-handler provider)]
+  (let [reg-handler      (provider/registration-handler provider)
+        revoke-handler   (provider/revocation-handler provider)
+        userinfo-handler (provider/userinfo-handler provider)]
     (fn [{:keys [uri request-method] :as request}]
       (cond
         (and (= uri "/.well-known/openid-configuration") (= request-method :get))
@@ -116,6 +119,9 @@
 
         (and (= uri "/authorize") (= request-method :get))
         (authorize-handler provider request)
+
+        (= uri "/userinfo")
+        (userinfo-handler request)
 
         (register-route? uri)
         (reg-handler request)

@@ -3,13 +3,18 @@
 
   Provides [[token-handler]] for the token endpoint (RFC 6749 §3.2),
   [[registration-handler]] for dynamic client registration (RFC 7591/7592),
-  and [[revocation-handler]] for token revocation (RFC 7009)."
+  [[revocation-handler]] for token revocation (RFC 7009), and
+  [[userinfo-handler]] for the UserInfo endpoint (OIDC Core §5.3)."
   (:require
    [cheshire.core :as json]
    [clojure.string :as str]
+   [oidc-provider.protocol :as proto]
    [oidc-provider.registration :as reg]
    [oidc-provider.revocation :as revocation]
-   [oidc-provider.token-endpoint :as token-ep]))
+   [oidc-provider.store :as store]
+   [oidc-provider.token-endpoint :as token-ep])
+  (:import
+   [java.time Clock]))
 
 (set! *warn-on-reflection* true)
 
@@ -140,3 +145,48 @@
                 (token-ep/token-error-response
                  (or (:error (ex-data e)) "invalid_request")
                  (ex-message e))))))))))
+
+(defn- bearer-unauthorized
+  "Returns a 401 response with `WWW-Authenticate: Bearer` header and optional
+  error code. Per RFC 6750 §3.1 the error is omitted when no token was
+  presented."
+  ([]
+   {:status  401
+    :headers {"WWW-Authenticate" "Bearer"
+              "Content-Type"     "application/json"}
+    :body    ""})
+  ([error-code]
+   {:status  401
+    :headers {"WWW-Authenticate" (str "Bearer error=\"" error-code "\"")
+              "Content-Type"     "application/json"}
+    :body    (json/generate-string {"error" error-code})}))
+
+(defn userinfo-handler
+  "Creates a Ring handler for the OIDC UserInfo endpoint (OIDC Core §5.3).
+
+  Takes `token-store`, `claims-provider`, and `clock`. Accepts GET and POST
+  requests with a Bearer token in the Authorization header. Looks up the
+  access token, validates expiry, retrieves user claims filtered by the
+  token's scope, and returns them as JSON."
+  [token-store claims-provider ^Clock clock]
+  (fn [request]
+    (let [method     (:request-method request)
+          token      (when (#{:get :post} method) (extract-bearer-token request))
+          token-data (when token (store/get-access-token token-store token))
+          expired?   (when token-data (> (.millis clock) (:expiry token-data)))]
+      (cond
+        (not (#{:get :post} method))
+        {:status  405
+         :headers {"Allow" "GET, POST" "Content-Type" "application/json"}
+         :body    (json/generate-string {"error" "method_not_allowed"})}
+
+        (not token)
+        (bearer-unauthorized)
+
+        (or (not token-data) expired?)
+        (bearer-unauthorized "invalid_token")
+
+        :else
+        (json-response 200 (proto/get-claims claims-provider
+                                             (:user-id token-data)
+                                             (:scope token-data)))))))

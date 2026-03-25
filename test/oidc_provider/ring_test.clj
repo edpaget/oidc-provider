@@ -3,12 +3,14 @@
    [cheshire.core :as json]
    [clojure.test :refer [deftest is testing]]
    [oidc-provider.core :as core]
+   [oidc-provider.protocol :as proto]
    [oidc-provider.registration :as reg]
    [oidc-provider.ring :as ring]
    [oidc-provider.store :as store]
    [oidc-provider.util :as util])
   (:import
-   (java.io ByteArrayInputStream)))
+   (java.io ByteArrayInputStream)
+   (java.time Clock Instant ZoneOffset)))
 
 (defn- json-body [m]
   (ByteArrayInputStream. (.getBytes (json/generate-string m) "UTF-8")))
@@ -273,3 +275,99 @@
       (is (= 400 (:status response)))
       (is (= "invalid_request" (:error body)))
       (is (= "application/json" (get-in response [:headers "Content-Type"]))))))
+
+;; ---------------------------------------------------------------------------
+;; UserInfo handler tests
+;; ---------------------------------------------------------------------------
+
+(defrecord TestClaimsProvider []
+  proto/ClaimsProvider
+  (get-claims [_ user-id scope]
+    (cond-> {:sub user-id}
+      (some #{"profile"} scope)
+      (assoc :name "Test User")
+      (some #{"email"} scope)
+      (assoc :email "test@example.com"))))
+
+(defn- userinfo-fixtures
+  ([] (userinfo-fixtures (Clock/systemUTC)))
+  ([clock]
+   (let [token-store   (store/create-token-store)
+         claims        (->TestClaimsProvider)
+         access-token  "valid-access-token"
+         future-expiry (+ (.millis ^Clock (Clock/systemUTC)) 3600000)]
+     (store/save-access-token token-store access-token "test-user" "client-1"
+                              ["openid" "profile" "email"] future-expiry nil)
+     {:handler      (ring/userinfo-handler token-store claims clock)
+      :access-token access-token})))
+
+(deftest userinfo-valid-token-returns-claims-test
+  (testing "GET with valid Bearer token returns JSON claims"
+    (let [{:keys [handler access-token]} (userinfo-fixtures)
+          response                       (handler {:request-method :get
+                                                   :headers        {"authorization" (str "Bearer " access-token)}})]
+      (is (= 200 (:status response)))
+      (is (= "application/json" (get-in response [:headers "Content-Type"])))
+      (is (= {:sub "test-user" :name "Test User" :email "test@example.com"}
+             (json/parse-string (:body response) true))))))
+
+(deftest userinfo-scope-filtering-test
+  (testing "claims are filtered by the access token's scope"
+    (let [token-store  (store/create-token-store)
+          claims       (->TestClaimsProvider)
+          access-token "openid-only-token"
+          expiry       (+ (.millis ^Clock (Clock/systemUTC)) 3600000)
+          _            (store/save-access-token token-store access-token "test-user" "client-1"
+                                                ["openid"] expiry nil)
+          handler      (ring/userinfo-handler token-store claims (Clock/systemUTC))
+          response     (handler {:request-method :get
+                                 :headers        {"authorization" (str "Bearer " access-token)}})]
+      (is (= 200 (:status response)))
+      (is (= {:sub "test-user"}
+             (json/parse-string (:body response) true))))))
+
+(deftest userinfo-missing-token-returns-401-test
+  (testing "GET without Authorization header returns 401 with WWW-Authenticate"
+    (let [{:keys [handler]} (userinfo-fixtures)
+          response          (handler {:request-method :get
+                                      :headers        {}})]
+      (is (= 401 (:status response)))
+      (is (= "Bearer" (get-in response [:headers "WWW-Authenticate"])))
+      (is (= "" (:body response))))))
+
+(deftest userinfo-unknown-token-returns-401-test
+  (testing "GET with unknown Bearer token returns 401"
+    (let [{:keys [handler]} (userinfo-fixtures)
+          response          (handler {:request-method :get
+                                      :headers        {"authorization" "Bearer unknown-token"}})]
+      (is (= 401 (:status response))))))
+
+(deftest userinfo-expired-token-returns-401-test
+  (testing "GET with expired Bearer token returns 401"
+    (let [past-clock   (Clock/fixed (Instant/parse "2020-01-01T00:00:00Z") ZoneOffset/UTC)
+          now-clock    (Clock/systemUTC)
+          token-store  (store/create-token-store)
+          claims       (->TestClaimsProvider)
+          access-token "expired-token"
+          past-expiry  (.millis ^Clock past-clock)
+          _            (store/save-access-token token-store access-token "test-user" "client-1"
+                                                ["openid"] past-expiry nil)
+          handler      (ring/userinfo-handler token-store claims now-clock)
+          response     (handler {:request-method :get
+                                 :headers        {"authorization" (str "Bearer " access-token)}})]
+      (is (= 401 (:status response))))))
+
+(deftest userinfo-method-not-allowed-test
+  (testing "DELETE returns 405 with Allow header"
+    (let [{:keys [handler]} (userinfo-fixtures)
+          response          (handler {:request-method :delete})]
+      (is (= 405 (:status response)))
+      (is (= "GET, POST" (get-in response [:headers "Allow"]))))))
+
+(deftest userinfo-post-valid-token-test
+  (testing "POST with valid Bearer token also returns claims"
+    (let [{:keys [handler access-token]} (userinfo-fixtures)
+          response                       (handler {:request-method :post
+                                                   :headers        {"authorization" (str "Bearer " access-token)}})]
+      (is (= 200 (:status response)))
+      (is (= "test-user" (:sub (json/parse-string (:body response) true)))))))
