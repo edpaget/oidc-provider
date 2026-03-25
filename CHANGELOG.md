@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Discovery `grant_types_supported` now includes `client_credentials` in the default set
+- Discovery response now explicitly includes `request_uri_parameter_supported`, `request_parameter_supported`, and `claims_parameter_supported` boolean flags per OIDC Discovery §3
+
 ## [0.6.2] - 2026-03-24
 
 ### Added

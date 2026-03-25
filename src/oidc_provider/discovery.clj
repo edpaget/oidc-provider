@@ -24,6 +24,9 @@
    [:code-challenge-methods-supported {:optional true} [:vector :string]]
    [:resource-indicators-supported {:optional true} :boolean]
    [:client-id-metadata-document-supported {:optional true} :boolean]
+   [:request-uri-parameter-supported {:optional true} :boolean]
+   [:request-parameter-supported {:optional true} :boolean]
+   [:claims-parameter-supported {:optional true} :boolean]
    [:registration-endpoint {:optional true} :string]
    [:revocation-endpoint {:optional true} :string]])
 
@@ -51,7 +54,10 @@
            claims-supported
            code-challenge-methods-supported
            resource-indicators-supported
-           client-id-metadata-document-supported] :as config}]
+           client-id-metadata-document-supported
+           request-uri-parameter-supported
+           request-parameter-supported
+           claims-parameter-supported] :as config}]
   {:pre [(m/validate DiscoveryConfig config)]}
   (cond-> {:issuer                                issuer
            :authorization_endpoint                authorization-endpoint
@@ -60,13 +66,22 @@
            :subject_types_supported               (or subject-types-supported ["public"])
            :id_token_signing_alg_values_supported (or id-token-signing-alg-values-supported ["RS256"])
            :scopes_supported                      (or scopes-supported ["openid" "profile" "email"])
-           :grant_types_supported                 (or grant-types-supported ["authorization_code" "refresh_token"])
+           :grant_types_supported                 (or grant-types-supported ["authorization_code" "refresh_token" "client_credentials"])
            :token_endpoint_auth_methods_supported (or token-endpoint-auth-methods-supported
                                                       ["client_secret_basic" "client_secret_post" "none"])
            :code_challenge_methods_supported      (or code-challenge-methods-supported ["S256"])
            :resource_indicators_supported         (if (some? resource-indicators-supported)
                                                     resource-indicators-supported
-                                                    true)}
+                                                    true)
+           :request_uri_parameter_supported       (if (some? request-uri-parameter-supported)
+                                                    request-uri-parameter-supported
+                                                    false)
+           :request_parameter_supported           (if (some? request-parameter-supported)
+                                                    request-parameter-supported
+                                                    false)
+           :claims_parameter_supported            (if (some? claims-parameter-supported)
+                                                    claims-parameter-supported
+                                                    false)}
     jwks-uri (assoc :jwks_uri jwks-uri)
     userinfo-endpoint (assoc :userinfo_endpoint userinfo-endpoint)
     claims-supported (assoc :claims_supported claims-supported)

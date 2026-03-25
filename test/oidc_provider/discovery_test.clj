@@ -118,3 +118,70 @@
                   :jwks-uri               "https://test.example.com/jwks"}
           result (discovery/openid-configuration config)]
       (is (= "https://test.example.com/jwks" (:jwks_uri result))))))
+
+(deftest discovery-default-grant-types-include-client-credentials-test
+  (testing "default grant_types_supported includes client_credentials"
+    (let [config {:issuer                 "https://test.example.com"
+                  :authorization-endpoint "https://test.example.com/authorize"
+                  :token-endpoint         "https://test.example.com/token"
+                  :jwks-uri               "https://test.example.com/jwks"}
+          result (discovery/openid-configuration config)]
+      (is (= ["authorization_code" "refresh_token" "client_credentials"]
+             (:grant_types_supported result))))))
+
+(deftest discovery-request-uri-parameter-supported-test
+  (testing "request_uri_parameter_supported defaults to false"
+    (let [config {:issuer                 "https://test.example.com"
+                  :authorization-endpoint "https://test.example.com/authorize"
+                  :token-endpoint         "https://test.example.com/token"
+                  :jwks-uri               "https://test.example.com/jwks"}
+          result (discovery/openid-configuration config)]
+      (is (= false (:request_uri_parameter_supported result))))))
+
+(deftest discovery-custom-request-uri-parameter-supported-test
+  (testing "explicit true value is respected"
+    (let [config {:issuer                          "https://test.example.com"
+                  :authorization-endpoint          "https://test.example.com/authorize"
+                  :token-endpoint                  "https://test.example.com/token"
+                  :jwks-uri                        "https://test.example.com/jwks"
+                  :request-uri-parameter-supported true}
+          result (discovery/openid-configuration config)]
+      (is (= true (:request_uri_parameter_supported result))))))
+
+(deftest discovery-request-parameter-supported-test
+  (testing "request_parameter_supported defaults to false"
+    (let [config {:issuer                 "https://test.example.com"
+                  :authorization-endpoint "https://test.example.com/authorize"
+                  :token-endpoint         "https://test.example.com/token"
+                  :jwks-uri               "https://test.example.com/jwks"}
+          result (discovery/openid-configuration config)]
+      (is (= false (:request_parameter_supported result))))))
+
+(deftest discovery-custom-request-parameter-supported-test
+  (testing "explicit true value is respected"
+    (let [config {:issuer                       "https://test.example.com"
+                  :authorization-endpoint       "https://test.example.com/authorize"
+                  :token-endpoint               "https://test.example.com/token"
+                  :jwks-uri                     "https://test.example.com/jwks"
+                  :request-parameter-supported  true}
+          result (discovery/openid-configuration config)]
+      (is (= true (:request_parameter_supported result))))))
+
+(deftest discovery-claims-parameter-supported-test
+  (testing "claims_parameter_supported defaults to false"
+    (let [config {:issuer                 "https://test.example.com"
+                  :authorization-endpoint "https://test.example.com/authorize"
+                  :token-endpoint         "https://test.example.com/token"
+                  :jwks-uri               "https://test.example.com/jwks"}
+          result (discovery/openid-configuration config)]
+      (is (= false (:claims_parameter_supported result))))))
+
+(deftest discovery-custom-claims-parameter-supported-test
+  (testing "explicit true value is respected"
+    (let [config {:issuer                      "https://test.example.com"
+                  :authorization-endpoint      "https://test.example.com/authorize"
+                  :token-endpoint              "https://test.example.com/token"
+                  :jwks-uri                    "https://test.example.com/jwks"
+                  :claims-parameter-supported  true}
+          result (discovery/openid-configuration config)]
+      (is (= true (:claims_parameter_supported result))))))
