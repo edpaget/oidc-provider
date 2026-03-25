@@ -39,6 +39,7 @@
    [:refresh-token-ttl-seconds {:optional true} pos-int?]
    [:rotate-refresh-tokens {:optional true} :boolean]
    [:allow-http-issuer {:optional true} :boolean]
+   [:grant-types-supported {:optional true} [:vector :string]]
    [:clock {:optional true} [:fn (fn [c] (instance? java.time.Clock c))]]])
 
 (defrecord Provider [config
@@ -75,6 +76,7 @@
            authorization-code-ttl-seconds
            refresh-token-ttl-seconds
            rotate-refresh-tokens
+           grant-types-supported
            clock
            client-store
            code-store
@@ -102,7 +104,8 @@
                                  :clock                          (or clock (Clock/systemUTC))}
                           key-set                   (assoc :key-set key-set)
                           active-kid                (assoc :active-signing-key-id active-kid)
-                          refresh-token-ttl-seconds (assoc :refresh-token-ttl-seconds refresh-token-ttl-seconds))]
+                          refresh-token-ttl-seconds (assoc :refresh-token-ttl-seconds refresh-token-ttl-seconds)
+                          grant-types-supported     (assoc :grant-types-supported grant-types-supported))]
     (->Provider config
                 provider-config
                 (or client-store (store/create-client-store))

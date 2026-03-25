@@ -2,7 +2,8 @@
   "OpenID Connect Discovery and metadata endpoints."
   (:require
    [malli.core :as m]
-   [oidc-provider.token :as token]))
+   [oidc-provider.token :as token]
+   [oidc-provider.token-endpoint :as token-ep]))
 
 (set! *warn-on-reflection* true)
 
@@ -57,7 +58,7 @@
            client-id-metadata-document-supported
            request-uri-parameter-supported
            request-parameter-supported
-           claims-parameter-supported] :as config}]
+           claims-parameter-supported]           :as config}]
   {:pre [(m/validate DiscoveryConfig config)]}
   (cond-> {:issuer                                issuer
            :authorization_endpoint                authorization-endpoint
@@ -66,7 +67,7 @@
            :subject_types_supported               (or subject-types-supported ["public"])
            :id_token_signing_alg_values_supported (or id-token-signing-alg-values-supported ["RS256"])
            :scopes_supported                      (or scopes-supported ["openid" "profile" "email"])
-           :grant_types_supported                 (or grant-types-supported ["authorization_code" "refresh_token" "client_credentials"])
+           :grant_types_supported                 (or grant-types-supported token-ep/default-grant-types-supported)
            :token_endpoint_auth_methods_supported (or token-endpoint-auth-methods-supported
                                                       ["client_secret_basic" "client_secret_post" "none"])
            :code_challenge_methods_supported      (or code-challenge-methods-supported ["S256"])

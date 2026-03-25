@@ -1006,6 +1006,142 @@
                               "public-cc")
             provider-config token-store))))))
 
+(deftest server-rejects-unconfigured-grant-type-test
+  (testing "rejects grant type not in server grant-types-supported"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"Unsupported grant type"
+         (token-ep/handle-token-request
+          {:grant_type "client_credentials" :client_id "test-client"}
+          (encode-basic-auth "test-client" "secret123")
+          (make-provider-config {:grant-types-supported ["authorization_code"]})
+          (test-client-store {:grant-types ["authorization_code" "client_credentials"]})
+          (store/create-authorization-code-store)
+          (store/create-token-store)
+          (->TestClaimsProvider))))
+    (is (= "unsupported_grant_type"
+           (try (token-ep/handle-token-request
+                 {:grant_type "client_credentials" :client_id "test-client"}
+                 (encode-basic-auth "test-client" "secret123")
+                 (make-provider-config {:grant-types-supported ["authorization_code"]})
+                 (test-client-store {:grant-types ["authorization_code" "client_credentials"]})
+                 (store/create-authorization-code-store)
+                 (store/create-token-store)
+                 (->TestClaimsProvider))
+                (catch clojure.lang.ExceptionInfo e
+                  (:error (ex-data e))))))))
+
+(deftest server-allows-configured-grant-type-test
+  (testing "allows grant type that is in server grant-types-supported"
+    (let [code-store      (store/create-authorization-code-store)
+          token-store     (store/create-token-store)
+          provider-config (make-provider-config {:grant-types-supported ["authorization_code"]})
+          client-store    (test-client-store {})
+          code            (token/generate-authorization-code)
+          expiry          (+ (System/currentTimeMillis) (* 1000 600))]
+      (store/save-authorization-code code-store code "user-1" "test-client"
+                                     "https://app.example.com/callback"
+                                     ["openid"] nil expiry nil nil nil)
+      (let [response    (token-ep/handle-token-request
+                         {:grant_type   "authorization_code"
+                          :code         code
+                          :redirect_uri "https://app.example.com/callback"}
+                         (encode-basic-auth "test-client" "secret123")
+                         provider-config client-store code-store token-store
+                         (->TestClaimsProvider))
+            access-data (store/get-access-token token-store (:access_token response))]
+        (is (= "user-1" (:user-id access-data)))))))
+
+(deftest server-default-allows-authorization-code-test
+  (testing "default config allows authorization_code"
+    (let [code-store      (store/create-authorization-code-store)
+          token-store     (store/create-token-store)
+          provider-config (make-provider-config {})
+          client-store    (test-client-store {:grant-types ["authorization_code" "refresh_token"]})
+          code            (token/generate-authorization-code)
+          expiry          (+ (System/currentTimeMillis) (* 1000 600))]
+      (store/save-authorization-code code-store code "user-1" "test-client"
+                                     "https://app.example.com/callback"
+                                     ["openid"] nil expiry nil nil nil)
+      (let [response    (token-ep/handle-token-request
+                         {:grant_type   "authorization_code"
+                          :code         code
+                          :redirect_uri "https://app.example.com/callback"}
+                         (encode-basic-auth "test-client" "secret123")
+                         provider-config client-store code-store token-store
+                         (->TestClaimsProvider))
+            access-data (store/get-access-token token-store (:access_token response))]
+        (is (= "user-1" (:user-id access-data)))))))
+
+(deftest server-default-allows-refresh-token-test
+  (testing "default config allows refresh_token"
+    (let [code-store      (store/create-authorization-code-store)
+          token-store     (store/create-token-store)
+          provider-config (make-provider-config {})
+          client-store    (test-client-store {:grant-types ["authorization_code" "refresh_token"]})
+          code            (token/generate-authorization-code)
+          expiry          (+ (System/currentTimeMillis) (* 1000 600))]
+      (store/save-authorization-code code-store code "user-1" "test-client"
+                                     "https://app.example.com/callback"
+                                     ["openid"] nil expiry nil nil nil)
+      (let [auth-response    (token-ep/handle-token-request
+                              {:grant_type   "authorization_code"
+                               :code         code
+                               :redirect_uri "https://app.example.com/callback"}
+                              (encode-basic-auth "test-client" "secret123")
+                              provider-config client-store code-store token-store
+                              (->TestClaimsProvider))
+            refresh-response (token-ep/handle-token-request
+                              {:grant_type    "refresh_token"
+                               :refresh_token (:refresh_token auth-response)}
+                              (encode-basic-auth "test-client" "secret123")
+                              provider-config client-store code-store token-store
+                              (->TestClaimsProvider))
+            access-data      (store/get-access-token token-store (:access_token refresh-response))]
+        (is (= "user-1" (:user-id access-data)))))))
+
+(deftest server-empty-grant-types-rejects-all-test
+  (testing "empty grant-types-supported rejects all grant types"
+    (is (= "unsupported_grant_type"
+           (try (token-ep/handle-token-request
+                 {:grant_type "authorization_code" :code "any"}
+                 (encode-basic-auth "test-client" "secret123")
+                 (make-provider-config {:grant-types-supported []})
+                 (test-client-store {})
+                 (store/create-authorization-code-store)
+                 (store/create-token-store)
+                 (->TestClaimsProvider))
+                (catch clojure.lang.ExceptionInfo e
+                  (:error (ex-data e))))))))
+
+(deftest server-default-allows-client-credentials-test
+  (testing "default config allows client_credentials"
+    (let [token-store (store/create-token-store)
+          response    (token-ep/handle-token-request
+                       {:grant_type "client_credentials" :scope "read"}
+                       (encode-basic-auth "test-client" "secret123")
+                       (make-provider-config {})
+                       (test-client-store {:grant-types ["client_credentials"]
+                                           :scopes      ["read"]})
+                       (store/create-authorization-code-store)
+                       token-store
+                       (->TestClaimsProvider))
+          access-data (store/get-access-token token-store (:access_token response))]
+      (is (= "test-client" (:client-id access-data))))))
+
+(deftest unknown-grant-type-returns-error-code-test
+  (testing "completely unknown grant type returns unsupported_grant_type error"
+    (is (= "unsupported_grant_type"
+           (try (token-ep/handle-token-request
+                 {:grant_type "urn:custom:grant" :client_id "test-client"}
+                 (encode-basic-auth "test-client" "secret123")
+                 (make-provider-config {})
+                 (test-client-store {})
+                 (store/create-authorization-code-store)
+                 (store/create-token-store)
+                 (->TestClaimsProvider))
+                (catch clojure.lang.ExceptionInfo e
+                  (:error (ex-data e))))))))
+
 (deftest authenticate-client-rejects-basic-for-post-client-test
   (testing "client_secret_post client is rejected when authenticating via any Basic header"
     (let [cs (test-client-store {:client-id                  "post-client"

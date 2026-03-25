@@ -159,11 +159,11 @@
 
 (deftest discovery-custom-request-parameter-supported-test
   (testing "explicit true value is respected"
-    (let [config {:issuer                       "https://test.example.com"
-                  :authorization-endpoint       "https://test.example.com/authorize"
-                  :token-endpoint               "https://test.example.com/token"
-                  :jwks-uri                     "https://test.example.com/jwks"
-                  :request-parameter-supported  true}
+    (let [config {:issuer                      "https://test.example.com"
+                  :authorization-endpoint      "https://test.example.com/authorize"
+                  :token-endpoint              "https://test.example.com/token"
+                  :jwks-uri                    "https://test.example.com/jwks"
+                  :request-parameter-supported true}
           result (discovery/openid-configuration config)]
       (is (= true (:request_parameter_supported result))))))
 
@@ -178,10 +178,10 @@
 
 (deftest discovery-custom-claims-parameter-supported-test
   (testing "explicit true value is respected"
-    (let [config {:issuer                      "https://test.example.com"
-                  :authorization-endpoint      "https://test.example.com/authorize"
-                  :token-endpoint              "https://test.example.com/token"
-                  :jwks-uri                    "https://test.example.com/jwks"
-                  :claims-parameter-supported  true}
+    (let [config {:issuer                     "https://test.example.com"
+                  :authorization-endpoint     "https://test.example.com/authorize"
+                  :token-endpoint             "https://test.example.com/token"
+                  :jwks-uri                   "https://test.example.com/jwks"
+                  :claims-parameter-supported true}
           result (discovery/openid-configuration config)]
       (is (= true (:claims_parameter_supported result))))))

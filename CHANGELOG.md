@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Issuer URL validation per RFC 8414 §2 — HTTPS required, no query or fragment components
 - `:allow-http-issuer` option for development use with HTTP issuers
 - Ring `token-handler` for the token endpoint with RFC 6749 §5.1 compliant `Cache-Control: no-store` and `Pragma: no-cache` headers on all success and error responses
+- Server-level `grant-types-supported` enforcement in token endpoint — grant types not in the provider's allowed list are rejected with `unsupported_grant_type` error per RFC 6749 §5.2
+- `unsupported_grant_type` error code in ex-data for unknown or disabled grant types
 
 ### Fixed
 - Discovery `grant_types_supported` now includes `client_credentials` in the default set

@@ -15,6 +15,10 @@
 
 (set! *warn-on-reflection* true)
 
+(def default-grant-types-supported
+  "Default grant types when `:grant-types-supported` is not configured."
+  ["authorization_code" "refresh_token" "client_credentials"])
+
 (def TokenRequest
   "Malli schema for token request parameters."
   [:map
@@ -175,18 +179,12 @@
           (throw (ex-info "PKCE verification failed" {:error "invalid_grant"})))))))
 
 (defn handle-authorization-code-grant
-  "Handles authorization_code grant type.
+  "Exchanges an authorization code for tokens per RFC 6749 §4.1.3.
 
-  Args:
-    params: Token request parameters
-    client: Authenticated client configuration
-    provider-config: Provider configuration map
-    code-store: AuthorizationCodeStore implementation
-    token-store: TokenStore implementation
-    claims-provider: ClaimsProvider implementation
-
-  Returns:
-    Token response map"
+  Validates the client is authorized for the `authorization_code` grant, verifies
+  the code against `code-store`, checks redirect URI and PKCE, then issues access,
+  refresh, and (when `openid` scope is present) ID tokens via `token-store` and
+  `claims-provider`. Returns a token response map."
   [{:keys [code redirect_uri code_verifier]} client provider-config code-store token-store claims-provider]
   (when-not (some #{"authorization_code"} (:grant-types client))
     (throw (ex-info "Client not authorized for authorization_code grant"
@@ -236,16 +234,11 @@
         resource      (assoc :resource resource)))))
 
 (defn handle-refresh-token-grant
-  "Handles refresh_token grant type.
+  "Issues a new access token from a refresh token per RFC 6749 §6.
 
-  Args:
-    params: Token request parameters
-    client: Authenticated client configuration
-    provider-config: Provider configuration map
-    token-store: TokenStore implementation
-
-  Returns:
-    Token response map"
+  Validates the client is authorized for the `refresh_token` grant, verifies the
+  token against `token-store`, enforces scope down-scoping and resource constraints,
+  and optionally rotates the refresh token. Returns a token response map."
   [{:keys [refresh_token scope resource]} client provider-config token-store]
   (when-not (some #{"refresh_token"} (:grant-types client))
     (throw (ex-info "Client not authorized for refresh_token grant"
@@ -299,16 +292,11 @@
           final-resource (assoc :resource final-resource))))))
 
 (defn handle-client-credentials-grant
-  "Handles client_credentials grant type.
+  "Issues an access token for the client itself per RFC 6749 §4.4.
 
-  Args:
-    params: Token request parameters
-    client: Authenticated client configuration
-    provider-config: Provider configuration map
-    token-store: TokenStore implementation
-
-  Returns:
-    Token response map"
+  Validates the client is authorized for the `client_credentials` grant and is
+  confidential, resolves the requested scope against the client's allowed scopes,
+  and stores the token via `token-store`. Returns a token response map."
   [{:keys [scope resource]} client provider-config token-store]
   (when-not (some #{"client_credentials"} (:grant-types client))
     (throw (ex-info "Client not authorized for client_credentials grant"
@@ -353,23 +341,29 @@
   (when-not (m/validate TokenRequest params)
     (throw (ex-info "Invalid token request"
                     {:errors (m/explain TokenRequest params)})))
-  (let [resources (normalize-resource (:resource params))
-        _         (when resources (proto/validate-resource-indicators resources))
-        params    (cond-> params resources (assoc :resource resources))
-        client    (authenticate-client params authorization-header client-store)
-        response  (case (:grant_type params)
-                    "authorization_code"
-                    (handle-authorization-code-grant params client provider-config
-                                                     code-store token-store claims-provider)
+  (let [resources             (normalize-resource (:resource params))
+        _                     (when resources (proto/validate-resource-indicators resources))
+        params                (cond-> params resources (assoc :resource resources))
+        grant-types-supported (or (:grant-types-supported provider-config)
+                                  default-grant-types-supported)
+        _                     (when-not (some #{(:grant_type params)} grant-types-supported)
+                                (throw (ex-info "Unsupported grant type"
+                                                {:error "unsupported_grant_type"})))
+        client                (authenticate-client params authorization-header client-store)
+        response              (case (:grant_type params)
+                                "authorization_code"
+                                (handle-authorization-code-grant params client provider-config
+                                                                 code-store token-store claims-provider)
 
-                    "refresh_token"
-                    (handle-refresh-token-grant params client provider-config token-store)
+                                "refresh_token"
+                                (handle-refresh-token-grant params client provider-config token-store)
 
-                    "client_credentials"
-                    (handle-client-credentials-grant params client provider-config token-store)
+                                "client_credentials"
+                                (handle-client-credentials-grant params client provider-config token-store)
 
-                    (throw (ex-info "Unsupported grant_type"
-                                    {:grant-type (:grant_type params)})))]
+                                (throw (ex-info "Unimplemented grant type"
+                                                {:error      "unsupported_grant_type"
+                                                 :grant-type (:grant_type params)})))]
     (when-not (m/validate TokenResponse response)
       (throw (ex-info "Invalid token response generated"
                       {:errors (m/explain TokenResponse response)})))
