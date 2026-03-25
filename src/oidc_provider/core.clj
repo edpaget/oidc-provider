@@ -208,10 +208,12 @@
 (defn register-client
   "Registers a new OAuth2/OIDC client.
 
-   Takes a Provider instance and a client configuration map. Stores the client
-   configuration in the client store and returns the registered client configuration
-   including the generated client-id."
+   Takes a Provider instance and a client configuration map that must conform to
+   the [[oidc-provider.protocol/ClientRegistration]] schema. Throws `AssertionError`
+   if the config is invalid. Stores the client in the client store and returns the
+   registered client configuration including the generated client-id."
   [provider client-config]
+  {:pre [(m/validate proto/ClientRegistration client-config)]}
   (proto/register-client (:client-store provider) client-config))
 
 (defn get-client

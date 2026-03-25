@@ -3,7 +3,9 @@
 
   Defines the [[ClaimsProvider]] protocol for supplying user claims to ID tokens,
   along with storage protocols ([[ClientStore]], [[AuthorizationCodeStore]],
-  [[TokenStore]]) for pluggable persistence.")
+  [[TokenStore]]) for pluggable persistence."
+  (:require
+   [malli.util :as mu]))
 
 (set! *warn-on-reflection* true)
 
@@ -39,6 +41,13 @@
    [:logo-uri {:optional true} :string]
    [:contacts {:optional true} [:vector :string]]
    [:registration-access-token {:optional true} :string]])
+
+(def ClientRegistration
+  "Malli schema for client registration input.
+
+  Derived from [[ClientConfig]] with `:client-id` made optional, since the store
+  may auto-generate one during registration."
+  (mu/optional-keys ClientConfig [:client-id]))
 
 (defprotocol ClientStore
   "Protocol for managing OAuth2/OIDC client registrations."

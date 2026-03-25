@@ -53,6 +53,66 @@
       (is (= secret123-hash (:client-secret-hash client)))
       (is (= ["https://app.example.com/callback"] (:redirect-uris client))))))
 
+(deftest register-client-missing-client-type-test
+  (testing "rejects config missing required :client-type"
+    (let [provider (core/create-provider
+                    {:issuer                 "https://test.example.com"
+                     :authorization-endpoint "https://test.example.com/authorize"
+                     :token-endpoint         "https://test.example.com/token"
+                     :jwks-uri               "https://test.example.com/jwks"})]
+      (is (thrown? AssertionError
+                   (core/register-client
+                    provider
+                    {:client-id      "bad-client"
+                     :redirect-uris  ["https://app.example.com/callback"]
+                     :grant-types    ["authorization_code"]
+                     :response-types ["code"]
+                     :scopes         ["openid"]}))))))
+
+(deftest register-client-invalid-grant-type-test
+  (testing "rejects config with invalid grant type"
+    (let [provider (core/create-provider
+                    {:issuer                 "https://test.example.com"
+                     :authorization-endpoint "https://test.example.com/authorize"
+                     :token-endpoint         "https://test.example.com/token"
+                     :jwks-uri               "https://test.example.com/jwks"})]
+      (is (thrown? AssertionError
+                   (core/register-client
+                    provider
+                    {:client-id      "bad-client"
+                     :client-type    "confidential"
+                     :redirect-uris  ["https://app.example.com/callback"]
+                     :grant-types    ["invalid_grant"]
+                     :response-types ["code"]
+                     :scopes         ["openid"]}))))))
+
+(deftest register-client-without-client-id-test
+  (testing "accepts config without client-id (store generates one)"
+    (let [provider (core/create-provider
+                    {:issuer                 "https://test.example.com"
+                     :authorization-endpoint "https://test.example.com/authorize"
+                     :token-endpoint         "https://test.example.com/token"
+                     :jwks-uri               "https://test.example.com/jwks"})
+          client   (core/register-client
+                    provider
+                    {:client-type    "public"
+                     :redirect-uris  ["https://app.example.com/callback"]
+                     :grant-types    ["authorization_code"]
+                     :response-types ["code"]
+                     :scopes         ["openid"]})]
+      (is (= "public" (:client-type client)))
+      (is (= client (core/get-client provider (:client-id client)))))))
+
+(deftest register-client-empty-map-test
+  (testing "rejects empty config map"
+    (let [provider (core/create-provider
+                    {:issuer                 "https://test.example.com"
+                     :authorization-endpoint "https://test.example.com/authorize"
+                     :token-endpoint         "https://test.example.com/token"
+                     :jwks-uri               "https://test.example.com/jwks"})]
+      (is (thrown? AssertionError
+                   (core/register-client provider {}))))))
+
 (deftest retrieve-registered-client-test
   (testing "retrieves registered client by id"
     (let [provider (core/create-provider
