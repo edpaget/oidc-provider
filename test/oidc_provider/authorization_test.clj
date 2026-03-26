@@ -3,6 +3,7 @@
    [clojure.string :as str]
    [clojure.test :refer [deftest is testing]]
    [oidc-provider.authorization :as authz]
+   [oidc-provider.protocol :as proto]
    [oidc-provider.store :as store]
    [oidc-provider.util :as util])
   (:import
@@ -162,7 +163,7 @@
 
 (deftest handle-authorization-approval-test
   (testing "generates authorization code stored with correct metadata"
-    (let [code-store      (store/create-authorization-code-store)
+    (let [code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
           provider-config {:issuer                         "https://test.example.com"
                            :authorization-code-ttl-seconds 600
                            :clock                          (Clock/systemUTC)}
@@ -178,7 +179,7 @@
                            provider-config
                            code-store)
           code            (get-in response [:params :code])
-          code-data       (store/get-authorization-code code-store code)]
+          code-data       (proto/get-authorization-code code-store code)]
       (is (= "https://app.example.com/callback" (:redirect-uri response)))
       (is (= "xyz" (get-in response [:params :state])))
       (is (= "https://test.example.com" (get-in response [:params :iss])))
@@ -273,7 +274,7 @@
 
 (deftest handle-authorization-approval-stores-pkce-test
   (testing "stores code-challenge and code-challenge-method with authorization code"
-    (let [code-store      (store/create-authorization-code-store)
+    (let [code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
           provider-config {:issuer                         "https://test.example.com"
                            :authorization-code-ttl-seconds 600
                            :clock                          (Clock/systemUTC)}
@@ -286,7 +287,7 @@
           response        (authz/handle-authorization-approval
                            request "user-123" provider-config code-store)
           code            (get-in response [:params :code])
-          code-data       (store/get-authorization-code code-store code)]
+          code-data       (proto/get-authorization-code code-store code)]
       (is (= "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM" (:code-challenge code-data)))
       (is (= "S256" (:code-challenge-method code-data))))))
 
@@ -425,7 +426,7 @@
 
 (deftest authorization-approval-nil-issuer-test
   (testing "omits :iss from response when provider-config has no :issuer"
-    (let [code-store      (store/create-authorization-code-store)
+    (let [code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
           provider-config {:authorization-code-ttl-seconds 600
                            :clock                          (Clock/systemUTC)}
           request         {:response_type "code"
@@ -458,7 +459,7 @@
 
 (deftest handle-authorization-approval-stores-resource-test
   (testing "resource indicators round-trip through code store"
-    (let [code-store      (store/create-authorization-code-store)
+    (let [code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
           provider-config {:issuer                         "https://test.example.com"
                            :authorization-code-ttl-seconds 600
                            :clock                          (Clock/systemUTC)}
@@ -470,5 +471,5 @@
           response        (authz/handle-authorization-approval
                            request "user-123" provider-config code-store)
           code            (get-in response [:params :code])
-          code-data       (store/get-authorization-code code-store code)]
+          code-data       (proto/get-authorization-code code-store code)]
       (is (= ["https://api.example.com" "https://other.example.com"] (:resource code-data))))))

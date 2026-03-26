@@ -54,8 +54,8 @@
           (encode-basic-auth "test-client" "wrong-secret")
           (make-provider-config {})
           (test-client-store {})
-          (store/create-authorization-code-store)
-          (store/create-token-store)
+          (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          (store/->HashingTokenStore (store/create-token-store))
           (->TestClaimsProvider))))))
 
 (deftest authenticate-client-missing-secret-test
@@ -67,8 +67,8 @@
           nil
           (make-provider-config {})
           (test-client-store {})
-          (store/create-authorization-code-store)
-          (store/create-token-store)
+          (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          (store/->HashingTokenStore (store/create-token-store))
           (->TestClaimsProvider))))))
 
 (deftest handle-authorization-code-grant-test
@@ -81,13 +81,13 @@
                              :grant-types        ["authorization_code"]
                              :response-types     ["code"]
                              :scopes             ["openid" "profile" "email"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           claims-provider (->TestClaimsProvider)
           provider-config (make-provider-config {:id-token-ttl-seconds 3600})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
-      (store/save-authorization-code code-store code "user-123" "test-client"
+      (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid" "profile"] "nonce123" expiry nil nil nil)
       (let [response   (token-ep/handle-authorization-code-grant
@@ -98,7 +98,7 @@
                         code-store
                         token-store
                         claims-provider)
-            token-data (store/get-access-token token-store (:access_token response))
+            token-data (proto/get-access-token token-store (:access_token response))
             id-claims  (token/validate-id-token provider-config (:id_token response) "test-client")]
         (is (= {:token_type "Bearer" :expires_in 3600 :scope "openid profile"}
                (select-keys response [:token_type :expires_in :scope])))
@@ -117,13 +117,13 @@
                              :grant-types        ["authorization_code"]
                              :response-types     ["code"]
                              :scopes             ["profile" "email"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           claims-provider (->TestClaimsProvider)
           provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
-      (store/save-authorization-code code-store code "user-123" "test-client"
+      (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
                                      ["profile"] nil expiry nil nil nil)
       (let [response   (token-ep/handle-authorization-code-grant
@@ -134,7 +134,7 @@
                         code-store
                         token-store
                         claims-provider)
-            token-data (store/get-access-token token-store (:access_token response))]
+            token-data (proto/get-access-token token-store (:access_token response))]
         (is (= nil (:id_token response)))
         (is (= "user-123" (:user-id token-data)))
         (is (= {:token_type "Bearer" :expires_in 3600 :scope "profile"}
@@ -150,13 +150,13 @@
                              :grant-types        ["authorization_code"]
                              :response-types     ["code"]
                              :scopes             ["openid"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           claims-provider (->TestClaimsProvider)
           provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (- (System/currentTimeMillis) 1000)]
-      (store/save-authorization-code code-store code "user-123" "test-client"
+      (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid"] nil expiry nil nil nil)
       (is (thrown-with-msg? Exception #"expired"
@@ -179,13 +179,13 @@
                              :grant-types        ["authorization_code"]
                              :response-types     ["code"]
                              :scopes             ["openid"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           claims-provider (->TestClaimsProvider)
           provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
-      (store/save-authorization-code code-store code "user-123" "test-client"
+      (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid"] nil expiry nil nil nil)
       (is (thrown-with-msg? Exception #"Missing redirect_uri"
@@ -207,13 +207,13 @@
                              :grant-types        ["authorization_code"]
                              :response-types     ["code"]
                              :scopes             ["openid"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           claims-provider (->TestClaimsProvider)
           provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
-      (store/save-authorization-code code-store code "user-123" "test-client"
+      (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid"] nil expiry nil nil nil)
       (is (thrown-with-msg? Exception #"Redirect URI mismatch"
@@ -236,16 +236,16 @@
                              :grant-types        ["refresh_token"]
                              :response-types     ["code"]
                              :scopes             ["openid" "profile"]}])
-          token-store     (store/create-token-store)
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           provider-config (make-provider-config {:rotate-refresh-tokens true})
           refresh-token   (token/generate-refresh-token)]
-      (store/save-refresh-token token-store refresh-token "user-123" "test-client" ["openid" "profile"] nil nil)
+      (proto/save-refresh-token token-store refresh-token "user-123" "test-client" ["openid" "profile"] nil nil)
       (let [response   (token-ep/handle-refresh-token-grant
                         {:refresh_token refresh-token}
                         (proto/get-client client-store "test-client")
                         provider-config
                         token-store)
-            token-data (store/get-access-token token-store (:access_token response))]
+            token-data (proto/get-access-token token-store (:access_token response))]
         (is (= {:token_type "Bearer" :expires_in 3600 :scope "openid profile"}
                (select-keys response [:token_type :expires_in :scope])))
         (is (string? (:refresh_token response)))
@@ -262,13 +262,13 @@
                              :grant-types        ["client_credentials"]
                              :response-types     []
                              :scopes             ["openid"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           claims-provider (->TestClaimsProvider)
           provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
-      (store/save-authorization-code code-store code "user-123" "cc-only-client"
+      (proto/save-authorization-code code-store code "user-123" "cc-only-client"
                                      "https://app.example.com/callback"
                                      ["openid"] nil expiry nil nil nil)
       (is (thrown-with-msg? Exception #"Client not authorized for authorization_code"
@@ -291,10 +291,10 @@
                              :grant-types        ["authorization_code"]
                              :response-types     ["code"]
                              :scopes             ["openid"]}])
-          token-store     (store/create-token-store)
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           provider-config (make-provider-config {})
           refresh-token   (token/generate-refresh-token)]
-      (store/save-refresh-token token-store refresh-token "user-123" "authcode-only-client" ["openid"] nil nil)
+      (proto/save-refresh-token token-store refresh-token "user-123" "authcode-only-client" ["openid"] nil nil)
       (is (thrown-with-msg? Exception #"Client not authorized for refresh_token"
                             (token-ep/handle-refresh-token-grant
                              {:refresh_token refresh-token}
@@ -312,14 +312,14 @@
                              :grant-types        ["client_credentials"]
                              :response-types     []
                              :scopes             ["api:read" "api:write"]}])
-          token-store     (store/create-token-store)
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           provider-config (make-provider-config {})
           response        (token-ep/handle-client-credentials-grant
                            {:scope "api:read"}
                            (proto/get-client client-store "test-client")
                            provider-config
                            token-store)
-          token-data      (store/get-access-token token-store (:access_token response))]
+          token-data      (proto/get-access-token token-store (:access_token response))]
       (is (= {:token_type "Bearer" :expires_in 3600 :scope "api:read"}
              (select-keys response [:token_type :expires_in :scope])))
       (is (= "test-client" (:client-id token-data)))
@@ -338,13 +338,13 @@
                              :grant-types        ["authorization_code"]
                              :response-types     ["code"]
                              :scopes             ["openid" "profile"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           claims-provider (->TestClaimsProvider)
           provider-config (make-provider-config {:id-token-ttl-seconds 3600})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
-      (store/save-authorization-code code-store code "user-123" "test-client"
+      (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid" "profile"] "nonce123" expiry challenge "S256" nil)
       (let [response   (token-ep/handle-authorization-code-grant
@@ -356,7 +356,7 @@
                         code-store
                         token-store
                         claims-provider)
-            token-data (store/get-access-token token-store (:access_token response))]
+            token-data (proto/get-access-token token-store (:access_token response))]
         (is (= {:token_type "Bearer" :expires_in 3600 :scope "openid profile"}
                (select-keys response [:token_type :expires_in :scope])))
         (is (= "user-123" (:user-id token-data)))))))
@@ -374,13 +374,13 @@
                              :grant-types        ["authorization_code"]
                              :response-types     ["code"]
                              :scopes             ["openid"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           claims-provider (->TestClaimsProvider)
           provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
-      (store/save-authorization-code code-store code "user-123" "test-client"
+      (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid"] nil expiry challenge "S256" nil)
       (is (thrown-with-msg? Exception #"PKCE verification failed"
@@ -406,13 +406,13 @@
                              :grant-types        ["authorization_code"]
                              :response-types     ["code"]
                              :scopes             ["openid"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           claims-provider (->TestClaimsProvider)
           provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
-      (store/save-authorization-code code-store code "user-123" "test-client"
+      (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid"] nil expiry challenge "S256" nil)
       (is (thrown-with-msg? Exception #"Missing code_verifier"
@@ -435,13 +435,13 @@
                              :grant-types        ["authorization_code"]
                              :response-types     ["code"]
                              :scopes             ["openid"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           claims-provider (->TestClaimsProvider)
           provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
-      (store/save-authorization-code code-store code "user-123" "test-client"
+      (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid"] nil expiry nil nil nil)
       (is (thrown-with-msg? Exception #"Unexpected code_verifier"
@@ -465,14 +465,14 @@
                              :grant-types        ["authorization_code"]
                              :response-types     ["code"]
                              :scopes             ["openid" "profile"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           claims-provider (->TestClaimsProvider)
           provider-config (make-provider-config {:id-token-ttl-seconds 3600})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))
           resources       ["https://api.example.com" "https://data.example.com"]]
-      (store/save-authorization-code code-store code "user-123" "test-client"
+      (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid" "profile"] "nonce123" expiry nil nil resources)
       (let [response    (token-ep/handle-authorization-code-grant
@@ -483,7 +483,7 @@
                          code-store
                          token-store
                          claims-provider)
-            access-data (store/get-access-token token-store (:access_token response))]
+            access-data (proto/get-access-token token-store (:access_token response))]
         (is (= resources (:resource response)))
         (is (= resources (:resource access-data)))
         (is (nil? (:refresh_token response)))))))
@@ -498,13 +498,13 @@
                              :grant-types        ["authorization_code"]
                              :response-types     ["code"]
                              :scopes             ["profile"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           claims-provider (->TestClaimsProvider)
           provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
-      (store/save-authorization-code code-store code "user-123" "test-client"
+      (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
                                      ["profile"] nil expiry nil nil nil)
       (let [response    (token-ep/handle-authorization-code-grant
@@ -515,7 +515,7 @@
                          code-store
                          token-store
                          claims-provider)
-            access-data (store/get-access-token token-store (:access_token response))]
+            access-data (proto/get-access-token token-store (:access_token response))]
         (is (nil? (:resource response)))
         (is (nil? (:resource access-data)))))))
 
@@ -529,10 +529,10 @@
                              :grant-types        ["refresh_token"]
                              :response-types     ["code"]
                              :scopes             ["openid" "profile"]}])
-          token-store     (store/create-token-store)
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           provider-config (make-provider-config {:rotate-refresh-tokens true})
           refresh-token   (token/generate-refresh-token)]
-      (store/save-refresh-token token-store refresh-token "user-123" "test-client"
+      (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
                                 ["openid" "profile"] nil
                                 ["https://api.example.com" "https://data.example.com"])
       (let [response    (token-ep/handle-refresh-token-grant
@@ -541,7 +541,7 @@
                          (proto/get-client client-store "test-client")
                          provider-config
                          token-store)
-            access-data (store/get-access-token token-store (:access_token response))]
+            access-data (proto/get-access-token token-store (:access_token response))]
         (is (= ["https://api.example.com"] (:resource response)))
         (is (= ["https://api.example.com"] (:resource access-data)))
         (is (string? (:refresh_token response)))))))
@@ -556,10 +556,10 @@
                              :grant-types        ["refresh_token"]
                              :response-types     ["code"]
                              :scopes             ["openid"]}])
-          token-store     (store/create-token-store)
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           provider-config (make-provider-config {})
           refresh-token   (token/generate-refresh-token)]
-      (store/save-refresh-token token-store refresh-token "user-123" "test-client"
+      (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
                                 ["openid"] nil
                                 ["https://api.example.com"])
       (is (thrown-with-msg? Exception #"Requested resource exceeds original grant"
@@ -580,10 +580,10 @@
                              :grant-types        ["refresh_token"]
                              :response-types     ["code"]
                              :scopes             ["openid"]}])
-          token-store     (store/create-token-store)
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           provider-config (make-provider-config {:rotate-refresh-tokens true})
           refresh-token   (token/generate-refresh-token)]
-      (store/save-refresh-token token-store refresh-token "user-123" "test-client"
+      (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
                                 ["openid"] nil
                                 ["https://api.example.com"])
       (let [response    (token-ep/handle-refresh-token-grant
@@ -591,7 +591,7 @@
                          (proto/get-client client-store "test-client")
                          provider-config
                          token-store)
-            access-data (store/get-access-token token-store (:access_token response))]
+            access-data (proto/get-access-token token-store (:access_token response))]
         (is (= ["https://api.example.com"] (:resource response)))
         (is (= ["https://api.example.com"] (:resource access-data)))
         (is (string? (:refresh_token response)))))))
@@ -606,7 +606,7 @@
                              :grant-types        ["client_credentials"]
                              :response-types     []
                              :scopes             ["api:read"]}])
-          token-store     (store/create-token-store)
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           provider-config (make-provider-config {})
           response        (token-ep/handle-client-credentials-grant
                            {:scope    "api:read"
@@ -614,7 +614,7 @@
                            (proto/get-client client-store "test-client")
                            provider-config
                            token-store)
-          access-data     (store/get-access-token token-store (:access_token response))]
+          access-data     (proto/get-access-token token-store (:access_token response))]
       (is (= ["https://api.example.com"] (:resource response)))
       (is (= ["https://api.example.com"] (:resource access-data))))))
 
@@ -624,16 +624,16 @@
                                            :redirect-uris  []
                                            :response-types []
                                            :scopes         ["api:read"]})
-          token-store  (store/create-token-store)
+          token-store  (store/->HashingTokenStore (store/create-token-store))
           response     (token-ep/handle-token-request
                         {:grant_type "client_credentials"
                          :scope      "api:read"
                          :resource   ["https://api.example.com" "https://data.example.com"]}
                         (encode-basic-auth "test-client" "secret123")
                         (make-provider-config {}) client-store
-                        (store/create-authorization-code-store) token-store
+                        (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store)) token-store
                         (->TestClaimsProvider))
-          access-data  (store/get-access-token token-store (:access_token response))]
+          access-data  (proto/get-access-token token-store (:access_token response))]
       (is (= ["https://api.example.com" "https://data.example.com"] (:resource response)))
       (is (= ["https://api.example.com" "https://data.example.com"] (:resource access-data))))))
 
@@ -650,8 +650,8 @@
                                         :redirect-uris      []
                                         :response-types     []
                                         :scopes             ["api:read"]})
-                    (store/create-authorization-code-store)
-                    (store/create-token-store)
+                    (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+                    (store/->HashingTokenStore (store/create-token-store))
                     (->TestClaimsProvider))]
       (is (= "Bearer" (:token_type response)))
       (is (= "api:read" (:scope response))))))
@@ -670,8 +670,8 @@
                               :redirect-uris      []
                               :response-types     []
                               :scopes             ["api:read"]})
-          (store/create-authorization-code-store)
-          (store/create-token-store)
+          (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          (store/->HashingTokenStore (store/create-token-store))
           (->TestClaimsProvider))))))
 
 (deftest confidential-client-no-credentials-test
@@ -687,8 +687,8 @@
                               :grant-types        ["client_credentials"]
                               :redirect-uris      []
                               :response-types     []})
-          (store/create-authorization-code-store)
-          (store/create-token-store)
+          (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          (store/->HashingTokenStore (store/create-token-store))
           (->TestClaimsProvider))))))
 
 (deftest explicit-auth-method-no-credentials-test
@@ -707,8 +707,8 @@
                               :redirect-uris              []
                               :response-types             []
                               :scopes                     ["api:read"]})
-          (store/create-authorization-code-store)
-          (store/create-token-store)
+          (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          (store/->HashingTokenStore (store/create-token-store))
           (->TestClaimsProvider))))
     (is (thrown-with-msg?
          Exception #"Client configured for secret-based auth has no stored credentials"
@@ -725,8 +725,8 @@
                               :redirect-uris              []
                               :response-types             []
                               :scopes                     ["api:read"]})
-          (store/create-authorization-code-store)
-          (store/create-token-store)
+          (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          (store/->HashingTokenStore (store/create-token-store))
           (->TestClaimsProvider))))))
 
 (deftest refresh-token-expired-rejection-test
@@ -740,11 +740,11 @@
                              :grant-types        ["refresh_token"]
                              :response-types     ["code"]
                              :scopes             ["openid"]}])
-          token-store     (store/create-token-store)
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           provider-config (make-provider-config {})
           refresh-token   (token/generate-refresh-token)
           past-expiry     (.millis fixed-clock)]
-      (store/save-refresh-token token-store refresh-token "user-123" "test-client"
+      (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
                                 ["openid"] past-expiry nil)
       (is (thrown-with-msg? Exception #"Refresh token expired"
                             (token-ep/handle-refresh-token-grant
@@ -764,11 +764,11 @@
                              :grant-types        ["refresh_token"]
                              :response-types     ["code"]
                              :scopes             ["openid" "profile"]}])
-          token-store     (store/create-token-store)
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           provider-config (make-provider-config {:rotate-refresh-tokens true})
           refresh-token   (token/generate-refresh-token)
           future-expiry   (.millis future-clock)]
-      (store/save-refresh-token token-store refresh-token "user-123" "test-client"
+      (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
                                 ["openid" "profile"] future-expiry nil)
       (let [response (token-ep/handle-refresh-token-grant
                       {:refresh_token refresh-token}
@@ -788,10 +788,10 @@
                              :grant-types        ["refresh_token"]
                              :response-types     ["code"]
                              :scopes             ["openid" "profile"]}])
-          token-store     (store/create-token-store)
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           provider-config (make-provider-config {:rotate-refresh-tokens true})
           old-refresh     (token/generate-refresh-token)]
-      (store/save-refresh-token token-store old-refresh "user-123" "test-client"
+      (proto/save-refresh-token token-store old-refresh "user-123" "test-client"
                                 ["openid" "profile"] nil nil)
       (let [response    (token-ep/handle-refresh-token-grant
                          {:refresh_token old-refresh}
@@ -799,8 +799,8 @@
                          provider-config
                          token-store)
             new-refresh (:refresh_token response)
-            old-data    (store/get-refresh-token token-store old-refresh)
-            new-data    (store/get-refresh-token token-store new-refresh)]
+            old-data    (proto/get-refresh-token token-store old-refresh)
+            new-data    (proto/get-refresh-token token-store new-refresh)]
         (is (nil? old-data))
         (is (= "user-123" (:user-id new-data)))
         (is (= "test-client" (:client-id new-data)))
@@ -815,17 +815,17 @@
                              :grant-types        ["refresh_token"]
                              :response-types     ["code"]
                              :scopes             ["openid"]}])
-          token-store     (store/create-token-store)
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           provider-config (make-provider-config {:rotate-refresh-tokens false})
           refresh-token   (token/generate-refresh-token)]
-      (store/save-refresh-token token-store refresh-token "user-123" "test-client"
+      (proto/save-refresh-token token-store refresh-token "user-123" "test-client"
                                 ["openid"] nil nil)
       (let [response (token-ep/handle-refresh-token-grant
                       {:refresh_token refresh-token}
                       (proto/get-client client-store "test-client")
                       provider-config
                       token-store)
-            old-data (store/get-refresh-token token-store refresh-token)]
+            old-data (proto/get-refresh-token token-store refresh-token)]
         (is (nil? (:refresh_token response)))
         (is (= "user-123" (:user-id old-data)))))))
 
@@ -840,20 +840,20 @@
                              :grant-types        ["refresh_token"]
                              :response-types     ["code"]
                              :scopes             ["openid"]}])
-          token-store     (store/create-token-store)
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           provider-config (make-provider-config {:refresh-token-ttl-seconds 86400
                                                  :rotate-refresh-tokens     true
                                                  :clock                     fixed-clock})
           old-refresh     (token/generate-refresh-token)
           old-expiry      (+ (.millis fixed-clock) (* 1000 1800))]
-      (store/save-refresh-token token-store old-refresh "user-123" "test-client"
+      (proto/save-refresh-token token-store old-refresh "user-123" "test-client"
                                 ["openid"] old-expiry nil)
       (let [response (token-ep/handle-refresh-token-grant
                       {:refresh_token old-refresh}
                       (proto/get-client client-store "test-client")
                       provider-config
                       token-store)
-            new-data (store/get-refresh-token token-store (:refresh_token response))
+            new-data (proto/get-refresh-token token-store (:refresh_token response))
             expected (+ (.millis fixed-clock) (* 1000 86400))]
         (is (= expected (:expiry new-data)))))))
 
@@ -867,13 +867,13 @@
                              :grant-types        ["authorization_code"]
                              :response-types     ["code"]
                              :scopes             ["openid"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           claims-provider (->TestClaimsProvider)
           provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
-      (store/save-authorization-code code-store code "user-123" "test-client"
+      (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid"] nil expiry nil nil nil)
       (is (thrown-with-msg? Exception #"Redirect URI mismatch"
@@ -885,7 +885,7 @@
                              code-store
                              token-store
                              claims-provider)))
-      (is (nil? (store/get-authorization-code code-store code))))))
+      (is (nil? (proto/get-authorization-code code-store code))))))
 
 (deftest code-consumed-on-successful-exchange-test
   (testing "authorization code is deleted from store after successful exchange"
@@ -897,13 +897,13 @@
                              :grant-types        ["authorization_code"]
                              :response-types     ["code"]
                              :scopes             ["openid"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           claims-provider (->TestClaimsProvider)
           provider-config (make-provider-config {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
-      (store/save-authorization-code code-store code "user-123" "test-client"
+      (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid"] nil expiry nil nil nil)
       (token-ep/handle-authorization-code-grant
@@ -914,7 +914,7 @@
        code-store
        token-store
        claims-provider)
-      (is (nil? (store/get-authorization-code code-store code))))))
+      (is (nil? (proto/get-authorization-code code-store code))))))
 
 (deftest authorization-code-grant-with-refresh-token-grant-type-test
   (testing "client with refresh_token grant type receives a refresh token"
@@ -926,13 +926,13 @@
                              :grant-types        ["authorization_code" "refresh_token"]
                              :response-types     ["code"]
                              :scopes             ["openid" "profile"]}])
-          code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           claims-provider (->TestClaimsProvider)
           provider-config (make-provider-config {:id-token-ttl-seconds 3600})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
-      (store/save-authorization-code code-store code "user-123" "test-client"
+      (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid" "profile"] "nonce123" expiry nil nil nil)
       (let [response     (token-ep/handle-authorization-code-grant
@@ -943,7 +943,7 @@
                           code-store
                           token-store
                           claims-provider)
-            refresh-data (store/get-refresh-token token-store (:refresh_token response))]
+            refresh-data (proto/get-refresh-token token-store (:refresh_token response))]
         (is (string? (:refresh_token response)))
         (is (= "user-123" (:user-id refresh-data)))
         (is (= "test-client" (:client-id refresh-data)))))))
@@ -992,7 +992,7 @@
 
 (deftest client-credentials-rejects-public-client-test
   (testing "client_credentials grant throws for public clients"
-    (let [token-store     (store/create-token-store)
+    (let [token-store     (store/->HashingTokenStore (store/create-token-store))
           provider-config (make-provider-config {})]
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo #"client_credentials grant requires a confidential client"
@@ -1015,8 +1015,8 @@
           (encode-basic-auth "test-client" "secret123")
           (make-provider-config {:grant-types-supported ["authorization_code"]})
           (test-client-store {:grant-types ["authorization_code" "client_credentials"]})
-          (store/create-authorization-code-store)
-          (store/create-token-store)
+          (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          (store/->HashingTokenStore (store/create-token-store))
           (->TestClaimsProvider))))
     (is (= "unsupported_grant_type"
            (try (token-ep/handle-token-request
@@ -1024,21 +1024,21 @@
                  (encode-basic-auth "test-client" "secret123")
                  (make-provider-config {:grant-types-supported ["authorization_code"]})
                  (test-client-store {:grant-types ["authorization_code" "client_credentials"]})
-                 (store/create-authorization-code-store)
-                 (store/create-token-store)
+                 (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+                 (store/->HashingTokenStore (store/create-token-store))
                  (->TestClaimsProvider))
                 (catch clojure.lang.ExceptionInfo e
                   (:error (ex-data e))))))))
 
 (deftest server-allows-configured-grant-type-test
   (testing "allows grant type that is in server grant-types-supported"
-    (let [code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+    (let [code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           provider-config (make-provider-config {:grant-types-supported ["authorization_code"]})
           client-store    (test-client-store {})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
-      (store/save-authorization-code code-store code "user-1" "test-client"
+      (proto/save-authorization-code code-store code "user-1" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid"] nil expiry nil nil nil)
       (let [response    (token-ep/handle-token-request
@@ -1048,18 +1048,18 @@
                          (encode-basic-auth "test-client" "secret123")
                          provider-config client-store code-store token-store
                          (->TestClaimsProvider))
-            access-data (store/get-access-token token-store (:access_token response))]
+            access-data (proto/get-access-token token-store (:access_token response))]
         (is (= "user-1" (:user-id access-data)))))))
 
 (deftest server-default-allows-authorization-code-test
   (testing "default config allows authorization_code"
-    (let [code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+    (let [code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           provider-config (make-provider-config {})
           client-store    (test-client-store {:grant-types ["authorization_code" "refresh_token"]})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
-      (store/save-authorization-code code-store code "user-1" "test-client"
+      (proto/save-authorization-code code-store code "user-1" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid"] nil expiry nil nil nil)
       (let [response    (token-ep/handle-token-request
@@ -1069,18 +1069,18 @@
                          (encode-basic-auth "test-client" "secret123")
                          provider-config client-store code-store token-store
                          (->TestClaimsProvider))
-            access-data (store/get-access-token token-store (:access_token response))]
+            access-data (proto/get-access-token token-store (:access_token response))]
         (is (= "user-1" (:user-id access-data)))))))
 
 (deftest server-default-allows-refresh-token-test
   (testing "default config allows refresh_token"
-    (let [code-store      (store/create-authorization-code-store)
-          token-store     (store/create-token-store)
+    (let [code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
           provider-config (make-provider-config {})
           client-store    (test-client-store {:grant-types ["authorization_code" "refresh_token"]})
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
-      (store/save-authorization-code code-store code "user-1" "test-client"
+      (proto/save-authorization-code code-store code "user-1" "test-client"
                                      "https://app.example.com/callback"
                                      ["openid"] nil expiry nil nil nil)
       (let [auth-response    (token-ep/handle-token-request
@@ -1096,7 +1096,7 @@
                               (encode-basic-auth "test-client" "secret123")
                               provider-config client-store code-store token-store
                               (->TestClaimsProvider))
-            access-data      (store/get-access-token token-store (:access_token refresh-response))]
+            access-data      (proto/get-access-token token-store (:access_token refresh-response))]
         (is (= "user-1" (:user-id access-data)))))))
 
 (deftest server-empty-grant-types-rejects-all-test
@@ -1107,25 +1107,25 @@
                  (encode-basic-auth "test-client" "secret123")
                  (make-provider-config {:grant-types-supported []})
                  (test-client-store {})
-                 (store/create-authorization-code-store)
-                 (store/create-token-store)
+                 (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+                 (store/->HashingTokenStore (store/create-token-store))
                  (->TestClaimsProvider))
                 (catch clojure.lang.ExceptionInfo e
                   (:error (ex-data e))))))))
 
 (deftest server-default-allows-client-credentials-test
   (testing "default config allows client_credentials"
-    (let [token-store (store/create-token-store)
+    (let [token-store (store/->HashingTokenStore (store/create-token-store))
           response    (token-ep/handle-token-request
                        {:grant_type "client_credentials" :scope "read"}
                        (encode-basic-auth "test-client" "secret123")
                        (make-provider-config {})
                        (test-client-store {:grant-types ["client_credentials"]
                                            :scopes      ["read"]})
-                       (store/create-authorization-code-store)
+                       (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
                        token-store
                        (->TestClaimsProvider))
-          access-data (store/get-access-token token-store (:access_token response))]
+          access-data (proto/get-access-token token-store (:access_token response))]
       (is (= "test-client" (:client-id access-data))))))
 
 (deftest unknown-grant-type-returns-error-code-test
@@ -1136,8 +1136,8 @@
                  (encode-basic-auth "test-client" "secret123")
                  (make-provider-config {})
                  (test-client-store {})
-                 (store/create-authorization-code-store)
-                 (store/create-token-store)
+                 (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+                 (store/->HashingTokenStore (store/create-token-store))
                  (->TestClaimsProvider))
                 (catch clojure.lang.ExceptionInfo e
                   (:error (ex-data e))))))))
@@ -1249,11 +1249,11 @@
                                                 :grant-types        ["client_credentials"]
                                                 :scopes             ["read"]})
                             "untyped-no-secret")
-          (make-provider-config {}) (store/create-token-store))))))
+          (make-provider-config {}) (store/->HashingTokenStore (store/create-token-store)))))))
 
 (deftest client-credentials-succeeds-for-untyped-client-with-secret-test
   (testing "client_credentials grant succeeds for client with nil :client-type but valid secret hash"
-    (let [token-store (store/create-token-store)
+    (let [token-store (store/->HashingTokenStore (store/create-token-store))
           response    (token-ep/handle-client-credentials-grant
                        {:scope "read"}
                        (proto/get-client (test-client-store {:client-id   "untyped-with-secret"
@@ -1263,7 +1263,7 @@
                                          "untyped-with-secret")
                        (make-provider-config {}) token-store)]
       (is (= "Bearer" (:token_type response)))
-      (is (some? (store/get-access-token token-store (:access_token response)))))))
+      (is (some? (proto/get-access-token token-store (:access_token response)))))))
 
 (deftest auth-method-none-rejected-for-confidential-test
   (testing "rejects confidential clients with token-endpoint-auth-method set to none"

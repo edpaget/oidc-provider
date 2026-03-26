@@ -109,8 +109,8 @@
     (->Provider config
                 provider-config
                 (or client-store (store/create-client-store))
-                (or code-store (store/create-authorization-code-store))
-                (or token-store (store/create-token-store))
+                (store/->HashingAuthorizationCodeStore (or code-store (store/create-authorization-code-store)))
+                (store/->HashingTokenStore (or token-store (store/create-token-store)))
                 claims-provider)))
 
 (defn discovery-metadata

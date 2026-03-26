@@ -107,7 +107,10 @@
   []
   (->InMemoryTokenStore (atom {}) (atom {})))
 
-(defrecord HashingTokenStore [inner]
+(defrecord ^{:doc "A [[proto/TokenStore]] decorator that SHA-256 hashes every token
+  via [[oidc-provider.util/hash-token]] before delegating to `inner`, ensuring the
+  backing store never holds plaintext token values."}
+ HashingTokenStore [inner]
   proto/TokenStore
   (save-access-token [_ token user-id client-id scope expiry resource]
     (proto/save-access-token inner (util/hash-token token) user-id client-id scope expiry resource))
@@ -120,7 +123,10 @@
   (revoke-token [_ token]
     (proto/revoke-token inner (util/hash-token token))))
 
-(defrecord HashingAuthorizationCodeStore [inner]
+(defrecord ^{:doc "A [[proto/AuthorizationCodeStore]] decorator that SHA-256 hashes every
+  authorization code via [[oidc-provider.util/hash-token]] before delegating to `inner`,
+  ensuring the backing store never holds plaintext code values."}
+ HashingAuthorizationCodeStore [inner]
   proto/AuthorizationCodeStore
   (save-authorization-code [_ code user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource]
     (proto/save-authorization-code inner (util/hash-token code) user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource))
@@ -130,65 +136,3 @@
     (proto/delete-authorization-code inner (util/hash-token code)))
   (consume-authorization-code [_ code]
     (proto/consume-authorization-code inner (util/hash-token code))))
-
-;; ---------------------------------------------------------------------------
-;; Hashing wrapper functions
-;;
-;; These hash the token/code with SHA-256 before delegating to the protocol,
-;; ensuring every store implementation receives hashed keys rather than
-;; plaintext secrets.
-;; ---------------------------------------------------------------------------
-
-(defn save-access-token
-  "Hashes `token` with SHA-256 via [[util/hash-token]] then delegates to
-  [[proto/save-access-token]]."
-  [store token user-id client-id scope expiry resource]
-  (proto/save-access-token store (util/hash-token token) user-id client-id scope expiry resource))
-
-(defn get-access-token
-  "Hashes `token` with SHA-256 via [[util/hash-token]] then delegates to
-  [[proto/get-access-token]]."
-  [store token]
-  (proto/get-access-token store (util/hash-token token)))
-
-(defn save-refresh-token
-  "Hashes `token` with SHA-256 via [[util/hash-token]] then delegates to
-  [[proto/save-refresh-token]]."
-  [store token user-id client-id scope expiry resource]
-  (proto/save-refresh-token store (util/hash-token token) user-id client-id scope expiry resource))
-
-(defn get-refresh-token
-  "Hashes `token` with SHA-256 via [[util/hash-token]] then delegates to
-  [[proto/get-refresh-token]]."
-  [store token]
-  (proto/get-refresh-token store (util/hash-token token)))
-
-(defn revoke-token
-  "Hashes `token` with SHA-256 via [[util/hash-token]] then delegates to
-  [[proto/revoke-token]]."
-  [store token]
-  (proto/revoke-token store (util/hash-token token)))
-
-(defn save-authorization-code
-  "Hashes `code` with SHA-256 via [[util/hash-token]] then delegates to
-  [[proto/save-authorization-code]]."
-  [store code user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource]
-  (proto/save-authorization-code store (util/hash-token code) user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource))
-
-(defn get-authorization-code
-  "Hashes `code` with SHA-256 via [[util/hash-token]] then delegates to
-  [[proto/get-authorization-code]]."
-  [store code]
-  (proto/get-authorization-code store (util/hash-token code)))
-
-(defn delete-authorization-code
-  "Hashes `code` with SHA-256 via [[util/hash-token]] then delegates to
-  [[proto/delete-authorization-code]]."
-  [store code]
-  (proto/delete-authorization-code store (util/hash-token code)))
-
-(defn consume-authorization-code
-  "Hashes `code` with SHA-256 via [[util/hash-token]] then delegates to
-  [[proto/consume-authorization-code]]."
-  [store code]
-  (proto/consume-authorization-code store (util/hash-token code)))
