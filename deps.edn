@@ -5,7 +5,7 @@
   metosin/malli          {:mvn/version "0.20.1"}
   cheshire/cheshire      {:mvn/version "6.2.0"}
   com.nimbusds/nimbus-jose-jwt {:mvn/version "10.8"}
-  com.nimbusds/oauth2-oidc-sdk {:mvn/version "11.36"}}
+  com.nimbusds/oauth2-oidc-sdk {:mvn/version "11.37"}}
 
  :aliases
  {:test
