@@ -2,11 +2,15 @@
   "Conformance suite test runner.
 
   Drives the OpenID Foundation Conformance Suite REST API to create and
-  run a Basic OP test plan, then reports results. Expects the conformance
-  suite to be running (see `docker-compose.yml`)."
+  run a Basic OP test plan, using Playwright for headless browser
+  automation. Expects the conformance suite to be running (see
+  `docker-compose.yml`)."
   (:require
    [cheshire.core :as json])
   (:import
+   [com.microsoft.playwright Browser Browser$NewContextOptions
+                             BrowserType$LaunchOptions Page$WaitForSelectorOptions
+                             Playwright]
    [java.net URI]
    [java.net.http HttpClient HttpClient$Version HttpRequest
                   HttpRequest$BodyPublishers HttpResponse$BodyHandlers]
@@ -23,6 +27,10 @@
 (def ^:private plan-variant
   {"server_metadata"     "discovery"
    "client_registration" "static_client"})
+
+;; ---------------------------------------------------------------------------
+;; HTTP client for conformance suite REST API
+;; ---------------------------------------------------------------------------
 
 (defn- trusting-ssl-context
   "Creates an SSLContext that trusts all certificates. Required for the
@@ -78,6 +86,10 @@
     (when-not (empty? ^String body-str)
       (json/parse-string body-str true))))
 
+;; ---------------------------------------------------------------------------
+;; Conformance suite REST API operations
+;; ---------------------------------------------------------------------------
+
 (defn- create-plan
   "Creates a test plan and returns the plan map with `:id` and `:modules`."
   [^HttpClient client ^String base-url config]
@@ -119,91 +131,99 @@
   (let [request (build-request :get (str base-url "/api/log/" module-id))]
     (send-request client request)))
 
-(defn- find-redirect-url
-  "Extracts the authorization redirect URL from the test module logs."
-  [^HttpClient client ^String base-url ^String module-id]
-  (let [logs (get-test-log client base-url module-id)]
-    (->> logs
-         (keep :redirect_to_authorization_endpoint)
-         first)))
-
-(defn- extract-implicit-url
-  "Extracts the implicit callback POST URL from the conformance suite's
-  callback HTML page JavaScript."
-  [^String html]
-  (when-let [m (re-find #"xhr\.open\('POST',\s*\"([^\"]+)\"" html)]
-    (.replace ^String (second m) "\\/" "/")))
-
 (defn- wait-for-states
   "Polls until the test module reaches one of the given statuses or times
   out. Returns the info map when a target status is reached."
   [^HttpClient client ^String base-url ^String module-id target-statuses timeout-ms]
-  (let [start    (System/currentTimeMillis)
-        targets  (set target-statuses)]
+  (let [start   (System/currentTimeMillis)
+        targets (set target-statuses)]
     (loop []
       (let [info   (get-test-info client base-url module-id)
             status (:status info)]
         (cond
           (targets status) info
           (= status "INTERRUPTED")
-          (throw (ex-info (str "Test INTERRUPTED") {:module-id module-id}))
+          (throw (ex-info "Test INTERRUPTED" {:module-id module-id}))
           (> (- (System/currentTimeMillis) start) timeout-ms)
           (throw (ex-info (str "Timeout (current: " status ")")
                           {:module-id module-id :status status}))
           :else (do (Thread/sleep 1000) (recur)))))))
 
+;; ---------------------------------------------------------------------------
+;; Playwright browser automation
+;; ---------------------------------------------------------------------------
+
+(defn- create-browser
+  "Creates a headless Chromium browser instance via Playwright."
+  ^Browser [^Playwright pw]
+  (-> (.chromium pw)
+      (.launch (-> (BrowserType$LaunchOptions.)
+                   (.setHeadless true)))))
+
+(defn- find-redirect-url
+  "Extracts the most recent authorization redirect URL from the test
+  module logs."
+  [^HttpClient client ^String base-url ^String module-id]
+  (let [logs (get-test-log client base-url module-id)]
+    (->> logs
+         (keep :redirect_to_authorization_endpoint)
+         last)))
+
 (defn- rewrite-host-url
   "Rewrites `host.docker.internal` URLs to `localhost` so the browser
-  simulation can reach the dev server from the host machine."
+  running on the host can reach the dev server."
   ^String [^String url]
   (.replace url "host.docker.internal" "localhost"))
 
 (defn- simulate-browser
-  "When a test is WAITING, simulates the browser flow:
-  1. GET the authorization URL on our provider (auto-approves → 302)
-  2. GET the conformance suite callback URL (returns HTML with JS)
-  3. Extract the implicit POST URL from the JS
-  4. POST to it to signal the authorization flow is complete"
-  [^HttpClient _client ^String base-url ^String module-id]
-  (let [auth-url (or (find-redirect-url _client base-url module-id)
-                     (throw (ex-info "No authorization redirect URL found"
-                                     {:module-id module-id})))
-        http     (-> (HttpClient/newBuilder)
-                     (.sslContext (trusting-ssl-context))
-                     (.version HttpClient$Version/HTTP_1_1)
-                     (.connectTimeout (Duration/ofSeconds 30))
-                     (.build))
-        auth-resp (.send http (build-request :get (rewrite-host-url auth-url))
-                         (HttpResponse$BodyHandlers/ofString))]
-    (when (= 302 (.statusCode auth-resp))
-      (let [callback-url (-> auth-resp .headers (.firstValue "location") .get)
-            cb-resp      (.send http (build-request :get callback-url)
-                                (HttpResponse$BodyHandlers/ofString))
-            implicit-url (extract-implicit-url (.body cb-resp))]
-        (when implicit-url
-          (let [post-req (-> (HttpRequest/newBuilder)
-                            (.uri (URI/create implicit-url))
-                            (.timeout (Duration/ofSeconds 30))
-                            (.header "Content-Type" "text/plain")
-                            (.POST (HttpRequest$BodyPublishers/ofString ""))
-                            (.build))]
-            (.send http post-req (HttpResponse$BodyHandlers/ofString))))))))
+  "Opens a headless browser page, navigates to the authorization URL,
+  and waits for the conformance suite callback JS to signal completion.
+  Returns true if the page completed, false if no redirect URL was found."
+  [^Browser browser ^HttpClient client ^String base-url ^String module-id]
+  (if-let [auth-url (find-redirect-url client base-url module-id)]
+    (let [context (.newContext browser
+                              (-> (Browser$NewContextOptions.)
+                                  (.setIgnoreHTTPSErrors true)))
+          page    (.newPage context)]
+      (try
+        (.navigate page (rewrite-host-url auth-url))
+        (.waitForSelector page "#submission_complete"
+                          (-> (Page$WaitForSelectorOptions.)
+                              (.setTimeout 30000)))
+        true
+        (catch Exception _e false)
+        (finally
+          (.close context))))
+    false))
+
+;; ---------------------------------------------------------------------------
+;; Test execution
+;; ---------------------------------------------------------------------------
 
 (defn- run-module
   "Runs a single test module following the conformance suite lifecycle:
   create → wait for CONFIGURED/WAITING/FINISHED → start if CONFIGURED →
-  simulate browser if WAITING → wait for FINISHED."
-  [^HttpClient client ^String base-url plan-id module-name module-variant]
+  simulate browser each time the test enters WAITING → wait for FINISHED."
+  [^Browser browser ^HttpClient client ^String base-url plan-id module-name module-variant]
   (let [module    (create-test-from-plan client base-url plan-id module-name module-variant)
         module-id (:id module)
         info      (wait-for-states client base-url module-id
                                    ["CONFIGURED" "WAITING" "FINISHED"] 60000)]
     (when (= (:status info) "CONFIGURED")
-      (start-test client base-url module-id)
-      (wait-for-states client base-url module-id ["WAITING" "FINISHED"] 60000))
-    (when (= (:status (get-test-info client base-url module-id)) "WAITING")
-      (simulate-browser client base-url module-id))
-    (wait-for-states client base-url module-id ["FINISHED"] 300000)))
+      (start-test client base-url module-id))
+    (loop [attempts 0]
+      (let [current (wait-for-states client base-url module-id
+                                     ["WAITING" "FINISHED"] 60000)]
+        (cond
+          (= (:status current) "FINISHED")
+          current
+
+          (>= attempts 5)
+          (wait-for-states client base-url module-id ["FINISHED"] 10000)
+
+          :else
+          (do (simulate-browser browser client base-url module-id)
+              (recur (inc attempts))))))))
 
 (defn- print-results
   "Prints a summary of test results and returns the count of failures."
@@ -232,25 +252,30 @@
         client   (create-http-client)]
     (println (str "Conformance server: " base-url))
     (println (str "Creating test plan: " plan-name))
-    (let [plan    (create-plan client base-url config)
-          plan-id (:id plan)
-          modules (:modules plan)]
-      (println (str "Plan created: " plan-id " (" (count modules) " modules)"))
-      (println)
-      (let [results (reduce
-                     (fn [acc {:keys [testModule variant]}]
-                       (print (str "  Running: " testModule "... "))
-                       (flush)
-                       (try
-                         (let [info (run-module client base-url plan-id testModule variant)]
-                           (println (:result info))
-                           (conj acc {:name testModule :result (:result info)}))
-                         (catch Exception e
-                           (println (str "ERROR: " (or (.getMessage e) (str e))))
-                           (conj acc {:name testModule :result "FAILED"}))))
-                     []
-                     modules)]
-        (print-results results)))))
+    (with-open [pw (Playwright/create)]
+      (let [browser (create-browser pw)
+            plan    (create-plan client base-url config)
+            plan-id (:id plan)
+            modules (:modules plan)]
+        (println (str "Plan created: " plan-id " (" (count modules) " modules)"))
+        (println)
+        (try
+          (let [results (reduce
+                         (fn [acc {:keys [testModule variant]}]
+                           (print (str "  Running: " testModule "... "))
+                           (flush)
+                           (try
+                             (let [info (run-module browser client base-url plan-id testModule variant)]
+                               (println (:result info))
+                               (conj acc {:name testModule :result (:result info)}))
+                             (catch Exception e
+                               (println (str "ERROR: " (or (.getMessage e) (str e))))
+                               (conj acc {:name testModule :result "FAILED"}))))
+                         []
+                         modules)]
+            (print-results results))
+          (finally
+            (.close browser)))))))
 
 (defn -main
   "Runs the Basic OP conformance tests against the conformance suite."

@@ -57,6 +57,7 @@
 
   :conformance
   {:extra-paths ["dev"]
-   :extra-deps  {ring/ring-jetty-adapter {:mvn/version "1.15.3"}
-                 ring/ring-core          {:mvn/version "1.15.3"}}
+   :extra-deps  {ring/ring-jetty-adapter              {:mvn/version "1.15.3"}
+                 ring/ring-core                      {:mvn/version "1.15.3"}
+                 com.microsoft.playwright/playwright {:mvn/version "1.51.0"}}
    :main-opts   ["-m" "oidc-provider.conformance"]}}}

@@ -171,7 +171,7 @@
       :grant-types                ["authorization_code" "refresh_token"]
       :response-types             ["code"]
       :scopes                     ["openid" "profile" "email"]
-      :token-endpoint-auth-method "client_secret_basic"})))
+      :token-endpoint-auth-method "client_secret_post"})))
 
 (defn -main
   "Starts the dev OIDC provider server. Port defaults to 9090 and can be
