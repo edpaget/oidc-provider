@@ -51,10 +51,18 @@
                    {"error"             (or (:error data) "invalid_request")
                     "error_description" (.getMessage e)})))
 
+(def ^:private conformance-callback
+  "Redirect URI used by the conformance suite."
+  "https://localhost.emobix.co.uk:8443/test/a/oidc-provider/callback")
+
 (defn- create-app-provider
-  "Creates a provider configured for the dev server."
+  "Creates a provider configured for the dev server. The base URL defaults
+  to `http://localhost:9090` but can be overridden via `BASE_URL` or `PORT`
+  environment variables. Use `BASE_URL=http://host.docker.internal:9090`
+  when the conformance suite runs in Docker."
   []
-  (let [base-url "http://localhost:9090"
+  (let [port     (or (System/getenv "PORT") "9090")
+        base-url (or (System/getenv "BASE_URL") (str "http://localhost:" port))
         rsa-key  (token/generate-rsa-key)]
     (provider/create-provider
      {:issuer                 base-url
@@ -139,26 +147,40 @@
       wrap-keyword-params
       wrap-params))
 
-(defn- register-test-client
-  "Pre-registers a test client with known credentials."
+(defn- register-test-clients
+  "Pre-registers two test clients with known credentials. The conformance
+  suite requires two separate clients for its test scenarios."
   [provider]
-  (provider/register-client
-   provider
-   {:client-id                  "test-client"
-    :client-type                "confidential"
-    :client-secret-hash         (util/hash-client-secret "test-secret")
-    :redirect-uris              ["https://example.com/callback"]
-    :grant-types                ["authorization_code" "refresh_token"]
-    :response-types             ["code"]
-    :scopes                     ["openid" "profile" "email"]
-    :token-endpoint-auth-method "client_secret_basic"}))
+  (let [redirect-uris ["https://example.com/callback" conformance-callback]]
+    (provider/register-client
+     provider
+     {:client-id                  "test-client"
+      :client-type                "confidential"
+      :client-secret-hash         (util/hash-client-secret "test-secret")
+      :redirect-uris              redirect-uris
+      :grant-types                ["authorization_code" "refresh_token"]
+      :response-types             ["code"]
+      :scopes                     ["openid" "profile" "email"]
+      :token-endpoint-auth-method "client_secret_basic"})
+    (provider/register-client
+     provider
+     {:client-id                  "test-client-2"
+      :client-type                "confidential"
+      :client-secret-hash         (util/hash-client-secret "test-secret-2")
+      :redirect-uris              redirect-uris
+      :grant-types                ["authorization_code" "refresh_token"]
+      :response-types             ["code"]
+      :scopes                     ["openid" "profile" "email"]
+      :token-endpoint-auth-method "client_secret_basic"})))
 
 (defn -main
-  "Starts the dev OIDC provider server on port 9090."
+  "Starts the dev OIDC provider server. Port defaults to 9090 and can be
+  overridden via the `PORT` environment variable."
   [& _args]
-  (let [provider (create-app-provider)
-        _        (register-test-client provider)
+  (let [port     (Integer/parseInt (or (System/getenv "PORT") "9090"))
+        provider (create-app-provider)
+        _        (register-test-clients provider)
         app      (create-app provider)]
-    (println "Starting OIDC provider dev server on http://localhost:9090")
-    (println "Test client: client_id=test-client client_secret=test-secret")
-    (jetty/run-jetty app {:port 9090 :join? true})))
+    (println (str "Starting OIDC provider dev server on http://localhost:" port))
+    (println "Test clients: test-client/test-secret, test-client-2/test-secret-2")
+    (jetty/run-jetty app {:port port :join? true})))

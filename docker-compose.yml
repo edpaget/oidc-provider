@@ -1,0 +1,46 @@
+# Runs the OpenID Conformance Suite for testing the OIDC provider.
+#
+# Prerequisites: clone and build the conformance suite first:
+#
+#   git clone https://gitlab.com/openid/conformance-suite.git
+#   cd conformance-suite
+#   MAVEN_CACHE=./m2 docker compose -f builder-compose.yml run builder
+#   cd ..
+#
+# Then start with: docker compose up -d
+# Access the UI at: https://localhost.emobix.co.uk:8443/
+
+services:
+  mongodb:
+    image: mongo:6.0.13
+    volumes:
+      - mongodb-data:/data/db
+
+  server:
+    build:
+      context: ./conformance-suite/server-dev
+    depends_on:
+      - mongodb
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./conformance-suite/target:/server
+    command: >
+      java
+      -jar /server/fapi-test-suite.jar
+      --fintechlabs.devmode=true
+      --fintechlabs.startredir=true
+      --fintechlabs.base_url=https://localhost.emobix.co.uk:8443
+      --spring.data.mongodb.uri=mongodb://mongodb:27017/test_suite
+
+  nginx:
+    build:
+      context: ./conformance-suite/nginx
+      dockerfile: Dockerfile-static
+    depends_on:
+      - server
+    ports:
+      - "8443:8443"
+
+volumes:
+  mongodb-data:

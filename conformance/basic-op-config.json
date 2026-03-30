@@ -1,0 +1,15 @@
+{
+  "description": "oidc-provider Basic OP conformance test",
+  "alias": "oidc-provider",
+  "server": {
+    "discoveryUrl": "http://host.docker.internal:9090/.well-known/openid-configuration"
+  },
+  "client": {
+    "client_id": "test-client",
+    "client_secret": "test-secret"
+  },
+  "client2": {
+    "client_id": "test-client-2",
+    "client_secret": "test-secret-2"
+  }
+}

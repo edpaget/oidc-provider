@@ -28,3 +28,6 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+# Conformance suite (cloned by conformance/setup.sh)
+conformance-suite/
