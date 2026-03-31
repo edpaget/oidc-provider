@@ -1,8 +1,20 @@
 # oidc-provider
 
 Full OIDC identity provider implementation.
-- **Namespaces**: `oidc-provider.core`, `oidc-provider.authorization`, `oidc-provider.token-endpoint`, `oidc-provider.discovery`, `oidc-provider.protocol`, `oidc-provider.token`, `oidc-provider.store`
+- **Namespaces**: `oidc-provider.core`, `oidc-provider.authorization`, `oidc-provider.token-endpoint`, `oidc-provider.discovery`, `oidc-provider.protocol`, `oidc-provider.token`, `oidc-provider.store`, `oidc-provider.error`
 - **Features**: Authorization code flow, refresh tokens, client credentials, pluggable storage
+
+## Architecture
+
+### Serialization boundary
+This library does **not** perform JSON serialization or deserialization. All public functions accept and return plain Clojure data structures (keyword maps, vectors, etc.). Ring response functions (`token-response`, `registration-response`, `revocation-response`, `userinfo-response`) return Ring response maps whose `:body` values are Clojure maps, not JSON strings.
+
+Integrators are responsible for adding Ring middleware to handle serialization at the edges:
+- **Response serialization**: `ring.middleware.json/wrap-json-response` (or equivalent) to serialize `:body` maps to JSON
+- **Request deserialization**: `ring.middleware.json/wrap-json-body` to parse incoming JSON bodies into keyword maps before they reach `registration-response`
+- **Form params**: `ring.middleware.params/wrap-params` + `ring.middleware.keyword-params/wrap-keyword-params` for token and revocation endpoints
+
+Do not add `cheshire.core` or any JSON library as a dependency of `oidc-provider.core`. If you find yourself calling `json/generate-string` or `json/parse-string` in core, you are violating this boundary.
 
 ---
 

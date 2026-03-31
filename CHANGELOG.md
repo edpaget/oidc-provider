@@ -8,21 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- Ring `userinfo-handler` for the UserInfo endpoint (RFC 5765 §5.3) with Bearer token authentication
+- `userinfo-response` for the UserInfo endpoint (OIDC Core §5.3) with Bearer token authentication
+- `token-response` for the token endpoint with RFC 6749 §5.1 compliant `Cache-Control: no-store` and `Pragma: no-cache` headers on all success and error responses
+- `registration-response` for dynamic client registration (RFC 7591) and client read (RFC 7592)
+- `revocation-response` for token revocation (RFC 7009)
+- `oidc-provider.error` namespace with keyword hierarchy for structured error dispatch via `isa?`
+- `RingRequest` and `RingResponse` malli schemas in `oidc-provider.core`
 - Client config validation against `ClientRegistration` schema in `register-client` before delegating to the store
 - Issuer URL validation per RFC 8414 §2 — HTTPS required, no query or fragment components
 - `:allow-http-issuer` option for development use with HTTP issuers
-- Ring `token-handler` for the token endpoint with RFC 6749 §5.1 compliant `Cache-Control: no-store` and `Pragma: no-cache` headers on all success and error responses
 - Server-level `grant-types-supported` enforcement in token endpoint — grant types not in the provider's allowed list are rejected with `unsupported_grant_type` error per RFC 6749 §5.2
 - `unsupported_grant_type` error code in ex-data for unknown or disabled grant types
 
 ### Changed
 - Default `token_endpoint_auth_method` for dynamic registration is now `client_secret_basic` per RFC 7591 §2 (was incorrectly `none`)
 - `handle-registration-request` accepts an optional `opts` map with `:clock` and `:registration-endpoint`
+- **Breaking:** `oidc-provider.ring` namespace deleted — all Ring response functions now live in `oidc-provider.core` (`token-response`, `registration-response`, `revocation-response`, `userinfo-response`)
+- **Breaking:** Ring response `:body` values are now plain Clojure maps (keyword keys), not JSON strings — integrators must add `wrap-json-response` middleware for JSON serialization
+- **Breaking:** `registration-response` expects `:body` to be a pre-parsed map (via `wrap-json-body` middleware), not a raw input stream
 - **Breaking:** `dynamic-read-client` and `handle-client-read` now return the client config map directly on success and throw `ex-info` on failure, instead of returning Ring-style `{:status :body}` maps
+- **Breaking:** Handler-creating functions (`registration-handler`, `revocation-handler`, `userinfo-handler`) replaced by direct response functions that take `[provider request]` and return a Ring response map
 - `handle-revocation-request` now returns `:ok` on success and throws `ex-info` on failure, instead of returning Ring response maps
-- Response-formatting functions (`token-error-response`, `token-success-response`, `registration-error-response`) removed from domain namespaces — Ring response construction is now exclusively in the HTTP layer
+- Response-formatting functions (`token-error-response`, `token-success-response`, `registration-error-response`) removed from domain namespaces
 - Error `ex-info` throws now include a `:type` keyword from the `oidc-provider.error` hierarchy, enabling structured dispatch via `isa?`
+- Malli `m/=>` schemas added to all public functions in `oidc-provider.core`
 
 ### Fixed
 - Registration response now includes `client_secret_expires_at` (value `0` for non-expiring) when a `client_secret` is issued, per RFC 7591 §3.2.1

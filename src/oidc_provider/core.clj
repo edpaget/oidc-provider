@@ -1,12 +1,21 @@
 (ns oidc-provider.core
-  "Core OIDC provider setup and configuration."
+  "Core OIDC provider setup and configuration.
+
+  Provides [[create-provider]] for initialization, domain functions like
+  [[token-request]] and [[dynamic-register-client]] that return pure data,
+  and Ring response functions like [[token-response]], [[registration-response]],
+  [[revocation-response]], and [[userinfo-response]] that return Ring response
+  maps with plain Clojure data as bodies. Use Ring middleware such as
+  `wrap-json-response` to handle JSON serialization."
   (:require
+   [clojure.string :as str]
    [malli.core :as m]
    [oidc-provider.authorization :as authz]
    [oidc-provider.discovery :as disco]
+   [oidc-provider.error :as error]
    [oidc-provider.protocol :as proto]
    [oidc-provider.registration :as reg]
-   [oidc-provider.ring :as ring-handlers]
+   [oidc-provider.revocation :as revocation]
    [oidc-provider.store :as store]
    [oidc-provider.token :as token]
    [oidc-provider.token-endpoint :as token-ep]
@@ -16,6 +25,69 @@
    [java.time Clock]))
 
 (set! *warn-on-reflection* true)
+
+;; ---------------------------------------------------------------------------
+;; Ring response helpers
+;; ---------------------------------------------------------------------------
+
+(defn- extract-bearer-token
+  "Extracts the Bearer token from the Authorization header, or returns nil."
+  [request]
+  (when-let [auth (get-in request [:headers "authorization"])]
+    (when (str/starts-with? auth "Bearer ")
+      (subs auth 7))))
+
+(def ^:private no-cache-headers
+  {"Cache-Control" "no-store"
+   "Pragma"        "no-cache"})
+
+(def ^:private auth-failure-headers
+  (assoc no-cache-headers "WWW-Authenticate" "Bearer"))
+
+(defn- extract-client-id
+  "Extracts the last non-empty path segment from the URI."
+  [uri]
+  (->> (str/split uri #"/")
+       (remove str/blank?)
+       last))
+
+(defn- bearer-unauthorized
+  "Returns a 401 response with `WWW-Authenticate: Bearer` header and optional
+  error code. Per RFC 6750 §3.1 the error is omitted when no token was
+  presented."
+  ([]
+   {:status  401
+    :headers {"WWW-Authenticate" "Bearer"}})
+  ([error-code]
+   {:status  401
+    :headers {"WWW-Authenticate" (str "Bearer error=\"" error-code "\"")}
+    :body    {:error error-code}}))
+
+(defn- method-not-allowed
+  "Returns a 405 response with the allowed methods."
+  [allowed]
+  {:status  405
+   :headers {"Allow" allowed}
+   :body    {:error :method_not_allowed}})
+
+(defn- unsupported-media-type
+  "Returns a 415 response requiring `application/x-www-form-urlencoded`."
+  []
+  {:status  415
+   :headers {"Accept" "application/x-www-form-urlencoded"}
+   :body    {:error             :invalid_request
+             :error_description "Content-Type must be application/x-www-form-urlencoded"}})
+
+(defn- form-urlencoded?
+  "Returns true when the request content-type starts with
+  `application/x-www-form-urlencoded`."
+  [request]
+  (some-> (get-in request [:headers "content-type"])
+          (str/starts-with? "application/x-www-form-urlencoded")))
+
+;; ---------------------------------------------------------------------------
+;; Provider setup
+;; ---------------------------------------------------------------------------
 
 (def ProviderSetup
   "Malli schema for provider setup configuration."
@@ -49,6 +121,22 @@
                      code-store
                      token-store
                      claims-provider])
+
+(def RingRequest
+  "Malli schema for an incoming Ring request map."
+  [:map
+   [:request-method keyword?]
+   [:headers {:optional true} [:map-of :string :string]]
+   [:uri {:optional true} :string]
+   [:params {:optional true} :map]
+   [:body {:optional true} :any]])
+
+(def RingResponse
+  "Malli schema for an outgoing Ring response map."
+  [:map
+   [:status pos-int?]
+   [:headers {:optional true} [:map-of :string :string]]
+   [:body {:optional true} :any]])
 
 (defn create-provider
   "Creates an OIDC provider instance.
@@ -114,6 +202,8 @@
                 (store/->HashingTokenStore (or token-store (store/create-token-store)))
                 claims-provider)))
 
+(m/=> create-provider [:=> [:cat ProviderSetup] :any])
+
 (defn discovery-metadata
   "Returns OpenID Connect Discovery metadata for the provider.
 
@@ -139,6 +229,8 @@
                  :revocation-endpoint
                  :client-id-metadata-document-supported])))
 
+(m/=> discovery-metadata [:=> [:cat :any] :map])
+
 (defn jwks
   "Returns JWKS for the provider.
 
@@ -147,6 +239,8 @@
    the JWKS endpoint."
   [provider]
   (disco/jwks-endpoint (:provider-config provider)))
+
+(m/=> jwks [:=> [:cat :any] :map])
 
 (defn parse-authorization-request
   "Validates an authorization request.
@@ -157,6 +251,8 @@
    authorization request map. Throws `ex-info` on validation errors."
   [provider params]
   (authz/parse-authorization-request params (:client-store provider)))
+
+(m/=> parse-authorization-request [:=> [:cat :any :map] :map])
 
 (defn authorize
   "Handles authorization approval after user authentication.
@@ -173,6 +269,8 @@
                   (:code-store provider))]
     (authz/build-redirect-url response)))
 
+(m/=> authorize [:=> [:cat :any :map :string] :string])
+
 (defn deny-authorization
   "Handles authorization denial.
 
@@ -183,6 +281,8 @@
   [{:keys [provider-config] :as _provider} request error-code error-description]
   (let [response (authz/handle-authorization-denial request error-code error-description provider-config)]
     (authz/build-redirect-url response)))
+
+(m/=> deny-authorization [:=> [:cat :any :map :string :string] :string])
 
 (defn token-request
   "Handles token endpoint request.
@@ -206,6 +306,8 @@
    (:token-store provider)
    (:claims-provider provider)))
 
+(m/=> token-request [:=> [:cat :any :map [:maybe :string]] :map])
+
 (defn register-client
   "Registers a new OAuth2/OIDC client.
 
@@ -217,6 +319,8 @@
   {:pre [(m/validate proto/ClientRegistration client-config)]}
   (proto/register-client (:client-store provider) client-config))
 
+(m/=> register-client [:=> [:cat :any proto/ClientRegistration] :map])
+
 (defn get-client
   "Retrieves a client configuration.
 
@@ -225,6 +329,8 @@
    or nil if the client doesn't exist."
   [provider client-id]
   (proto/get-client (:client-store provider) client-id))
+
+(m/=> get-client [:=> [:cat :any :string] [:maybe :map]])
 
 (defn dynamic-register-client
   "Dynamically registers a new OAuth2/OIDC client per RFC 7591.
@@ -240,6 +346,8 @@
      {:clock                 (:clock provider-config)
       :registration-endpoint (:registration-endpoint (:config provider))})))
 
+(m/=> dynamic-register-client [:=> [:cat :any :map] :map])
+
 (defn dynamic-read-client
   "Reads a dynamically registered client's configuration per RFC 7592.
 
@@ -250,35 +358,125 @@
   [provider client-id access-token]
   (reg/handle-client-read (:client-store provider) client-id access-token))
 
-(defn registration-handler
-  "Creates a Ring handler for dynamic client registration.
+(m/=> dynamic-read-client [:=> [:cat :any :string :string] :map])
 
-   Takes a Provider instance. To gate registration access, use
-   application-level middleware."
-  [provider]
-  (ring-handlers/registration-handler
-   (:client-store provider)
-   {:clock                 (get-in provider [:provider-config :clock])
-    :registration-endpoint (:registration-endpoint (:config provider))}))
+;; ---------------------------------------------------------------------------
+;; Ring response functions
+;; ---------------------------------------------------------------------------
 
-(defn revocation-handler
-  "Creates a Ring handler for RFC 7009 token revocation.
+(defn registration-response
+  "Returns a Ring response for dynamic client registration (RFC 7591/7592).
 
-   Takes a Provider instance and returns a Ring handler that accepts POST
-   requests to revoke access or refresh tokens."
-  [provider]
-  (ring-handlers/revocation-handler
-   (:client-store provider)
-   (:token-store provider)))
+  Dispatches POST for registration and GET for client configuration reads.
+  Takes a Provider instance and a Ring `request` whose `:body` has already been
+  parsed to a keyword map (e.g. via `wrap-json-body` or `wrap-keyword-params`).
+  To gate registration access, use application-level middleware."
+  [provider request]
+  (case (:request-method request)
+    :post (if-not (map? (:body request))
+            {:status 400
+             :body   {:error             :invalid_client_metadata
+                      :error_description "Missing or malformed JSON body"}}
+            (try
+              {:status 201
+               :body   (dynamic-register-client provider (:body request))}
+              (catch clojure.lang.ExceptionInfo e
+                {:status 400
+                 :body   {:error             :invalid_client_metadata
+                          :error_description (or (:error_description (ex-data e))
+                                                 "invalid_client_metadata")}})))
+    :get  (let [token (extract-bearer-token request)]
+            (if-not token
+              {:status 401
+               :body   {:error :invalid_token}}
+              (try
+                (let [client-id (extract-client-id (:uri request))]
+                  {:status 200
+                   :body   (dynamic-read-client provider client-id token)})
+                (catch clojure.lang.ExceptionInfo _
+                  {:status 401
+                   :body   {:error :invalid_token}}))))
+    (method-not-allowed "GET, POST")))
 
-(defn userinfo-handler
-  "Creates a Ring handler for the OIDC UserInfo endpoint (OIDC Core §5.3).
+(m/=> registration-response [:=> [:cat :any RingRequest] RingResponse])
 
-   Takes a Provider instance and returns a Ring handler that accepts GET
-   and POST requests with a Bearer token. Returns user claims as JSON,
-   filtered by the access token's scope."
-  [provider]
-  (ring-handlers/userinfo-handler
-   (:token-store provider)
-   (:claims-provider provider)
-   (get-in provider [:provider-config :clock])))
+(defn revocation-response
+  "Returns a Ring response for RFC 7009 token revocation.
+
+  Only accepts POST requests with `application/x-www-form-urlencoded` content
+  type. Returns 200 on success, 400 for missing token, or 401 on auth failure."
+  [provider request]
+  (if (not= :post (:request-method request))
+    (method-not-allowed "POST")
+    (if-not (form-urlencoded? request)
+      (unsupported-media-type)
+      (try
+        (let [auth-header (get-in request [:headers "authorization"])]
+          (revocation/handle-revocation-request
+           (:params request) auth-header
+           (:client-store provider) (:token-store provider))
+          {:status 200})
+        (catch clojure.lang.ExceptionInfo e
+          (if (error/request-error? (:type (ex-data e)))
+            {:status  400
+             :headers no-cache-headers
+             :body    {:error             (keyword (ex-message e))
+                       :error_description (:error_description (ex-data e))}}
+            {:status  401
+             :headers auth-failure-headers
+             :body    {:error :invalid_client}}))))))
+
+(m/=> revocation-response [:=> [:cat :any RingRequest] RingResponse])
+
+(defn token-response
+  "Returns a Ring response for the OAuth2 token endpoint (RFC 6749 §3.2).
+
+  Only accepts POST requests with `application/x-www-form-urlencoded` content
+  type. Success responses include `Cache-Control: no-store` and `Pragma: no-cache`
+  headers per RFC 6749 §5.1."
+  [provider request]
+  (if (not= :post (:request-method request))
+    (method-not-allowed "POST")
+    (if-not (form-urlencoded? request)
+      (unsupported-media-type)
+      (try
+        (let [auth-header (get-in request [:headers "authorization"])
+              result      (token-request provider (:params request) auth-header)]
+          {:status  200
+           :headers no-cache-headers
+           :body    result})
+        (catch clojure.lang.ExceptionInfo e
+          {:status  400
+           :headers no-cache-headers
+           :body    (cond-> {:error (or (:error (ex-data e)) "invalid_request")}
+                      (ex-message e) (assoc :error_description (ex-message e)))})))))
+
+(m/=> token-response [:=> [:cat :any RingRequest] RingResponse])
+
+(defn userinfo-response
+  "Returns a Ring response for the OIDC UserInfo endpoint (OIDC Core §5.3).
+
+  Accepts GET and POST requests with a Bearer token in the Authorization header.
+  Looks up the access token, validates expiry, retrieves user claims filtered by
+  the token's scope, and returns them as a Clojure map."
+  [provider request]
+  (if-not (#{:get :post} (:request-method request))
+    (method-not-allowed "GET, POST")
+    (let [clock      ^Clock (get-in provider [:provider-config :clock])
+          token      (extract-bearer-token request)
+          token-data (when token (proto/get-access-token (:token-store provider) token))
+          expired?   (when token-data (> (.millis clock) (:expiry token-data)))]
+      (cond
+        (not token)
+        (bearer-unauthorized)
+
+        (or (not token-data) expired?)
+        (bearer-unauthorized "invalid_token")
+
+        :else
+        {:status 200
+         :body   (proto/get-claims (:claims-provider provider)
+                                   (:user-id token-data)
+                                   (:scope token-data))}))))
+
+(m/=> userinfo-response [:=> [:cat :any RingRequest] RingResponse])
