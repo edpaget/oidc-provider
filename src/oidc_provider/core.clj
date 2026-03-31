@@ -146,7 +146,8 @@
    `:jwks-uri` (required for OIDC; omit for plain OAuth2),
    `:signing-key` (RSAKey for signing tokens, generated if `:jwks-uri` is provided),
    `:access-token-ttl-seconds` (defaults to 3600), `:id-token-ttl-seconds` (defaults to
-   3600), `:authorization-code-ttl-seconds` (defaults to 600), `:client-store`,
+   3600), `:authorization-code-ttl-seconds` (defaults to 600 per the RFC 6749 §4.1.2
+   maximum recommendation; shorter values are recommended for production), `:client-store`,
    `:code-store`, `:token-store` (all three store implementations created in-memory if
    not provided), and `:claims-provider` (required for ID token claims).
 

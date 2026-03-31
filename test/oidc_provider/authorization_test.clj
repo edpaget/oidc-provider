@@ -187,6 +187,24 @@
       (is (= "test-client" (:client-id code-data)))
       (is (= ["openid" "profile"] (:scope code-data))))))
 
+(deftest handle-authorization-approval-custom-ttl-test
+  (testing "custom authorization-code-ttl-seconds changes stored code expiry"
+    (let [now             1000000
+          clock           (Clock/fixed (java.time.Instant/ofEpochMilli now) java.time.ZoneOffset/UTC)
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          provider-config {:issuer                         "https://test.example.com"
+                           :authorization-code-ttl-seconds 120
+                           :clock                          clock}
+          request         {:response_type "code"
+                           :client_id     "test-client"
+                           :redirect_uri  "https://app.example.com/callback"
+                           :scope         "openid"}
+          response        (authz/handle-authorization-approval
+                           request "user-123" provider-config code-store)
+          code            (get-in response [:params :code])
+          code-data       (proto/get-authorization-code code-store code)]
+      (is (= (+ now (* 1000 120)) (:expiry code-data))))))
+
 (deftest handle-authorization-denial-test
   (testing "generates error response with iss parameter"
     (let [request         {:redirect_uri "https://app.example.com/callback"
