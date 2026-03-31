@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Ring `userinfo-handler` for the UserInfo endpoint (RFC 5765 §5.3) with Bearer token authentication
 - Client config validation against `ClientRegistration` schema in `register-client` before delegating to the store
 - Issuer URL validation per RFC 8414 §2 — HTTPS required, no query or fragment components
 - `:allow-http-issuer` option for development use with HTTP issuers

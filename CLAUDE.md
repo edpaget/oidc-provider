@@ -152,13 +152,136 @@ clj-kondo --lint src test
 - Use the body for additional context when needed
 
 ## Changelog
-- Keep `CHANGELOG.md` updated when making user-facing changes (`feat`, `fix`, `refactor` that changes behavior)
+- **Every `feat` or `fix` commit must have a corresponding `CHANGELOG.md` entry** — treat a missing entry as a build failure
 - Follow [Keep a Changelog](https://keepachangelog.com/) format
 - Add entries under `## [Unreleased]` in the appropriate section: `Added`, `Fixed`, `Changed`, `Deprecated`, `Removed`, `Security`
 - Write entries as concise, human-readable descriptions of what changed (not commit messages)
+- Include the relevant RFC or spec section when applicable (e.g., "per RFC 6749 §5.2")
+- `refactor` commits that change public API surface or user-visible behavior also require an entry
 - Do not update the changelog for internal-only changes like `test`, `docs`, `ci`, `style`, or `chore`
+- When completing a task, review `git log` since the last release tag and verify every `feat`/`fix` commit has a changelog entry before considering the work done
 
 ## Context Maintenance
 - Use `clojure_eval` with `:reload` to ensure you're working with the latest code
 - always switch into `(in-ns ...)` the namespace that you are working on
 - Keep function and namespace references fully qualified when crossing namespace boundaries
+
+# rdm
+
+rdm is a CLI for managing project roadmaps, phases, and tasks. Use these instructions to interact with plan data exclusively through the rdm CLI.
+
+## Setup
+
+The plan repo location is set via `RDM_ROOT` environment variable or `--root` flag. The project is specified with `--project oidc-provider` (or set `RDM_PROJECT` env var, or configure `default_project` in `rdm.toml`).
+
+## Discovering work
+
+```bash
+rdm roadmap list --project oidc-provider       # list all roadmaps with progress
+rdm task list --project oidc-provider           # list open/in-progress tasks
+rdm task list --project oidc-provider --status all  # list all tasks including done
+```
+
+## Reading details
+
+```bash
+rdm roadmap show <slug> --project oidc-provider          # show roadmap with phases and body
+rdm phase list --roadmap <slug> --project oidc-provider  # list phases with numbers and statuses
+rdm phase show <stem-or-number> --roadmap <slug> --project oidc-provider  # show phase details
+rdm task show <slug> --project oidc-provider             # show task details
+```
+
+Add `--no-body` to any `show` command to suppress body content when you only need metadata.
+
+## Updating status
+
+Always pass `--no-edit` to prevent the CLI from opening an interactive editor.
+
+```bash
+rdm phase update <stem-or-number> --status done --no-edit --roadmap <slug> --project oidc-provider
+rdm task update <slug> --status done --no-edit --project oidc-provider
+```
+
+## Creating items
+
+Always pass `--no-edit` to suppress the interactive editor.
+
+```bash
+rdm roadmap create <slug> --title "Title" --body "Summary." --no-edit --project oidc-provider
+rdm phase create <slug> --title "Title" --number <n> --body "Details." --no-edit --roadmap <slug> --project oidc-provider
+rdm task create <slug> --title "Title" --body "Description." --no-edit --project oidc-provider
+```
+
+## Body content
+
+Use `--body` for short inline content. For multiline content, pipe via stdin:
+
+```bash
+rdm task create <slug> --title "Title" --no-edit --project oidc-provider <<'EOF'
+Multi-line body content goes here.
+
+It supports full Markdown.
+EOF
+```
+
+Do **not** use `--body` and stdin together — the CLI will error.
+
+## Planning workflow
+
+### Before starting work
+
+Run `rdm roadmap list --project oidc-provider` to see all roadmaps and their progress. Check `rdm task list --project oidc-provider` for open tasks. Identify what is in-progress and what comes next before writing any code.
+
+### Implementing a roadmap phase
+
+1. Read the phase: `rdm phase show <stem-or-number> --roadmap <slug> --project oidc-provider`
+2. Plan your approach and get approval before starting
+3. Implement the work described in the phase
+4. Include a `Done:` line in the git commit message — the post-merge hook will mark the phase done and record the commit SHA.
+   **Use the exact roadmap slug and phase stem from the rdm commands above — do NOT invent or paraphrase them:**
+   ```
+   Done: <roadmap-slug>/<phase-stem>
+   ```
+5. Check the next phase: `rdm phase list --roadmap <slug> --project oidc-provider`
+
+### Completing a task
+
+1. Implement the work described in the task
+2. Include a `Done: task/<slug>` line in the git commit message — the post-merge hook will mark the task done and record the commit SHA.
+   **Use the exact task slug from the rdm commands above — do NOT invent or paraphrase it.**
+
+### Discovering bugs or side-work
+
+If you encounter a bug or unrelated improvement while working on a phase, do not fix it inline. Create a task instead:
+
+```bash
+rdm task create <slug> --title "Description of the issue" --body "Details." --no-edit --project oidc-provider
+```
+
+This keeps the current phase focused and ensures nothing is forgotten.
+
+### When a task grows too complex
+
+If a task becomes large enough to warrant multiple phases, promote it to a roadmap:
+
+```bash
+rdm promote <task-slug> --roadmap-slug <new-roadmap-slug> --project oidc-provider
+```
+
+## Status transitions
+
+### Phase statuses
+
+- `not-started` → `in-progress` — work begins
+- `in-progress` → `done` — work is complete
+- `in-progress` → `blocked` — waiting on an external dependency
+- `blocked` → `in-progress` — blocker resolved
+- `done` is terminal (can be manually reverted if needed)
+
+### Task statuses
+
+- `open` → `in-progress` — work begins
+- `in-progress` → `done` — work is complete
+- `in-progress` → `wont-fix` — decided not to do
+- `open` → `wont-fix` — decided not to do before starting
+- `done` and `wont-fix` are terminal
