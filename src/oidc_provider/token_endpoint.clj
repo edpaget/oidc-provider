@@ -218,7 +218,7 @@
                            (let [user-claims (proto/get-claims claims-provider user-id scope)]
                              (token/generate-id-token
                               provider-config user-id (:client-id client)
-                              user-claims {:nonce (:nonce code-data)})))]
+                              user-claims {:nonce (:nonce code-data) :azp true})))]
       (proto/save-access-token token-store access-token user-id (:client-id client) scope expiry resource)
       (when refresh-token
         (proto/save-refresh-token token-store refresh-token user-id (:client-id client) scope refresh-expiry resource))

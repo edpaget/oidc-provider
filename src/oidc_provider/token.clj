@@ -72,17 +72,18 @@
 
 (def ^:private protected-claims
   "Claim names managed by the provider that must not be overwritten by ClaimsProvider."
-  #{"iss" "sub" "aud" "exp" "iat" "nonce" "auth_time"})
+  #{"iss" "sub" "aud" "exp" "iat" "nonce" "auth_time" "azp"})
 
 (defn generate-id-token
   "Generates a signed OIDC ID token as a JWT string. Takes a `provider-config`
   map (matching the `ProviderConfig` schema), a `user-id` (set as the `sub`
   claim), a `client-id` (set as the `aud` claim), a `claims` map of additional
-  claims to include, and an `opts` map supporting `:nonce` for replay protection
-  and `:auth-time` for the authentication timestamp."
+  claims to include, and an `opts` map supporting `:nonce` for replay protection,
+  `:auth-time` for the authentication timestamp, and `:azp` to include the
+  authorized party claim per OIDC Core §2."
   [{:keys [issuer key-set active-signing-key-id id-token-ttl-seconds clock] :as config}
    user-id client-id claims
-   {:keys [nonce auth-time]}]
+   {:keys [nonce auth-time azp]}]
   {:pre [(m/validate ProviderConfig config)]}
   (when-not key-set
     (throw (ex-info "Signing key required for ID token generation; configure :signing-key or :signing-keys" {})))
@@ -94,6 +95,8 @@
       (.audience (java.util.Arrays/asList (into-array String [client-id])))
       (.expirationTime ^Date (add-seconds clock ttl))
       (.issueTime ^Date (Date/from (Instant/now clock))))
+    (when azp
+      (.claim builder "azp" client-id))
     (when nonce
       (.claim builder "nonce" nonce))
     (when auth-time

@@ -143,3 +143,24 @@
           claims  (token/validate-id-token config jwt-str "client-1")]
       (is (= "a@b.com" (:email claims)))
       (is (= "admin" (:role claims))))))
+
+(deftest id-token-contains-azp-claim-test
+  (testing "azp claim is set to client-id when :azp opt is true"
+    (let [config  (single-key-config)
+          jwt-str (token/generate-id-token config "user-1" "client-1" {} {:azp true})
+          claims  (token/validate-id-token config jwt-str "client-1")]
+      (is (= "client-1" (:azp claims))))))
+
+(deftest id-token-omits-azp-when-not-requested-test
+  (testing "azp claim is absent when :azp opt is not provided"
+    (let [config  (single-key-config)
+          jwt-str (token/generate-id-token config "user-1" "client-1" {} {})
+          claims  (token/validate-id-token config jwt-str "client-1")]
+      (is (nil? (:azp claims))))))
+
+(deftest claims-provider-cannot-overwrite-azp-test
+  (testing "ClaimsProvider returning :azp does not overwrite the authorized party"
+    (let [config  (single-key-config)
+          jwt-str (token/generate-id-token config "user-1" "client-1" {:azp "evil-client"} {:azp true})
+          claims  (token/validate-id-token config jwt-str "client-1")]
+      (is (= "client-1" (:azp claims))))))
