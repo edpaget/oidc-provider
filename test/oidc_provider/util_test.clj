@@ -35,6 +35,10 @@
     (is (false? (util/valid-web-redirect-uri? "cursor://callback")))
     (is (false? (util/valid-web-redirect-uri? "/callback")))))
 
+(deftest valid-web-redirect-uri-rejects-fragment-test
+  (testing "rejects HTTPS URIs with fragment components per RFC 6749 §3.1.2"
+    (is (false? (util/valid-web-redirect-uri? "https://example.com/cb#frag")))))
+
 (deftest valid-native-redirect-uri-accepts-custom-scheme-test
   (testing "accepts custom URI schemes for native clients"
     (is (true? (util/valid-native-redirect-uri? "cursor://callback")))
@@ -49,8 +53,10 @@
     (is (true? (util/valid-native-redirect-uri? "http://[::1]:8080/callback")))))
 
 (deftest valid-native-redirect-uri-rejects-fragment-test
-  (testing "rejects custom scheme URIs with fragments"
-    (is (false? (util/valid-native-redirect-uri? "cursor://callback#fragment")))))
+  (testing "rejects URIs with fragments for all URI types per RFC 6749 §3.1.2"
+    (is (false? (util/valid-native-redirect-uri? "cursor://callback#fragment")))
+    (is (false? (util/valid-native-redirect-uri? "https://example.com/cb#frag")))
+    (is (false? (util/valid-native-redirect-uri? "http://localhost/cb#frag")))))
 
 (deftest valid-native-redirect-uri-rejects-http-non-loopback-test
   (testing "rejects HTTP on non-loopback hosts"
@@ -65,6 +71,10 @@
     (is (false? (util/valid-redirect-uri-https-only? "http://localhost/callback")))
     (is (false? (util/valid-redirect-uri-https-only? "http://127.0.0.1/callback")))
     (is (false? (util/valid-redirect-uri-https-only? "http://[::1]/callback")))))
+
+(deftest valid-redirect-uri-https-only-rejects-fragment-test
+  (testing "rejects HTTPS URIs with fragment components per RFC 6749 §3.1.2"
+    (is (false? (util/valid-redirect-uri-https-only? "https://example.com/cb#frag")))))
 
 (deftest valid-redirect-uri-https-only-rejects-relative-test
   (testing "rejects relative URIs and malformed strings"

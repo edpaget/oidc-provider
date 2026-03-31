@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Malli `m/=>` schemas added to all public functions in `oidc-provider.core`
 
 ### Fixed
+- Redirect URI validators now reject URIs with fragment components per RFC 6749 §3.1.2 (`valid-web-redirect-uri?`, `valid-native-redirect-uri?`, `valid-redirect-uri-https-only?`)
 - Registration response now includes `client_secret_expires_at` (value `0` for non-expiring) when a `client_secret` is issued, per RFC 7591 §3.2.1
 - Registration response now includes `client_id_issued_at` with epoch seconds timestamp per RFC 7591 §3.2.1
 - Registration response now includes `registration_client_uri` when registration endpoint is configured, per RFC 7592

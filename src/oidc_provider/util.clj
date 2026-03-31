@@ -99,24 +99,25 @@
       (contains? #{"[::1]" "::1"} host)))
 
 (defn- custom-scheme-uri?
-  "Returns true when `uri` uses a non-HTTP/HTTPS scheme, is absolute, and has no fragment."
-  [^URI uri ^String scheme]
-  (and (not (contains? #{"http" "https"} scheme))
-       (.isAbsolute uri)
-       (nil? (.getFragment uri))))
+  "Returns true when `uri` uses a non-HTTP/HTTPS scheme.
+  Callers are responsible for checking that the URI is absolute and has no fragment."
+  [^URI _uri ^String scheme]
+  (not (contains? #{"http" "https"} scheme)))
 
 (m/=> valid-web-redirect-uri? [:=> [:cat :string] :boolean])
 
 (defn valid-web-redirect-uri?
-  "Returns true when `uri-str` is an absolute HTTPS URI with a host.
-  For `application_type` `\"web\"` clients per OpenID Connect Dynamic Client Registration."
+  "Returns true when `uri-str` is an absolute HTTPS URI with a host and no fragment.
+  For `application_type` `\"web\"` clients per OpenID Connect Dynamic Client Registration.
+  Rejects URIs with fragment components per RFC 6749 Section 3.1.2."
   [uri-str]
   (try
     (let [uri    (URI. ^String uri-str)
           scheme (some-> (.getScheme uri) str/lower-case)]
       (and (.isAbsolute uri)
            (some? (.getHost uri))
-           (= scheme "https")))
+           (= scheme "https")
+           (nil? (.getFragment uri))))
     (catch URISyntaxException _ false)))
 
 (m/=> valid-native-redirect-uri? [:=> [:cat :string] :boolean])
@@ -131,20 +132,19 @@
     (let [uri    (URI. ^String uri-str)
           scheme (some-> (.getScheme uri) str/lower-case)
           host   (some-> (.getHost uri) str/lower-case)]
-      (or (and (= scheme "https")
-               (.isAbsolute uri)
-               (some? host))
-          (and (= scheme "http")
-               (loopback-host? host)
-               (.isAbsolute uri))
-          (custom-scheme-uri? uri scheme)))
+      (and (.isAbsolute uri)
+           (nil? (.getFragment uri))
+           (or (and (= scheme "https") (some? host))
+               (and (= scheme "http") (loopback-host? host))
+               (custom-scheme-uri? uri scheme))))
     (catch URISyntaxException _ false)))
 
 (m/=> valid-redirect-uri-https-only? [:=> [:cat :string] :boolean])
 
 (defn valid-redirect-uri-https-only?
-  "Returns true when `uri-str` is an absolute URI with HTTPS scheme only.
+  "Returns true when `uri-str` is an absolute URI with HTTPS scheme only and no fragment.
   Unlike [[valid-native-redirect-uri?]], this rejects HTTP even on loopback addresses.
+  Rejects URIs with fragment components per RFC 6749 Section 3.1.2.
   Intended for metadata-document clients where HTTPS is strictly required."
   [uri-str]
   (try
@@ -152,7 +152,8 @@
           scheme (some-> (.getScheme uri) str/lower-case)]
       (and (.isAbsolute uri)
            (some? (.getHost uri))
-           (= scheme "https")))
+           (= scheme "https")
+           (nil? (.getFragment uri))))
     (catch URISyntaxException _ false)))
 
 (m/=> validate-issuer [:=> [:cat :string :boolean] :nil])
