@@ -15,12 +15,12 @@ Run the [OpenID Foundation Conformance Suite](https://gitlab.com/openid/conforma
 ./conformance/setup.sh
 ```
 
-This clones the conformance suite repo (if needed), builds the JAR via Maven in Docker (~5 minutes on first run), and starts the services. The suite will be available at https://localhost.emobix.co.uk:8443/ after ~30 seconds.
+This clones the conformance suite (pinned to `release-v5.1.39`), builds the JAR via Maven in Docker (~5 minutes on first run), and starts the services with health checks. The suite will be available at https://localhost.emobix.co.uk:8443/ once the script completes.
 
 ### 2. Start the dev server
 
 ```bash
-clojure -M:dev
+BASE_URL=http://host.docker.internal:9090 clojure -M:dev
 ```
 
 The OIDC provider runs at http://localhost:9090 with two pre-registered test clients:

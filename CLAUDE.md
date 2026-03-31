@@ -37,6 +37,7 @@ Be concise, straightforward, and avoid hyperbole.
 
 ## Comments
 - Do not include comments in generated code, unless specifically asked to.
+- Section-divider comments (e.g., `;; ---` banners) are acceptable for organizing long namespaces.
 
 ## Docstrings
 

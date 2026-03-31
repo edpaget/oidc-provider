@@ -11,13 +11,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 SUITE_DIR="$PROJECT_DIR/conformance-suite"
+SUITE_VERSION="release-v5.1.39"
 
 cd "$PROJECT_DIR"
 
 # Clone if not present
 if [ ! -d "$SUITE_DIR" ]; then
-  echo "Cloning conformance suite..."
-  git clone --depth 1 https://gitlab.com/openid/conformance-suite.git "$SUITE_DIR"
+  echo "Cloning conformance suite ($SUITE_VERSION)..."
+  git clone --depth 1 --branch "$SUITE_VERSION" \
+    https://gitlab.com/openid/conformance-suite.git "$SUITE_DIR"
 fi
 
 # Build if JAR not present
@@ -26,14 +28,13 @@ if [ ! -f "$SUITE_DIR/target/fapi-test-suite.jar" ]; then
   MAVEN_CACHE="$SUITE_DIR/m2" docker compose -f "$SUITE_DIR/builder-compose.yml" run builder
 fi
 
-# Start services
+# Start services and wait for healthy
 echo "Starting conformance suite..."
-docker compose up -d
+docker compose up -d --wait
 
 echo ""
-echo "Conformance suite starting at https://localhost.emobix.co.uk:8443/"
-echo "Wait ~30 seconds for the Java server to initialize."
+echo "Conformance suite ready at https://localhost.emobix.co.uk:8443/"
 echo ""
 echo "Next steps:"
-echo "  1. Start the dev server:    clojure -M:dev"
+echo "  1. Start the dev server:    BASE_URL=http://host.docker.internal:9090 clojure -M:dev"
 echo "  2. Run conformance tests:   clojure -M:conformance"

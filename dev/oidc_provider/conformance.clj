@@ -47,10 +47,11 @@
     ctx))
 
 (defn- create-http-client
-  "Creates an HttpClient that skips TLS verification, including hostname
-  checks. Required for the conformance suite's self-signed cert."
+  "Creates an HttpClient that skips TLS verification. Hostname
+  verification is disabled via the JVM flag
+  `-Djdk.internal.httpclient.disableHostnameVerification=true`
+  set in the `:conformance` alias."
   ^HttpClient []
-  (System/setProperty "jdk.internal.httpclient.disableHostnameVerification" "true")
   (-> (HttpClient/newBuilder)
       (.sslContext (trusting-ssl-context))
       (.version HttpClient$Version/HTTP_1_1)
@@ -191,7 +192,10 @@
                           (-> (Page$WaitForSelectorOptions.)
                               (.setTimeout 30000)))
         true
-        (catch Exception _e false)
+        (catch Exception e
+          (binding [*out* *err*]
+            (println (str "    Browser: " (.getMessage e))))
+          false)
         (finally
           (.close context))))
     false))

@@ -60,4 +60,5 @@
    :extra-deps  {ring/ring-jetty-adapter              {:mvn/version "1.15.3"}
                  ring/ring-core                      {:mvn/version "1.15.3"}
                  com.microsoft.playwright/playwright {:mvn/version "1.51.0"}}
+   :jvm-opts    ["-Djdk.internal.httpclient.disableHostnameVerification=true"]
    :main-opts   ["-m" "oidc-provider.conformance"]}}}
