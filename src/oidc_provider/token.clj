@@ -70,6 +70,10 @@
   [^Clock clock seconds]
   (Date/from (.plusSeconds (Instant/now clock) seconds)))
 
+(def ^:private protected-claims
+  "Claim names managed by the provider that must not be overwritten by ClaimsProvider."
+  #{"iss" "sub" "aud" "exp" "iat" "nonce" "auth_time"})
+
 (defn generate-id-token
   "Generates a signed OIDC ID token as a JWT string. Takes a `provider-config`
   map (matching the `ProviderConfig` schema), a `user-id` (set as the `sub`
@@ -94,7 +98,7 @@
       (.claim builder "nonce" nonce))
     (when auth-time
       (.claim builder "auth_time" (long auth-time)))
-    (doseq [[k v] claims]
+    (doseq [[k v] (remove (fn [[k _]] (protected-claims (name k))) claims)]
       (.claim builder (name k) v))
     (let [claims-set            (.build builder)
           ^RSAKey signing-key   (active-signing-key key-set active-signing-key-id)

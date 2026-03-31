@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Protection against ClaimsProvider overwriting registered JWT claims (`iss`, `sub`, `aud`, `exp`, `iat`, `nonce`, `auth_time`) in ID tokens
 - `handle-client-update` for RFC 7592 §2.2 client metadata update via PUT
 - `handle-client-delete` for RFC 7592 §2.3 client deregistration via DELETE
 - `delete-client` method on `ClientStore` protocol

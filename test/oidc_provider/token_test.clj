@@ -100,3 +100,46 @@
           future-cfg   (assoc config :clock future-clock)]
       (is (thrown-with-msg? Exception #"Token expired"
                             (token/validate-id-token future-cfg jwt-str "client-1"))))))
+
+(defn- single-key-config []
+  (let [k       (token/generate-rsa-key)
+        key-set (JWKSet. ^com.nimbusds.jose.jwk.JWK k)]
+    (make-config key-set (.getKeyID ^RSAKey k))))
+
+(deftest claims-provider-cannot-overwrite-sub-test
+  (testing "ClaimsProvider returning :sub does not overwrite the ID token subject"
+    (let [config  (single-key-config)
+          jwt-str (token/generate-id-token config "user-1" "client-1" {:sub "evil"} {})
+          claims  (token/validate-id-token config jwt-str "client-1")]
+      (is (= "user-1" (:sub claims))))))
+
+(deftest claims-provider-cannot-overwrite-iss-test
+  (testing "ClaimsProvider returning :iss does not change the issuer"
+    (let [config  (single-key-config)
+          jwt-str (token/generate-id-token config "user-1" "client-1" {:iss "https://evil.com"} {})
+          claims  (token/validate-id-token config jwt-str "client-1")]
+      (is (= "https://test.example.com" (:iss claims))))))
+
+(deftest claims-provider-cannot-overwrite-aud-test
+  (testing "ClaimsProvider returning :aud does not change the audience"
+    (let [config  (single-key-config)
+          jwt-str (token/generate-id-token config "user-1" "client-1" {:aud "evil-client"} {})
+          claims  (token/validate-id-token config jwt-str "client-1")]
+      (is (= ["client-1"] (:aud claims))))))
+
+(deftest claims-provider-cannot-overwrite-nonce-test
+  (testing "ClaimsProvider returning :nonce does not overwrite the real nonce"
+    (let [config  (single-key-config)
+          jwt-str (token/generate-id-token config "user-1" "client-1"
+                                           {:nonce "evil-nonce"} {:nonce "real-nonce"})
+          claims  (token/validate-id-token config jwt-str "client-1")]
+      (is (= "real-nonce" (:nonce claims))))))
+
+(deftest custom-claims-passthrough-test
+  (testing "custom claims from ClaimsProvider are included in the ID token"
+    (let [config  (single-key-config)
+          jwt-str (token/generate-id-token config "user-1" "client-1"
+                                           {:email "a@b.com" :role "admin"} {})
+          claims  (token/validate-id-token config jwt-str "client-1")]
+      (is (= "a@b.com" (:email claims)))
+      (is (= "admin" (:role claims))))))
