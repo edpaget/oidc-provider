@@ -296,7 +296,7 @@
          claims        (->TestClaimsProvider)
          access-token  "valid-access-token"
          future-expiry (+ (.millis ^Clock (Clock/systemUTC)) 3600000)]
-     (store/save-access-token token-store access-token "test-user" "client-1"
+     (proto/save-access-token token-store access-token "test-user" "client-1"
                               ["openid" "profile" "email"] future-expiry nil)
      {:handler      (ring/userinfo-handler token-store claims clock)
       :access-token access-token})))
@@ -317,7 +317,7 @@
           claims       (->TestClaimsProvider)
           access-token "openid-only-token"
           expiry       (+ (.millis ^Clock (Clock/systemUTC)) 3600000)
-          _            (store/save-access-token token-store access-token "test-user" "client-1"
+          _            (proto/save-access-token token-store access-token "test-user" "client-1"
                                                 ["openid"] expiry nil)
           handler      (ring/userinfo-handler token-store claims (Clock/systemUTC))
           response     (handler {:request-method :get
@@ -350,7 +350,7 @@
           claims       (->TestClaimsProvider)
           access-token "expired-token"
           past-expiry  (.millis ^Clock past-clock)
-          _            (store/save-access-token token-store access-token "test-user" "client-1"
+          _            (proto/save-access-token token-store access-token "test-user" "client-1"
                                                 ["openid"] past-expiry nil)
           handler      (ring/userinfo-handler token-store claims now-clock)
           response     (handler {:request-method :get

@@ -11,7 +11,6 @@
    [oidc-provider.protocol :as proto]
    [oidc-provider.registration :as reg]
    [oidc-provider.revocation :as revocation]
-   [oidc-provider.store :as store]
    [oidc-provider.token-endpoint :as token-ep])
   (:import
    [java.time Clock]))
@@ -172,7 +171,7 @@
   (fn [request]
     (let [method     (:request-method request)
           token      (when (#{:get :post} method) (extract-bearer-token request))
-          token-data (when token (store/get-access-token token-store token))
+          token-data (when token (proto/get-access-token token-store token))
           expired?   (when token-data (> (.millis clock) (:expiry token-data)))]
       (cond
         (not (#{:get :post} method))
