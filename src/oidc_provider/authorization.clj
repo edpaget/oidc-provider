@@ -90,8 +90,9 @@
    and resource indicator parameters. Returns the validated request map.
 
    The `:resource` parameter may be a string (single value) or a vector (multiple
-   values); it is normalized to a vector. Throws `ex-info` on validation errors or
-   if the client is unknown."
+   values); it is normalized to a vector. When the request has no `:resource` parameter
+   and the client has a `:default-resource` configured, the default is applied
+   automatically. Throws `ex-info` on validation errors or if the client is unknown."
   [params client-store]
   (when-not (m/validate AuthorizationRequest params)
     (throw (ex-info "Invalid authorization request"
@@ -102,19 +103,23 @@
     (when-not client
       (throw (ex-info "Unknown client" {:client-id client-id})))
     (validate-redirect-uri client (:redirect_uri params))
-    (try
-      (validate-response-type client (:response_type params))
-      (when (:scope params)
-        (validate-scope client (:scope params)))
-      (validate-public-client-pkce client params)
-      (when-let [resources (:resource params)]
-        (proto/validate-resource-indicators resources))
-      (catch clojure.lang.ExceptionInfo e
-        (throw (ex-info (ex-message e)
-                        (cond-> (assoc (ex-data e)
-                                       :redirect_uri (:redirect_uri params))
-                          (:state params) (assoc :state (:state params)))))))
-    params))
+    (let [params (if (and (nil? (:resource params))
+                          (:default-resource client))
+                   (assoc params :resource (:default-resource client))
+                   params)]
+      (try
+        (validate-response-type client (:response_type params))
+        (when (:scope params)
+          (validate-scope client (:scope params)))
+        (validate-public-client-pkce client params)
+        (when-let [resources (:resource params)]
+          (proto/validate-resource-indicators resources))
+        (catch clojure.lang.ExceptionInfo e
+          (throw (ex-info (ex-message e)
+                          (cond-> (assoc (ex-data e)
+                                         :redirect_uri (:redirect_uri params))
+                            (:state params) (assoc :state (:state params)))))))
+      params)))
 
 (defn handle-authorization-approval
   "Handles user approval of authorization request.

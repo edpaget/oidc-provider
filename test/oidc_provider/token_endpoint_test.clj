@@ -1294,3 +1294,60 @@
                               :grant-types                ["client_credentials"]
                               :redirect-uris              []
                               :response-types             []}))))))
+
+(deftest client-credentials-default-resource-test
+  (testing "client default-resource applied when request has no resource"
+    (let [token-store     (store/->HashingTokenStore (store/create-token-store))
+          provider-config (make-provider-config {})
+          client          {:client-id          "test-client"
+                           :client-type        "confidential"
+                           :client-secret-hash secret123-hash
+                           :redirect-uris      []
+                           :grant-types        ["client_credentials"]
+                           :response-types     []
+                           :scopes             ["api:read"]
+                           :default-resource   ["https://api.example.com"]}
+          response        (token-ep/handle-client-credentials-grant
+                           {:scope "api:read"}
+                           client provider-config token-store)
+          access-data     (proto/get-access-token token-store (:access_token response))]
+      (is (= ["https://api.example.com"] (:resource response)))
+      (is (= ["https://api.example.com"] (:resource access-data))))))
+
+(deftest client-credentials-explicit-resource-overrides-default-test
+  (testing "explicit resource parameter overrides client default-resource"
+    (let [token-store     (store/->HashingTokenStore (store/create-token-store))
+          provider-config (make-provider-config {})
+          client          {:client-id          "test-client"
+                           :client-type        "confidential"
+                           :client-secret-hash secret123-hash
+                           :redirect-uris      []
+                           :grant-types        ["client_credentials"]
+                           :response-types     []
+                           :scopes             ["api:read"]
+                           :default-resource   ["https://api.example.com"]}
+          response        (token-ep/handle-client-credentials-grant
+                           {:scope    "api:read"
+                            :resource ["https://other.example.com"]}
+                           client provider-config token-store)
+          access-data     (proto/get-access-token token-store (:access_token response))]
+      (is (= ["https://other.example.com"] (:resource response)))
+      (is (= ["https://other.example.com"] (:resource access-data))))))
+
+(deftest client-credentials-no-default-no-resource-test
+  (testing "no default-resource and no request resource results in nil resource"
+    (let [token-store     (store/->HashingTokenStore (store/create-token-store))
+          provider-config (make-provider-config {})
+          client          {:client-id          "test-client"
+                           :client-type        "confidential"
+                           :client-secret-hash secret123-hash
+                           :redirect-uris      []
+                           :grant-types        ["client_credentials"]
+                           :response-types     []
+                           :scopes             ["api:read"]}
+          response        (token-ep/handle-client-credentials-grant
+                           {:scope "api:read"}
+                           client provider-config token-store)
+          access-data     (proto/get-access-token token-store (:access_token response))]
+      (is (nil? (:resource response)))
+      (is (nil? (:resource access-data))))))

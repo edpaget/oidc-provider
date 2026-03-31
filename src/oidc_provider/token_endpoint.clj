@@ -295,7 +295,9 @@
 
   Validates the client is authorized for the `client_credentials` grant and is
   confidential, resolves the requested scope against the client's allowed scopes,
-  and stores the token via `token-store`. Returns a token response map."
+  and stores the token via `token-store`. When no `resource` parameter is present
+  in the request and the client has a `:default-resource` configured, the default
+  is used for audience binding. Returns a token response map."
   [{:keys [scope resource]} client provider-config token-store]
   (when-not (some #{"client_credentials"} (:grant-types client))
     (throw (ex-info "Client not authorized for client_credentials grant"
@@ -305,7 +307,8 @@
                      (:client-secret-hash client)))
     (throw (ex-info "client_credentials grant requires a confidential client"
                     {:client-id (:client-id client)})))
-  (let [requested-scope (if scope (vec (str/split scope #" ")) [])
+  (let [resource        (or resource (:default-resource client))
+        requested-scope (if scope (vec (str/split scope #" ")) [])
         client-scope    (:scopes client)
         final-scope     (if (empty? requested-scope)
                           client-scope

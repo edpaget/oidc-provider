@@ -155,6 +155,10 @@
    fragment component. Set `:allow-http-issuer` to `true` to permit HTTP issuers
    during local development.
 
+   Without RFC 8707 resource indicators or a client-level `:default-resource` setting,
+   access tokens have no audience binding. Configure `:default-resource` on client
+   registrations to scope tokens to specific resource servers by default.
+
    Validates the configuration and returns a Provider instance with all stores and
    settings initialized."
   [{:keys [issuer

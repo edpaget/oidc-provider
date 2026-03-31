@@ -25,7 +25,12 @@
   [:map-of :keyword :any])
 
 (def ClientConfig
-  "Malli schema for OAuth2/OIDC client configuration."
+  "Malli schema for OAuth2/OIDC client configuration.
+
+  The optional `:default-resource` field provides audience binding for access tokens
+  when the request omits a `resource` parameter (RFC 8707). When set, tokens issued
+  for this client will be scoped to the given resource URIs by default. An explicit
+  `resource` parameter in the request overrides this default."
   [:map
    [:client-id :string]
    [:client-type [:enum "confidential" "public"]]
@@ -36,6 +41,7 @@
    [:scopes [:vector :string]]
    [:token-endpoint-auth-method {:optional true}
     [:enum "client_secret_basic" "client_secret_post" "none"]]
+   [:default-resource {:optional true} [:vector {:min 1} :string]]
    [:client-name {:optional true} :string]
    [:client-uri {:optional true} :string]
    [:logo-uri {:optional true} :string]

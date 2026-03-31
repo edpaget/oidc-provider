@@ -491,3 +491,40 @@
           code            (get-in response [:params :code])
           code-data       (proto/get-authorization-code code-store code)]
       (is (= ["https://api.example.com" "https://other.example.com"] (:resource code-data))))))
+
+(deftest parse-authorization-request-applies-default-resource-test
+  (testing "client default-resource applied when request has no resource"
+    (let [client-store (store/create-client-store
+                        [{:client-id          "test-client"
+                          :client-type        "confidential"
+                          :client-secret-hash secret-hash
+                          :redirect-uris      ["https://app.example.com/callback"]
+                          :grant-types        ["authorization_code"]
+                          :response-types     ["code"]
+                          :scopes             ["openid"]
+                          :default-resource   ["https://api.example.com"]}])
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"}
+          result       (authz/parse-authorization-request params client-store)]
+      (is (= ["https://api.example.com"] (:resource result))))))
+
+(deftest parse-authorization-request-explicit-resource-overrides-default-test
+  (testing "explicit resource parameter overrides client default-resource"
+    (let [client-store (store/create-client-store
+                        [{:client-id          "test-client"
+                          :client-type        "confidential"
+                          :client-secret-hash secret-hash
+                          :redirect-uris      ["https://app.example.com/callback"]
+                          :grant-types        ["authorization_code"]
+                          :response-types     ["code"]
+                          :scopes             ["openid"]
+                          :default-resource   ["https://api.example.com"]}])
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"
+                        :resource      "https://other.example.com"}
+          result       (authz/parse-authorization-request params client-store)]
+      (is (= ["https://other.example.com"] (:resource result))))))
