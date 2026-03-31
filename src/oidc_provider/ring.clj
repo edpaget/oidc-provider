@@ -8,6 +8,7 @@
   (:require
    [cheshire.core :as json]
    [clojure.string :as str]
+   [oidc-provider.error :as error]
    [oidc-provider.protocol :as proto]
    [oidc-provider.registration :as reg]
    [oidc-provider.revocation :as revocation]
@@ -38,6 +39,14 @@
    :headers {"Content-Type" "application/json"}
    :body    (json/generate-string body)})
 
+(def ^:private no-cache-headers
+  {"Content-Type"  "application/json"
+   "Cache-Control" "no-store"
+   "Pragma"        "no-cache"})
+
+(def ^:private auth-failure-headers
+  (assoc no-cache-headers "WWW-Authenticate" "Bearer"))
+
 (defn- extract-client-id
   "Extracts the last non-empty path segment from the URI."
   [uri]
@@ -66,9 +75,11 @@
   (let [token (extract-bearer-token request)]
     (if-not token
       (json-response 401 {"error" "invalid_token"})
-      (let [client-id (extract-client-id (:uri request))
-            result    (reg/handle-client-read client-store client-id token)]
-        (json-response (:status result) (:body result))))))
+      (try
+        (let [client-id (extract-client-id (:uri request))]
+          (json-response 200 (reg/handle-client-read client-store client-id token)))
+        (catch clojure.lang.ExceptionInfo _
+          (json-response 401 {"error" "invalid_token"}))))))
 
 (defn registration-handler
   "Creates a Ring handler for dynamic client registration.
@@ -109,12 +120,21 @@
                      "Accept"       "application/x-www-form-urlencoded"}
            :body    (json/generate-string {"error"             "invalid_request"
                                            "error_description" "Content-Type must be application/x-www-form-urlencoded"})}
-          (let [auth-header (get-in request [:headers "authorization"])
-                result      (revocation/handle-revocation-request
-                             (:params request) auth-header
-                             client-store token-store)]
-            (cond-> result
-              (:body result) (update :body json/generate-string))))))))
+          (try
+            (let [auth-header (get-in request [:headers "authorization"])]
+              (revocation/handle-revocation-request
+               (:params request) auth-header client-store token-store)
+              {:status 200})
+            (catch clojure.lang.ExceptionInfo e
+              (if (error/request-error? (:type (ex-data e)))
+                {:status  400
+                 :headers no-cache-headers
+                 :body    (json/generate-string
+                           {:error             (ex-message e)
+                            :error_description (:error_description (ex-data e))})}
+                {:status  401
+                 :headers auth-failure-headers
+                 :body    (json/generate-string {:error "invalid_client"})}))))))))
 
 (defn token-handler
   "Creates a Ring handler for the OAuth2 token endpoint (RFC 6749 §3.2).
@@ -144,11 +164,15 @@
                                  (:params request) auth-header
                                  provider-config client-store
                                  code-store token-store claims-provider)]
-                (token-ep/token-success-response result))
+                {:status  200
+                 :headers no-cache-headers
+                 :body    (json/generate-string result)})
               (catch clojure.lang.ExceptionInfo e
-                (token-ep/token-error-response
-                 (or (:error (ex-data e)) "invalid_request")
-                 (ex-message e))))))))))
+                {:status  400
+                 :headers no-cache-headers
+                 :body    (json/generate-string
+                           (cond-> {:error (or (:error (ex-data e)) "invalid_request")}
+                             (ex-message e) (assoc :error_description (ex-message e))))}))))))))
 
 (defn- bearer-unauthorized
   "Returns a 401 response with `WWW-Authenticate: Bearer` header and optional

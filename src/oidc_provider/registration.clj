@@ -2,14 +2,14 @@
   "Dynamic client registration per RFC 7591.
 
   Provides [[handle-registration-request]] for processing client registration
-  requests and [[registration-error-response]] for formatting error responses.
-  Accepts keyword maps and converts to kebab-case for internal storage
-  via [[oidc-provider.protocol/ClientStore]]."
+  requests and [[handle-client-read]] for reading client configuration per
+  RFC 7592. Accepts keyword maps and converts to kebab-case for internal
+  storage via [[oidc-provider.protocol/ClientStore]]."
   (:require
-   [cheshire.core :as json]
    [clojure.set :as set]
    [clojure.string :as str]
    [malli.core :as m]
+   [oidc-provider.error :as error]
    [oidc-provider.protocol :as proto]
    [oidc-provider.token :as token]
    [oidc-provider.util :as util])
@@ -198,8 +198,9 @@
 
   Takes the `store` implementing [[oidc-provider.protocol/ClientStore]],
   `client-id`, and the bearer `access-token` presented by the caller.
-  Returns the client configuration if the token is valid, or a 401 error
-  response otherwise. The stored registration access token is a PBKDF2 hash;
+  Returns the client configuration map if the token is valid.
+  Throws `ex-info` with `\"invalid_token\"` when the client is unknown or the
+  token does not match. The stored registration access token is a PBKDF2 hash;
   verification uses [[oidc-provider.util/verify-client-secret]]."
   [store client-id access-token]
   (let [client (proto/get-client store client-id)]
@@ -207,17 +208,6 @@
              (try
                (util/verify-client-secret access-token (:registration-access-token client))
                (catch Exception _ false)))
-      {:status 200 :body (client-config->response client)}
-      {:status 401 :body {:error "invalid_token"}})))
+      (client-config->response client)
+      (throw (ex-info "invalid_token" {:type ::error/invalid-token})))))
 
-(defn registration-error-response
-  "Creates an RFC 7591 error response.
-
-  Takes an `error` code string and `error-description` string. Returns a Ring
-  response map with JSON body."
-  [error error-description]
-  {:status  400
-   :headers {"Content-Type" "application/json"}
-   :body    (json/generate-string
-             (cond-> {:error error}
-               error-description (assoc :error_description error-description)))})

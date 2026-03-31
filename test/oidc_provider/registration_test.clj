@@ -39,7 +39,6 @@
                         client-store)
           client-id    (:client_id response)
           stored       (proto/get-client client-store client-id)]
-      (is (string? (:client_secret response)))
       (is (nil? (:client-secret stored)))
       (is (util/verify-client-secret (:client_secret response) (:client-secret-hash stored))))))
 
@@ -52,7 +51,6 @@
           client-id    (:client_id response)
           stored       (proto/get-client client-store client-id)
           plaintext    (:registration_access_token response)]
-      (is (string? plaintext))
       (is (str/starts-with? (:registration-access-token stored) "PBKDF2"))
       (is (util/verify-client-secret plaintext (:registration-access-token stored))))))
 
@@ -213,8 +211,7 @@
           client-id    (:client_id reg-response)
           token        (:registration_access_token reg-response)
           read-result  (reg/handle-client-read client-store client-id token)]
-      (is (= 200 (:status read-result)))
-      (is (not (contains? (:body read-result) :registration_access_token))))))
+      (is (not (contains? read-result :registration_access_token))))))
 
 (deftest client-read-success-test
   (testing "reads back client configuration with valid token"
@@ -228,27 +225,24 @@
           client-id    (:client_id reg-response)
           token        (:registration_access_token reg-response)
           read-result  (reg/handle-client-read client-store client-id token)]
-      (is (= 200 (:status read-result)))
       (is (= (dissoc reg-response :registration_access_token :client_id_issued_at)
-             (:body read-result))))))
+             read-result)))))
 
 (deftest client-read-invalid-token-test
-  (testing "returns 401 when token does not match"
+  (testing "throws invalid_token when token does not match"
     (let [client-store (store/create-client-store)
           reg-response (reg/handle-registration-request
                         {:redirect_uris ["https://app.example.com/callback"]}
                         client-store)
-          client-id    (:client_id reg-response)
-          read-result  (reg/handle-client-read client-store client-id "wrong-token")]
-      (is (= 401 (:status read-result)))
-      (is (= {:error "invalid_token"} (:body read-result))))))
+          client-id    (:client_id reg-response)]
+      (is (thrown-with-msg? Exception #"invalid_token"
+                            (reg/handle-client-read client-store client-id "wrong-token"))))))
 
 (deftest client-read-unknown-client-test
-  (testing "returns 401 for nonexistent client_id"
-    (let [client-store (store/create-client-store)
-          read-result  (reg/handle-client-read client-store "nonexistent-id" "any-token")]
-      (is (= 401 (:status read-result)))
-      (is (= {:error "invalid_token"} (:body read-result))))))
+  (testing "throws invalid_token for nonexistent client_id"
+    (is (thrown-with-msg? Exception #"invalid_token"
+                          (reg/handle-client-read (store/create-client-store)
+                                                  "nonexistent-id" "any-token")))))
 
 (deftest register-native-client-custom-scheme-test
   (testing "native client with custom URI scheme succeeds"

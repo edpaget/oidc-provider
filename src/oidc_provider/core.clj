@@ -244,8 +244,9 @@
   "Reads a dynamically registered client's configuration per RFC 7592.
 
    Takes a Provider instance, a `client-id`, and the bearer `access-token`
-   presented by the caller. Returns the client configuration if the token is
-   valid, or a 401 error response otherwise."
+   presented by the caller. Returns the client configuration map if the token
+   is valid. Throws `ex-info` with `\"invalid_token\"` when the client is
+   unknown or the token does not match."
   [provider client-id access-token]
   (reg/handle-client-read (:client-store provider) client-id access-token))
 

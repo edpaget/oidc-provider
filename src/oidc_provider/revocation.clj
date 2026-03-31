@@ -5,16 +5,9 @@
   The endpoint always returns 200 on successful authentication, even for unknown
   tokens, to prevent token-scanning attacks per RFC 7009 §2.2."
   (:require
+   [oidc-provider.error :as error]
    [oidc-provider.protocol :as proto]
    [oidc-provider.token-endpoint :as token-ep]))
-
-(def ^:private no-cache-headers
-  {"Content-Type"  "application/json"
-   "Cache-Control" "no-store"
-   "Pragma"        "no-cache"})
-
-(def ^:private auth-failure-headers
-  (assoc no-cache-headers "WWW-Authenticate" "Bearer"))
 
 (set! *warn-on-reflection* true)
 
@@ -40,22 +33,17 @@
 
   Authenticates the client via [[oidc-provider.token-endpoint/authenticate-client]],
   validates the `token` parameter is present, and revokes the token from
-  `token-store`. Returns `{:status 200}` on success (including for unknown
-  tokens per RFC 7009 §2.2), `{:status 400}` when the `token` parameter is
-  missing, or `{:status 401}` on authentication failure."
+  `token-store`. Returns `:ok` on success (including for unknown tokens per
+  RFC 7009 §2.2). Throws `ex-info` with `\"invalid_request\"` when the `token`
+  parameter is missing, or lets authentication exceptions propagate on
+  credential failure."
   [params authorization-header client-store token-store]
-  (try
-    (let [client (token-ep/authenticate-client params authorization-header client-store)]
-      (if-not (:token params)
-        {:status  400
-         :headers no-cache-headers
-         :body    {:error "invalid_request" :error_description "Missing token parameter"}}
-        (let [token      (:token params)
-              token-data (lookup-token token-store token (:token_type_hint params))]
-          (when (and token-data (= (:client-id token-data) (:client-id client)))
-            (proto/revoke-token token-store token))
-          {:status 200})))
-    (catch clojure.lang.ExceptionInfo _
-      {:status  401
-       :headers auth-failure-headers
-       :body    {:error "invalid_client"}})))
+  (let [client (token-ep/authenticate-client params authorization-header client-store)]
+    (when-not (:token params)
+      (throw (ex-info "invalid_request" {:type              ::error/invalid-request
+                                         :error_description "Missing token parameter"})))
+    (let [token      (:token params)
+          token-data (lookup-token token-store token (:token_type_hint params))]
+      (when (and token-data (= (:client-id token-data) (:client-id client)))
+        (proto/revoke-token token-store token))
+      :ok)))

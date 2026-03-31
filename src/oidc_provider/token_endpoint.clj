@@ -1,7 +1,6 @@
 (ns oidc-provider.token-endpoint
   "Token endpoint implementation for OAuth2/OIDC."
   (:require
-   [cheshire.core :as json]
    [clojure.string :as str]
    [malli.core :as m]
    [oidc-provider.protocol :as proto]
@@ -367,31 +366,3 @@
                       {:errors (m/explain TokenResponse response)})))
     response))
 
-(def ^:private no-cache-headers
-  {"Content-Type"  "application/json"
-   "Cache-Control" "no-store"
-   "Pragma"        "no-cache"})
-
-(defn token-error-response
-  "Creates an OAuth2 error response with cache-control headers per RFC 6749 §5.1.
-
-  Takes an `error` code string, an `error-description` string, and an optional
-  `:status` (defaults to 400). Returns a Ring response map with JSON body and
-  `Cache-Control: no-store` / `Pragma: no-cache` headers."
-  [error error-description & {:keys [status] :or {status 400}}]
-  {:status  status
-   :headers no-cache-headers
-   :body    (json/generate-string
-             (cond-> {:error error}
-               error-description (assoc :error_description error-description)))})
-
-(defn token-success-response
-  "Wraps a token response map as a Ring response with cache-control headers per RFC 6749 §5.1.
-
-  Takes a `token-map` (e.g. the result of [[handle-token-request]]) and returns
-  a Ring response with status 200, JSON body, and `Cache-Control: no-store` /
-  `Pragma: no-cache` headers."
-  [token-map]
-  {:status  200
-   :headers no-cache-headers
-   :body    (json/generate-string token-map)})

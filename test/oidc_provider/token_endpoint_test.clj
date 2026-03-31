@@ -248,7 +248,7 @@
             token-data (proto/get-access-token token-store (:access_token response))]
         (is (= {:token_type "Bearer" :expires_in 3600 :scope "openid profile"}
                (select-keys response [:token_type :expires_in :scope])))
-        (is (string? (:refresh_token response)))
+        (is (some? (proto/get-refresh-token token-store (:refresh_token response))))
         (is (= "user-123" (:user-id token-data)))
         (is (= "test-client" (:client-id token-data)))))))
 
@@ -544,7 +544,7 @@
             access-data (proto/get-access-token token-store (:access_token response))]
         (is (= ["https://api.example.com"] (:resource response)))
         (is (= ["https://api.example.com"] (:resource access-data)))
-        (is (string? (:refresh_token response)))))))
+        (is (some? (proto/get-refresh-token token-store (:refresh_token response))))))))
 
 (deftest refresh-token-grant-rejects-expanded-resource-test
   (testing "requesting a resource not in original set throws invalid_target"
@@ -594,7 +594,7 @@
             access-data (proto/get-access-token token-store (:access_token response))]
         (is (= ["https://api.example.com"] (:resource response)))
         (is (= ["https://api.example.com"] (:resource access-data)))
-        (is (string? (:refresh_token response)))))))
+        (is (some? (proto/get-refresh-token token-store (:refresh_token response))))))))
 
 (deftest client-credentials-grant-with-resource-test
   (testing "resource is stored and returned in response"
@@ -777,7 +777,7 @@
                       token-store)]
         (is (= "Bearer" (:token_type response)))
         (is (= "openid profile" (:scope response)))
-        (is (string? (:refresh_token response)))))))
+        (is (some? (proto/get-refresh-token token-store (:refresh_token response))))))))
 
 (deftest refresh-token-rotation-revokes-old-token-test
   (testing "old refresh token is revoked and new one has correct metadata"
@@ -944,22 +944,8 @@
                           token-store
                           claims-provider)
             refresh-data (proto/get-refresh-token token-store (:refresh_token response))]
-        (is (string? (:refresh_token response)))
         (is (= "user-123" (:user-id refresh-data)))
         (is (= "test-client" (:client-id refresh-data)))))))
-
-(deftest token-error-response-cache-headers-test
-  (testing "error response includes Cache-Control and Pragma headers"
-    (let [resp (token-ep/token-error-response "invalid_request" "bad request")]
-      (is (= "no-store" (get-in resp [:headers "Cache-Control"])))
-      (is (= "no-cache" (get-in resp [:headers "Pragma"]))))))
-
-(deftest token-success-response-cache-headers-test
-  (testing "success response includes Cache-Control and Pragma headers"
-    (let [resp (token-ep/token-success-response {:access_token "tok" :token_type "Bearer"})]
-      (is (= 200 (:status resp)))
-      (is (= "no-store" (get-in resp [:headers "Cache-Control"])))
-      (is (= "no-cache" (get-in resp [:headers "Pragma"]))))))
 
 (deftest parse-basic-auth-url-decoded-test
   (testing "URL-decodes client_id and client_secret per RFC 6749 §2.3.1"

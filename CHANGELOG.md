@@ -19,7 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 - Default `token_endpoint_auth_method` for dynamic registration is now `client_secret_basic` per RFC 7591 §2 (was incorrectly `none`)
 - `handle-registration-request` accepts an optional `opts` map with `:clock` and `:registration-endpoint`
-- `registration-handler` accepts an optional `opts` map forwarded to registration
+- **Breaking:** `dynamic-read-client` and `handle-client-read` now return the client config map directly on success and throw `ex-info` on failure, instead of returning Ring-style `{:status :body}` maps
+- `handle-revocation-request` now returns `:ok` on success and throws `ex-info` on failure, instead of returning Ring response maps
+- Response-formatting functions (`token-error-response`, `token-success-response`, `registration-error-response`) removed from domain namespaces — Ring response construction is now exclusively in the HTTP layer
+- Error `ex-info` throws now include a `:type` keyword from the `oidc-provider.error` hierarchy, enabling structured dispatch via `isa?`
 
 ### Fixed
 - Registration response now includes `client_secret_expires_at` (value `0` for non-expiring) when a `client_secret` is issued, per RFC 7591 §3.2.1

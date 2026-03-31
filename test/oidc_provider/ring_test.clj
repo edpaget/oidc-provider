@@ -20,13 +20,14 @@
 
 (deftest post-registration-success-test
   (testing "valid POST returns 201 with JSON body containing client_id"
-    (let [handler  (ring/registration-handler (store/create-client-store))
-          response (handler {:request-method :post
-                             :body           (valid-request-body)})]
+    (let [client-store (store/create-client-store)
+          handler      (ring/registration-handler client-store)
+          response     (handler {:request-method :post
+                                 :body           (valid-request-body)})
+          body         (json/parse-string (:body response))]
       (is (= 201 (:status response)))
       (is (= "application/json" (get-in response [:headers "Content-Type"])))
-      (let [body (json/parse-string (:body response))]
-        (is (string? (get body "client_id")))))))
+      (is (some? (proto/get-client client-store (get body "client_id")))))))
 
 (deftest post-registration-invalid-metadata-test
   (testing "POST with empty object returns 400 with invalid_client_metadata"
@@ -203,7 +204,7 @@
                                                   :params         {:grant_type "urn:unsupported"}})
           body                          (json/parse-string (:body response) true)]
       (is (= 400 (:status response)))
-      (is (string? (:error body))))))
+      (is (= "unsupported_grant_type" (:error body))))))
 
 (defn- revocation-fixtures []
   (let [client-store (store/create-client-store
