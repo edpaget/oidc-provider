@@ -16,7 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Server-level `grant-types-supported` enforcement in token endpoint — grant types not in the provider's allowed list are rejected with `unsupported_grant_type` error per RFC 6749 §5.2
 - `unsupported_grant_type` error code in ex-data for unknown or disabled grant types
 
+### Changed
+- Default `token_endpoint_auth_method` for dynamic registration is now `client_secret_basic` per RFC 7591 §2 (was incorrectly `none`)
+- `handle-registration-request` accepts an optional `opts` map with `:clock` and `:registration-endpoint`
+- `registration-handler` accepts an optional `opts` map forwarded to registration
+
 ### Fixed
+- Registration response now includes `client_secret_expires_at` (value `0` for non-expiring) when a `client_secret` is issued, per RFC 7591 §3.2.1
+- Registration response now includes `client_id_issued_at` with epoch seconds timestamp per RFC 7591 §3.2.1
+- Registration response now includes `registration_client_uri` when registration endpoint is configured, per RFC 7592
 - Discovery `grant_types_supported` now includes `client_credentials` in the default set
 - Discovery response now explicitly includes `request_uri_parameter_supported`, `request_parameter_supported`, and `claims_parameter_supported` boolean flags per OIDC Discovery §3
 - Revocation 401 responses now include `WWW-Authenticate: Bearer` header per RFC 6750 §3

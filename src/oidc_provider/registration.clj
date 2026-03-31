@@ -14,7 +14,8 @@
    [oidc-provider.token :as token]
    [oidc-provider.util :as util])
   (:import
-   (java.net URI URISyntaxException)))
+   (java.net URI URISyntaxException)
+   (java.time Clock Instant)))
 
 (set! *warn-on-reflection* true)
 
@@ -47,7 +48,10 @@
    [:client_uri {:optional true} :string]
    [:logo_uri {:optional true} :string]
    [:contacts {:optional true} [:vector :string]]
-   [:application_type :string]])
+   [:application_type :string]
+   [:client_secret_expires_at {:optional true} :int]
+   [:client_id_issued_at {:optional true} :int]
+   [:registration_client_uri {:optional true} :string]])
 
 (defn- apply-defaults
   "Merges RFC 7591 defaults into a registration request."
@@ -55,7 +59,7 @@
   (cond-> request
     (not (:grant_types request))                (assoc :grant_types ["authorization_code"])
     (not (:response_types request))             (assoc :response_types ["code"])
-    (not (:token_endpoint_auth_method request)) (assoc :token_endpoint_auth_method "none")
+    (not (:token_endpoint_auth_method request)) (assoc :token_endpoint_auth_method "client_secret_basic")
     (not (:application_type request))           (assoc :application_type "web")))
 
 (defn- valid-https-uri?
@@ -157,27 +161,37 @@
 (defn handle-registration-request
   "Processes a dynamic client registration request per RFC 7591.
 
-  Takes a `request` map with keyword keys and a `client-store` implementing
-  [[oidc-provider.protocol/ClientStore]]. Validates the request, applies RFC 7591
-  defaults, generates credentials, registers the client, and returns the registration
-  response with keyword keys.
+  Takes a `request` map with keyword keys, a `client-store` implementing
+  [[oidc-provider.protocol/ClientStore]], and an optional `opts` map. The `opts`
+  map supports `:clock` (a `java.time.Clock`, defaults to UTC) for generating
+  `client_id_issued_at`, and `:registration-endpoint` (a base URL string) for
+  constructing `registration_client_uri` per RFC 7592.
 
   Throws `ex-info` with `\"invalid_client_metadata\"` message on validation errors."
-  [request client-store]
-  (when-not (m/validate RegistrationRequest request)
-    (throw (ex-info "invalid_client_metadata"
-                    {:errors (m/explain RegistrationRequest request)})))
-  (let [config    (-> request apply-defaults validate-request request->client-config)
-        reg-token (:registration-access-token config)
-        secret    (when (not= (:token-endpoint-auth-method config) "none")
-                    (util/generate-client-secret))
-        to-store  (cond-> (assoc config :registration-access-token
-                                 (util/hash-client-secret reg-token))
-                    secret (assoc :client-secret-hash (util/hash-client-secret secret)))
-        stored    (proto/register-client client-store to-store)]
-    (cond-> (-> (client-config->response stored)
-                (assoc :registration_access_token reg-token))
-      secret (assoc :client_secret secret))))
+  ([request client-store]
+   (handle-registration-request request client-store {}))
+  ([request client-store opts]
+   (when-not (m/validate RegistrationRequest request)
+     (throw (ex-info "invalid_client_metadata"
+                     {:errors (m/explain RegistrationRequest request)})))
+   (let [config       (-> request apply-defaults validate-request request->client-config)
+         reg-token    (:registration-access-token config)
+         secret       (when (not= (:token-endpoint-auth-method config) "none")
+                        (util/generate-client-secret))
+         to-store     (cond-> (assoc config :registration-access-token
+                                     (util/hash-client-secret reg-token))
+                        secret (assoc :client-secret-hash (util/hash-client-secret secret)))
+         stored       (proto/register-client client-store to-store)
+         ^Clock clock (or (:clock opts) (Clock/systemUTC))
+         issued-at    (.getEpochSecond (Instant/now clock))
+         client-id    (:client-id stored)
+         reg-ep       (:registration-endpoint opts)]
+     (cond-> (-> (client-config->response stored)
+                 (assoc :registration_access_token reg-token)
+                 (assoc :client_id_issued_at issued-at))
+       secret (assoc :client_secret secret
+                     :client_secret_expires_at 0)
+       reg-ep (assoc :registration_client_uri (str reg-ep "/" client-id))))))
 
 (defn handle-client-read
   "Handles RFC 7592 client read requests.

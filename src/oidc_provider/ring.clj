@@ -47,13 +47,13 @@
 
 (defn- handle-post
   "Handles POST registration requests."
-  [request client-store]
+  [request client-store opts]
   (let [parsed (parse-json-body request)]
     (if-not parsed
       (json-response 400 {"error"             "invalid_client_metadata"
                           "error_description" "Missing or malformed JSON body"})
       (try
-        (let [result (reg/handle-registration-request parsed client-store)]
+        (let [result (reg/handle-registration-request parsed client-store opts)]
           (json-response 201 result))
         (catch clojure.lang.ExceptionInfo e
           (json-response 400 {"error"             "invalid_client_metadata"
@@ -73,18 +73,23 @@
 (defn registration-handler
   "Creates a Ring handler for dynamic client registration.
 
-  Takes a `client-store` implementing [[oidc-provider.protocol/ClientStore]].
+  Takes a `client-store` implementing [[oidc-provider.protocol/ClientStore]] and
+  an optional `opts` map passed through to
+  [[oidc-provider.registration/handle-registration-request]]. Supported keys are
+  `:clock` (a `java.time.Clock`) and `:registration-endpoint` (a base URL string).
   Returns a Ring handler function that dispatches POST for registration
   and GET for client configuration reads. To gate registration access,
   use application-level middleware."
-  [client-store]
-  (fn [request]
-    (case (:request-method request)
-      :post (handle-post request client-store)
-      :get  (handle-get request client-store)
-      {:status  405
-       :headers {"Allow" "GET, POST" "Content-Type" "application/json"}
-       :body    (json/generate-string {"error" "method_not_allowed"})})))
+  ([client-store]
+   (registration-handler client-store {}))
+  ([client-store opts]
+   (fn [request]
+     (case (:request-method request)
+       :post (handle-post request client-store opts)
+       :get  (handle-get request client-store)
+       {:status  405
+        :headers {"Allow" "GET, POST" "Content-Type" "application/json"}
+        :body    (json/generate-string {"error" "method_not_allowed"})}))))
 
 (defn revocation-handler
   "Creates a Ring handler for RFC 7009 token revocation.

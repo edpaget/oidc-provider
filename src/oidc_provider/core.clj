@@ -234,7 +234,11 @@
    returns the registration response in snake_case wire format. Throws `ex-info`
    with `\"invalid_client_metadata\"` on validation errors."
   [provider request]
-  (reg/handle-registration-request request (:client-store provider)))
+  (let [{:keys [provider-config client-store]} provider]
+    (reg/handle-registration-request
+     request client-store
+     {:clock                 (:clock provider-config)
+      :registration-endpoint (:registration-endpoint (:config provider))})))
 
 (defn dynamic-read-client
   "Reads a dynamically registered client's configuration per RFC 7592.
@@ -251,7 +255,10 @@
    Takes a Provider instance. To gate registration access, use
    application-level middleware."
   [provider]
-  (ring-handlers/registration-handler (:client-store provider)))
+  (ring-handlers/registration-handler
+   (:client-store provider)
+   {:clock                 (get-in provider [:provider-config :clock])
+    :registration-endpoint (:registration-endpoint (:config provider))}))
 
 (defn revocation-handler
   "Creates a Ring handler for RFC 7009 token revocation.

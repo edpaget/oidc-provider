@@ -5,7 +5,9 @@
    [oidc-provider.protocol :as proto]
    [oidc-provider.registration :as reg]
    [oidc-provider.store :as store]
-   [oidc-provider.util :as util]))
+   [oidc-provider.util :as util])
+  (:import
+   (java.time Clock Instant ZoneOffset)))
 
 (deftest register-minimal-client-test
   (testing "applies RFC 7591 defaults for a minimal registration request"
@@ -15,8 +17,8 @@
                         client-store)]
       (is (= ["authorization_code"] (:grant_types response)))
       (is (= ["code"] (:response_types response)))
-      (is (= "none" (:token_endpoint_auth_method response)))
-      (is (nil? (:client_secret response))))))
+      (is (= "client_secret_basic" (:token_endpoint_auth_method response)))
+      (is (string? (:client_secret response))))))
 
 (deftest registered-client-retrievable-test
   (testing "registered client is retrievable from the store"
@@ -173,7 +175,8 @@
   (testing "auth method none sets client-type to public in store"
     (let [client-store (store/create-client-store)
           response     (reg/handle-registration-request
-                        {:redirect_uris ["https://app.example.com/callback"]}
+                        {:redirect_uris              ["https://app.example.com/callback"]
+                         :token_endpoint_auth_method "none"}
                         client-store)
           client-id    (:client_id response)
           stored       (proto/get-client client-store client-id)]
@@ -217,15 +220,16 @@
   (testing "reads back client configuration with valid token"
     (let [client-store (store/create-client-store)
           reg-response (reg/handle-registration-request
-                        {:redirect_uris ["https://app.example.com/callback"]
-                         :client_name   "My App"
-                         :scope         "openid profile"}
+                        {:redirect_uris              ["https://app.example.com/callback"]
+                         :client_name                "My App"
+                         :scope                      "openid profile"
+                         :token_endpoint_auth_method "none"}
                         client-store)
           client-id    (:client_id reg-response)
           token        (:registration_access_token reg-response)
           read-result  (reg/handle-client-read client-store client-id token)]
       (is (= 200 (:status read-result)))
-      (is (= (dissoc reg-response :client_secret :registration_access_token)
+      (is (= (dissoc reg-response :registration_access_token :client_id_issued_at)
              (:body read-result))))))
 
 (deftest client-read-invalid-token-test
@@ -292,3 +296,54 @@
                     {:redirect_uris ["https://app.example.com/callback"]}
                     (store/create-client-store))]
       (is (= "web" (:application_type response))))))
+
+(deftest response-includes-client-secret-expires-at-test
+  (testing "client_secret_expires_at is 0 when client_secret is issued"
+    (let [response (reg/handle-registration-request
+                    {:redirect_uris              ["https://app.example.com/callback"]
+                     :token_endpoint_auth_method "client_secret_basic"}
+                    (store/create-client-store))]
+      (is (= 0 (:client_secret_expires_at response))))))
+
+(deftest response-omits-client-secret-expires-at-for-public-test
+  (testing "client_secret_expires_at is absent for public clients"
+    (let [response (reg/handle-registration-request
+                    {:redirect_uris              ["https://app.example.com/callback"]
+                     :token_endpoint_auth_method "none"}
+                    (store/create-client-store))]
+      (is (nil? (:client_secret_expires_at response))))))
+
+(deftest response-includes-client-id-issued-at-test
+  (testing "client_id_issued_at is epoch seconds from provided clock"
+    (let [fixed-instant (Instant/parse "2026-01-15T12:00:00Z")
+          clock         (Clock/fixed fixed-instant ZoneOffset/UTC)
+          response      (reg/handle-registration-request
+                         {:redirect_uris ["https://app.example.com/callback"]}
+                         (store/create-client-store)
+                         {:clock clock})]
+      (is (= (.getEpochSecond fixed-instant) (:client_id_issued_at response))))))
+
+(deftest registration-client-uri-included-test
+  (testing "registration_client_uri is included when registration-endpoint is configured"
+    (let [response (reg/handle-registration-request
+                    {:redirect_uris ["https://app.example.com/callback"]}
+                    (store/create-client-store)
+                    {:registration-endpoint "https://op.example.com/register"})]
+      (is (= (str "https://op.example.com/register/" (:client_id response))
+             (:registration_client_uri response))))))
+
+(deftest registration-client-uri-omitted-test
+  (testing "registration_client_uri is absent when registration-endpoint is not configured"
+    (let [response (reg/handle-registration-request
+                    {:redirect_uris ["https://app.example.com/callback"]}
+                    (store/create-client-store))]
+      (is (nil? (:registration_client_uri response))))))
+
+(deftest explicit-none-produces-public-client-test
+  (testing "explicitly requesting none produces a public client with no secret"
+    (let [response (reg/handle-registration-request
+                    {:redirect_uris              ["https://app.example.com/callback"]
+                     :token_endpoint_auth_method "none"}
+                    (store/create-client-store))]
+      (is (= "none" (:token_endpoint_auth_method response)))
+      (is (nil? (:client_secret response))))))
