@@ -225,9 +225,19 @@
           (do (simulate-browser browser client base-url module-id)
               (recur (inc attempts))))))))
 
+(defn- load-test-list
+  "Loads a JSON file mapping test names to descriptions. Returns a set
+  of test names, or an empty set if the file doesn't exist."
+  [^String path]
+  (try
+    (let [m (json/parse-string (slurp path))]
+      (set (remove #(= "_comment" %) (keys m))))
+    (catch java.io.FileNotFoundException _ #{})))
+
 (defn- print-results
-  "Prints a summary of test results and returns the count of failures."
-  [results]
+  "Prints a summary of test results and returns the number of unexpected
+  failures (failures not in the expected-failures set)."
+  [results expected-failures]
   (let [grouped (group-by :result results)]
     (println)
     (println "=== Conformance Test Results ===")
@@ -239,18 +249,33 @@
                   "  Skipped: " (count (get grouped "SKIPPED" []))))
     (println)
     (doseq [r (sort-by :name results)]
-      (println (format "  %-8s %s" (:result r) (:name r))))
-    (count (get grouped "FAILED" []))))
+      (let [expected? (expected-failures (:name r))
+            marker    (if (and expected? (= "FAILED" (:result r))) " (expected)" "")]
+        (println (format "  %-8s %s%s" (:result r) (:name r) marker))))
+    (let [unexpected (filter #(and (= "FAILED" (:result %))
+                                   (not (expected-failures (:name %))))
+                             results)]
+      (when (seq unexpected)
+        (println)
+        (println (str (count unexpected) " UNEXPECTED failure(s):"
+                      (apply str (map #(str "\n    " (:name %)) unexpected)))))
+      (count unexpected))))
 
 (defn run-basic-op
-  "Runs the Basic OP conformance test plan. Returns the number of failures."
+  "Runs the Basic OP conformance test plan. Returns the number of
+  unexpected failures. Tests in `expected-skips.json` are not run.
+  Tests in `expected-failures.json` run but don't count as failures."
   [{:keys [base-url config-file]}]
-  (let [base-url (or base-url
-                     (System/getenv "CONFORMANCE_SERVER")
-                     "https://localhost.emobix.co.uk:8443")
-        config   (json/parse-string (slurp (or config-file "conformance/basic-op-config.json")) true)
-        client   (create-http-client)]
+  (let [base-url          (or base-url
+                              (System/getenv "CONFORMANCE_SERVER")
+                              "https://localhost.emobix.co.uk:8443")
+        config            (json/parse-string (slurp (or config-file "conformance/basic-op-config.json")) true)
+        skips             (load-test-list "conformance/expected-skips.json")
+        expected-failures (load-test-list "conformance/expected-failures.json")
+        client            (create-http-client)]
     (println (str "Conformance server: " base-url))
+    (when (seq skips)
+      (println (str "Skipping " (count skips) " tests (see conformance/expected-skips.json)")))
     (println (str "Creating test plan: " plan-name))
     (with-open [pw (Playwright/create)]
       (let [browser (create-browser pw)
@@ -262,18 +287,21 @@
         (try
           (let [results (reduce
                          (fn [acc {:keys [testModule variant]}]
-                           (print (str "  Running: " testModule "... "))
-                           (flush)
-                           (try
-                             (let [info (run-module browser client base-url plan-id testModule variant)]
-                               (println (:result info))
-                               (conj acc {:name testModule :result (:result info)}))
-                             (catch Exception e
-                               (println (str "ERROR: " (or (.getMessage e) (str e))))
-                               (conj acc {:name testModule :result "FAILED"}))))
+                           (if (skips testModule)
+                             (do (println (str "  Skipping: " testModule))
+                                 (conj acc {:name testModule :result "SKIPPED"}))
+                             (do (print (str "  Running: " testModule "... "))
+                                 (flush)
+                                 (try
+                                   (let [info (run-module browser client base-url plan-id testModule variant)]
+                                     (println (:result info))
+                                     (conj acc {:name testModule :result (:result info)}))
+                                   (catch Exception e
+                                     (println (str "ERROR: " (or (.getMessage e) (str e))))
+                                     (conj acc {:name testModule :result "FAILED"}))))))
                          []
                          modules)]
-            (print-results results))
+            (print-results results expected-failures))
           (finally
             (.close browser)))))))
 

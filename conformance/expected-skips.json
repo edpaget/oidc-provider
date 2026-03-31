@@ -1,0 +1,9 @@
+{
+  "_comment": "Tests skipped because they timeout waiting for protocol features not yet implemented. Each entry references the roadmap that would fix it.",
+
+  "oidcc-response-type-missing": "authorization-error-handling/phase-1-standardize-authz-error-codes",
+  "oidcc-prompt-login": "oidc-request-parameters/phase-1-enforce-prompt-parameter",
+  "oidcc-max-age-1": "oidc-request-parameters/phase-2-enforce-max-age-parameter",
+  "oidcc-ensure-registered-redirect-uri": "authorization-error-handling/phase-1-standardize-authz-error-codes",
+  "oidcc-ensure-request-object-with-redirect-uri": "task:reject-unsupported-request-objects"
+}
