@@ -5,7 +5,9 @@
    [oidc-provider.token :as token])
   (:import
    [com.nimbusds.jose.jwk JWKSet RSAKey]
-   [java.time Clock Instant ZoneOffset]))
+   [java.security MessageDigest]
+   [java.time Clock Instant ZoneOffset]
+   [java.util Arrays Base64]))
 
 (deftest normalize-single-key-to-jwk-set-test
   (testing "single RSAKey wraps into a one-key JWKSet with kid preserved"
@@ -164,3 +166,43 @@
           jwt-str (token/generate-id-token config "user-1" "client-1" {:azp "evil-client"} {:azp true})
           claims  (token/validate-id-token config jwt-str "client-1")]
       (is (= "client-1" (:azp claims))))))
+
+(defn- compute-at-hash
+  "Computes at_hash independently using Java crypto: SHA-256 the access token,
+  take the left half, base64url-encode without padding."
+  [^String access-token]
+  (let [digest (.digest (MessageDigest/getInstance "SHA-256") (.getBytes access-token "US-ASCII"))
+        left   (Arrays/copyOf digest (/ (alength digest) 2))]
+    (.encodeToString (.withoutPadding (Base64/getUrlEncoder)) left)))
+
+(deftest id-token-contains-at-hash-test
+  (testing "at_hash matches independent SHA-256 left-half computation"
+    (let [config   (single-key-config)
+          at       "test-access-token-value"
+          expected (compute-at-hash at)
+          jwt-str  (token/generate-id-token config "user-1" "client-1" {} {:access-token at})
+          claims   (token/validate-id-token config jwt-str "client-1")]
+      (is (= expected (:at_hash claims))))))
+
+(deftest id-token-omits-at-hash-when-no-access-token-test
+  (testing "at_hash is absent when no access token is provided"
+    (let [config  (single-key-config)
+          jwt-str (token/generate-id-token config "user-1" "client-1" {} {})
+          claims  (token/validate-id-token config jwt-str "client-1")]
+      (is (nil? (:at_hash claims))))))
+
+(deftest claims-provider-cannot-overwrite-at-hash-test
+  (testing "ClaimsProvider returning :at_hash does not overwrite the computed hash"
+    (let [config   (single-key-config)
+          at       "test-access-token-value"
+          expected (compute-at-hash at)
+          jwt-str  (token/generate-id-token config "user-1" "client-1" {:at_hash "evil"} {:access-token at})
+          claims   (token/validate-id-token config jwt-str "client-1")]
+      (is (= expected (:at_hash claims))))))
+
+(deftest claims-provider-at-hash-stripped-without-access-token-test
+  (testing "ClaimsProvider :at_hash is stripped even when no access token is provided"
+    (let [config  (single-key-config)
+          jwt-str (token/generate-id-token config "user-1" "client-1" {:at_hash "evil"} {})
+          claims  (token/validate-id-token config jwt-str "client-1")]
+      (is (nil? (:at_hash claims))))))

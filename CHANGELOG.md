@@ -8,8 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `at_hash` (access token hash) claim in ID tokens via `:access-token` opt, per OIDC Core §3.1.3.6
 - Optional `azp` (authorized party) claim in ID tokens via `:azp` opt, per OIDC Core §2
-- Protection against ClaimsProvider overwriting registered JWT claims (`iss`, `sub`, `aud`, `exp`, `iat`, `nonce`, `auth_time`, `azp`) in ID tokens
+- Protection against ClaimsProvider overwriting registered JWT claims (`iss`, `sub`, `aud`, `exp`, `iat`, `nonce`, `auth_time`, `azp`, `at_hash`) in ID tokens
 - `handle-client-update` for RFC 7592 §2.2 client metadata update via PUT
 - `handle-client-delete` for RFC 7592 §2.3 client deregistration via DELETE
 - `delete-client` method on `ClientStore` protocol

@@ -13,6 +13,7 @@
    [com.nimbusds.jwt.proc DefaultJWTProcessor]
    [com.nimbusds.oauth2.sdk AuthorizationCode]
    [com.nimbusds.oauth2.sdk.token BearerAccessToken RefreshToken]
+   [com.nimbusds.openid.connect.sdk.claims AccessTokenHash]
    [java.security KeyPairGenerator SecureRandom]
    [java.time Clock Instant]
    [java.util Date UUID]))
@@ -72,18 +73,19 @@
 
 (def ^:private protected-claims
   "Claim names managed by the provider that must not be overwritten by ClaimsProvider."
-  #{"iss" "sub" "aud" "exp" "iat" "nonce" "auth_time" "azp"})
+  #{"iss" "sub" "aud" "exp" "iat" "nonce" "auth_time" "azp" "at_hash"})
 
 (defn generate-id-token
   "Generates a signed OIDC ID token as a JWT string. Takes a `provider-config`
   map (matching the `ProviderConfig` schema), a `user-id` (set as the `sub`
   claim), a `client-id` (set as the `aud` claim), a `claims` map of additional
   claims to include, and an `opts` map supporting `:nonce` for replay protection,
-  `:auth-time` for the authentication timestamp, and `:azp` to include the
-  authorized party claim per OIDC Core §2."
+  `:auth-time` for the authentication timestamp, `:azp` to include the authorized
+  party claim per OIDC Core §2, and `:access-token` to compute the `at_hash` claim
+  per OIDC Core §3.1.3.6."
   [{:keys [issuer key-set active-signing-key-id id-token-ttl-seconds clock] :as config}
    user-id client-id claims
-   {:keys [nonce auth-time azp]}]
+   {:keys [nonce auth-time azp access-token]}]
   {:pre [(m/validate ProviderConfig config)]}
   (when-not key-set
     (throw (ex-info "Signing key required for ID token generation; configure :signing-key or :signing-keys" {})))
@@ -97,6 +99,9 @@
       (.issueTime ^Date (Date/from (Instant/now clock))))
     (when azp
       (.claim builder "azp" client-id))
+    (when access-token
+      (.claim builder "at_hash"
+              (.getValue (AccessTokenHash/compute (BearerAccessToken. ^String access-token) JWSAlgorithm/RS256))))
     (when nonce
       (.claim builder "nonce" nonce))
     (when auth-time
