@@ -45,6 +45,24 @@
       (is (= ["https://app.example.com/cb"] (:redirect-uris updated)))
       (is (= "https://example.com" (:client-uri updated))))))
 
+(deftest delete-client-success-test
+  (testing "removes an existing client and returns true"
+    (let [client-store (store/create-client-store)
+          registered   (proto/register-client client-store
+                                              {:client-type                "public"
+                                               :redirect-uris              ["https://app.example.com/cb"]
+                                               :grant-types                ["authorization_code"]
+                                               :response-types             ["code"]
+                                               :scopes                     ["openid"]
+                                               :token-endpoint-auth-method "none"})
+          client-id    (:client-id registered)]
+      (is (true? (proto/delete-client client-store client-id)))
+      (is (nil? (proto/get-client client-store client-id))))))
+
+(deftest delete-client-nonexistent-test
+  (testing "returns false for a nonexistent client"
+    (is (false? (proto/delete-client (store/create-client-store) "nonexistent")))))
+
 (deftest consume-authorization-code-test
   (testing "returns code data and removes code from store"
     (let [code-store (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))

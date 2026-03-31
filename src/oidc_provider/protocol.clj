@@ -70,7 +70,13 @@
 
     Merges `updated-config` into the existing client config for `client-id`, preserving
     fields not present in `updated-config`. Returns the updated client config, or nil
-    if the client does not exist."))
+    if the client does not exist.")
+
+  (delete-client [this client-id]
+    "Removes a client registration by `client-id`.
+
+    Returns true if the client existed and was removed, false if the client was
+    not found."))
 
 (defprotocol AuthorizationCodeStore
   "Protocol for storing and retrieving authorization codes.

@@ -360,43 +360,104 @@
 
 (m/=> dynamic-read-client [:=> [:cat :any :string :string] :map])
 
+(defn dynamic-update-client
+  "Updates a dynamically registered client's metadata per RFC 7592 §2.2.
+
+  Takes a Provider instance, a `client-id`, the bearer `access-token`, and the
+  updated metadata `body` map. Returns the updated client configuration.
+  Throws `ex-info` with `\"invalid_token\"` on auth failure or
+  `\"invalid_client_metadata\"` on validation errors."
+  [provider client-id access-token body]
+  (reg/handle-client-update (:client-store provider) client-id access-token body))
+
+(m/=> dynamic-update-client [:=> [:cat :any :string :string :map] :map])
+
+(defn dynamic-delete-client
+  "Deregisters a dynamically registered client per RFC 7592 §2.3.
+
+  Takes a Provider instance, a `client-id`, and the bearer `access-token`.
+  Returns nil on success. Throws `ex-info` with `\"invalid_token\"` on auth
+  failure."
+  [provider client-id access-token]
+  (reg/handle-client-delete (:client-store provider) client-id access-token))
+
+(m/=> dynamic-delete-client [:=> [:cat :any :string :string] :nil])
+
 ;; ---------------------------------------------------------------------------
 ;; Ring response functions
 ;; ---------------------------------------------------------------------------
 
-(defn registration-response
-  "Returns a Ring response for dynamic client registration (RFC 7591/7592).
+(defn- registration-error-response
+  "Converts a caught `ExceptionInfo` from the registration domain into a Ring
+  response. Auth errors (per `oidc-provider.error` hierarchy) become 401,
+  validation errors become 400."
+  [e]
+  (if (error/auth-error? (:type (ex-data e)))
+    {:status 401
+     :body   {:error :invalid_token}}
+    {:status 400
+     :body   {:error             :invalid_client_metadata
+              :error_description (or (:error_description (ex-data e))
+                                     "invalid_client_metadata")}}))
 
-  Dispatches POST for registration and GET for client configuration reads.
-  Takes a Provider instance and a Ring `request` whose `:body` has already been
-  parsed to a keyword map (e.g. via `wrap-json-body` or `wrap-keyword-params`).
+(defn- with-bearer-auth
+  "Extracts the Bearer token from `request` and calls `(f token)`. Returns 401
+  if no token is present."
+  [request f]
+  (if-let [token (extract-bearer-token request)]
+    (f token)
+    {:status 401
+     :body   {:error :invalid_token}}))
+
+(defn registration-response
+  "Returns a Ring response for dynamic client registration (RFC 7591) and client
+  configuration management (RFC 7592).
+
+  Dispatches on HTTP method: POST for registration, GET for client read, PUT for
+  client metadata update, and DELETE for deregistration. Takes a Provider
+  instance and a Ring `request` whose `:body` has already been parsed to a
+  keyword map (e.g. via `wrap-json-body` or `wrap-keyword-params`).
   To gate registration access, use application-level middleware."
   [provider request]
   (case (:request-method request)
-    :post (if-not (map? (:body request))
-            {:status 400
-             :body   {:error             :invalid_client_metadata
-                      :error_description "Missing or malformed JSON body"}}
-            (try
-              {:status 201
-               :body   (dynamic-register-client provider (:body request))}
-              (catch clojure.lang.ExceptionInfo e
-                {:status 400
-                 :body   {:error             :invalid_client_metadata
-                          :error_description (or (:error_description (ex-data e))
-                                                 "invalid_client_metadata")}})))
-    :get  (let [token (extract-bearer-token request)]
-            (if-not token
-              {:status 401
-               :body   {:error :invalid_token}}
+    :post   (if-not (map? (:body request))
+              {:status 400
+               :body   {:error             :invalid_client_metadata
+                        :error_description "Missing or malformed JSON body"}}
               (try
-                (let [client-id (extract-client-id (:uri request))]
-                  {:status 200
-                   :body   (dynamic-read-client provider client-id token)})
-                (catch clojure.lang.ExceptionInfo _
-                  {:status 401
-                   :body   {:error :invalid_token}}))))
-    (method-not-allowed "GET, POST")))
+                {:status 201
+                 :body   (dynamic-register-client provider (:body request))}
+                (catch clojure.lang.ExceptionInfo e
+                  (registration-error-response e))))
+    :get    (with-bearer-auth request
+              (fn [token]
+                (try
+                  (let [client-id (extract-client-id (:uri request))]
+                    {:status 200
+                     :body   (dynamic-read-client provider client-id token)})
+                  (catch clojure.lang.ExceptionInfo e
+                    (registration-error-response e)))))
+    :put    (with-bearer-auth request
+              (fn [token]
+                (if-not (map? (:body request))
+                  {:status 400
+                   :body   {:error             :invalid_client_metadata
+                            :error_description "Missing or malformed JSON body"}}
+                  (try
+                    (let [client-id (extract-client-id (:uri request))]
+                      {:status 200
+                       :body   (dynamic-update-client provider client-id token (:body request))})
+                    (catch clojure.lang.ExceptionInfo e
+                      (registration-error-response e))))))
+    :delete (with-bearer-auth request
+              (fn [token]
+                (try
+                  (let [client-id (extract-client-id (:uri request))]
+                    (dynamic-delete-client provider client-id token)
+                    {:status 204})
+                  (catch clojure.lang.ExceptionInfo e
+                    (registration-error-response e)))))
+    (method-not-allowed "DELETE, GET, POST, PUT")))
 
 (m/=> registration-response [:=> [:cat :any RingRequest] RingResponse])
 

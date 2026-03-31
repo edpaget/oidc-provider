@@ -341,3 +341,128 @@
                     (store/create-client-store))]
       (is (= "none" (:token_endpoint_auth_method response)))
       (is (nil? (:client_secret response))))))
+
+;; ---------------------------------------------------------------------------
+;; Client update tests (RFC 7592 §2.2)
+;; ---------------------------------------------------------------------------
+
+(defn- register-test-client
+  "Registers a client and returns [client-store reg-response]."
+  ([]
+   (register-test-client {}))
+  ([extra-request]
+   (let [client-store (store/create-client-store)
+         response     (reg/handle-registration-request
+                       (merge {:redirect_uris ["https://app.example.com/callback"]}
+                              extra-request)
+                       client-store)]
+     [client-store response])))
+
+(deftest handle-client-update-success-test
+  (testing "updates client metadata and returns updated config"
+    (let [[store reg] (register-test-client)
+          client-id   (:client_id reg)
+          token       (:registration_access_token reg)
+          result      (reg/handle-client-update
+                       store client-id token
+                       {:redirect_uris ["https://new.example.com/callback"]})]
+      (is (= ["https://new.example.com/callback"] (:redirect_uris result)))
+      (is (= client-id (:client_id result))))))
+
+(deftest handle-client-update-invalid-token-test
+  (testing "throws invalid_token when token does not match"
+    (let [[store reg] (register-test-client)
+          client-id   (:client_id reg)]
+      (is (thrown-with-msg? Exception #"invalid_token"
+                            (reg/handle-client-update
+                             store client-id "wrong-token"
+                             {:redirect_uris ["https://new.example.com/callback"]}))))))
+
+(deftest handle-client-update-invalid-metadata-test
+  (testing "throws invalid_client_metadata for invalid redirect URI"
+    (let [[store reg] (register-test-client)
+          client-id   (:client_id reg)
+          token       (:registration_access_token reg)]
+      (is (thrown-with-msg? Exception #"invalid_client_metadata"
+                            (reg/handle-client-update
+                             store client-id token
+                             {:redirect_uris ["not-a-url"]}))))))
+
+(deftest handle-client-update-preserves-credentials-test
+  (testing "update preserves client_id, client_secret, and registration_access_token"
+    (let [[store reg] (register-test-client)
+          client-id   (:client_id reg)
+          token       (:registration_access_token reg)
+          _           (reg/handle-client-update
+                       store client-id token
+                       {:redirect_uris ["https://new.example.com/callback"]})
+          stored      (proto/get-client store client-id)]
+      (is (= client-id (:client-id stored)))
+      (is (util/verify-client-secret token (:registration-access-token stored)))
+      (is (some? (:client-secret-hash stored))))))
+
+(deftest handle-client-update-replaces-metadata-test
+  (testing "update replaces all mutable metadata fields"
+    (let [[store reg] (register-test-client {:client_name "Original"
+                                             :scope       "openid"})
+          client-id   (:client_id reg)
+          token       (:registration_access_token reg)
+          result      (reg/handle-client-update
+                       store client-id token
+                       {:redirect_uris ["https://new.example.com/callback"]
+                        :client_name   "Updated"
+                        :scope         "openid profile"})]
+      (is (= "Updated" (:client_name result)))
+      (is (= "openid profile" (:scope result))))))
+
+;; ---------------------------------------------------------------------------
+;; Client delete tests (RFC 7592 §2.3)
+;; ---------------------------------------------------------------------------
+
+(deftest handle-client-delete-success-test
+  (testing "deletes client and subsequent read throws invalid_token"
+    (let [[store reg] (register-test-client)
+          client-id   (:client_id reg)
+          token       (:registration_access_token reg)]
+      (is (nil? (reg/handle-client-delete store client-id token)))
+      (is (thrown-with-msg? Exception #"invalid_token"
+                            (reg/handle-client-read store client-id token))))))
+
+(deftest handle-client-delete-invalid-token-test
+  (testing "throws invalid_token when token does not match"
+    (let [[store reg] (register-test-client)
+          client-id   (:client_id reg)]
+      (is (thrown-with-msg? Exception #"invalid_token"
+                            (reg/handle-client-delete store client-id "wrong-token"))))))
+
+(deftest handle-client-delete-already-deleted-test
+  (testing "throws invalid_token when client was already deleted"
+    (let [[store reg] (register-test-client)
+          client-id   (:client_id reg)
+          token       (:registration_access_token reg)]
+      (reg/handle-client-delete store client-id token)
+      (is (thrown-with-msg? Exception #"invalid_token"
+                            (reg/handle-client-delete store client-id token))))))
+
+(deftest handle-client-update-changes-auth-method-test
+  (testing "updating to auth method none clears client-secret-hash"
+    (let [[store reg] (register-test-client {:token_endpoint_auth_method "client_secret_basic"})
+          client-id   (:client_id reg)
+          token       (:registration_access_token reg)
+          result      (reg/handle-client-update
+                       store client-id token
+                       {:redirect_uris              ["https://app.example.com/callback"]
+                        :token_endpoint_auth_method "none"})]
+      (is (= "none" (:token_endpoint_auth_method result)))
+      (is (nil? (:client-secret-hash (proto/get-client store client-id)))))))
+
+(deftest handle-client-update-ignores-client-id-in-body-test
+  (testing "client_id in update body is silently ignored"
+    (let [[store reg] (register-test-client)
+          client-id   (:client_id reg)
+          token       (:registration_access_token reg)
+          result      (reg/handle-client-update
+                       store client-id token
+                       {:redirect_uris ["https://app.example.com/callback"]
+                        :client_id     "attacker-id"})]
+      (is (= client-id (:client_id result))))))

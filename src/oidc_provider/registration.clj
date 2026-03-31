@@ -1,10 +1,12 @@
 (ns oidc-provider.registration
-  "Dynamic client registration per RFC 7591.
+  "Dynamic client registration per RFC 7591 and client configuration management
+  per RFC 7592.
 
   Provides [[handle-registration-request]] for processing client registration
-  requests and [[handle-client-read]] for reading client configuration per
-  RFC 7592. Accepts keyword maps and converts to kebab-case for internal
-  storage via [[oidc-provider.protocol/ClientStore]]."
+  requests, [[handle-client-read]] for reading client configuration,
+  [[handle-client-update]] for replacing client metadata, and
+  [[handle-client-delete]] for deregistration. Accepts keyword maps and converts
+  to kebab-case for internal storage via [[oidc-provider.protocol/ClientStore]]."
   (:require
    [clojure.set :as set]
    [clojure.string :as str]
@@ -78,11 +80,13 @@
   (when-let [client-uri (:client_uri request)]
     (when-not (valid-https-uri? client-uri)
       (throw (ex-info "invalid_client_metadata"
-                      {:error_description (str "Invalid client_uri: " (util/truncate client-uri 200))}))))
+                      {:type              ::error/invalid-client-metadata
+                       :error_description (str "Invalid client_uri: " (util/truncate client-uri 200))}))))
   (when-let [logo-uri (:logo_uri request)]
     (when-not (valid-https-uri? logo-uri)
       (throw (ex-info "invalid_client_metadata"
-                      {:error_description (str "Invalid logo_uri: " (util/truncate logo-uri 200))})))))
+                      {:type              ::error/invalid-client-metadata
+                       :error_description (str "Invalid logo_uri: " (util/truncate logo-uri 200))})))))
 
 (defn- validate-redirect-uris
   "Validates redirect URIs based on `application_type`: `\"web\"` requires HTTPS only,
@@ -94,7 +98,8 @@
     (doseq [uri (:redirect_uris request)]
       (when-not (validator uri)
         (throw (ex-info "invalid_client_metadata"
-                        {:error_description (str "Invalid redirect URI: " (util/truncate uri 200))}))))))
+                        {:type              ::error/invalid-client-metadata
+                         :error_description (str "Invalid redirect URI: " (util/truncate uri 200))}))))))
 
 (defn- validate-grant-response-consistency
   "Validates that `grant_types` and `response_types` are consistent per RFC 7591."
@@ -104,15 +109,18 @@
     (when (and (contains? grant-types "authorization_code")
                (not (contains? response-types "code")))
       (throw (ex-info "invalid_client_metadata"
-                      {:error_description "grant_types contains authorization_code but response_types is missing code"})))
+                      {:type              ::error/invalid-client-metadata
+                       :error_description "grant_types contains authorization_code but response_types is missing code"})))
     (when (and (contains? grant-types "implicit")
                (empty? (set/intersection response-types #{"token" "id_token"})))
       (throw (ex-info "invalid_client_metadata"
-                      {:error_description "grant_types contains implicit but response_types is missing token or id_token"})))
+                      {:type              ::error/invalid-client-metadata
+                       :error_description "grant_types contains implicit but response_types is missing token or id_token"})))
     (when (and (contains? response-types "code")
                (not (contains? grant-types "authorization_code")))
       (throw (ex-info "invalid_client_metadata"
-                      {:error_description "response_types contains code but grant_types is missing authorization_code"})))))
+                      {:type              ::error/invalid-client-metadata
+                       :error_description "response_types contains code but grant_types is missing authorization_code"})))))
 
 (defn- validate-request
   "Runs semantic validations on a defaulted registration request."
@@ -173,7 +181,8 @@
   ([request client-store opts]
    (when-not (m/validate RegistrationRequest request)
      (throw (ex-info "invalid_client_metadata"
-                     {:errors (m/explain RegistrationRequest request)})))
+                     {:type   ::error/invalid-client-metadata
+                      :errors (m/explain RegistrationRequest request)})))
    (let [config       (-> request apply-defaults validate-request request->client-config)
          reg-token    (:registration-access-token config)
          secret       (when (not= (:token-endpoint-auth-method config) "none")
@@ -193,6 +202,44 @@
                      :client_secret_expires_at 0)
        reg-ep (assoc :registration_client_uri (str reg-ep "/" client-id))))))
 
+(defn- authenticate-client
+  "Retrieves and authenticates a client by verifying the bearer token against the
+  stored registration access token hash. Returns the client config on success.
+  Throws `ex-info` with `\"invalid_token\"` on failure."
+  [store client-id access-token]
+  (let [client (proto/get-client store client-id)]
+    (if (and client
+             (try
+               (util/verify-client-secret access-token (:registration-access-token client))
+               (catch Exception _ false)))
+      client
+      (throw (ex-info "invalid_token" {:type ::error/invalid-token})))))
+
+(defn- update-request->client-config
+  "Converts an update request to a kebab-case config, preserving immutable fields
+  from the `existing` client (client-id, credentials, registration access token)."
+  [request existing]
+  (let [auth-method (:token_endpoint_auth_method request)
+        public?     (= auth-method "none")
+        scope-str   (:scope request)
+        scopes      (if scope-str (vec (str/split scope-str #" ")) [])]
+    (cond-> {:client-id                  (:client-id existing)
+             :client-type                (if public? "public" "confidential")
+             :redirect-uris              (:redirect_uris request)
+             :grant-types                (:grant_types request)
+             :response-types             (:response_types request)
+             :scopes                     scopes
+             :token-endpoint-auth-method auth-method
+             :application-type           (:application_type request)
+             :registration-access-token  (:registration-access-token existing)
+             :client-secret-hash         (when-not public? (:client-secret-hash existing))}
+      (:client_name request) (assoc :client-name (:client_name request))
+      (:client_uri request)  (assoc :client-uri (:client_uri request))
+      (:logo_uri request)    (assoc :logo-uri (:logo_uri request))
+      (:contacts request)    (assoc :contacts (:contacts request)))))
+
+(m/=> handle-client-read [:=> [:cat :any :string :string] :map])
+
 (defn handle-client-read
   "Handles RFC 7592 client read requests.
 
@@ -200,14 +247,44 @@
   `client-id`, and the bearer `access-token` presented by the caller.
   Returns the client configuration map if the token is valid.
   Throws `ex-info` with `\"invalid_token\"` when the client is unknown or the
-  token does not match. The stored registration access token is a PBKDF2 hash;
-  verification uses [[oidc-provider.util/verify-client-secret]]."
+  token does not match."
   [store client-id access-token]
-  (let [client (proto/get-client store client-id)]
-    (if (and client
-             (try
-               (util/verify-client-secret access-token (:registration-access-token client))
-               (catch Exception _ false)))
-      (client-config->response client)
-      (throw (ex-info "invalid_token" {:type ::error/invalid-token})))))
+  (client-config->response (authenticate-client store client-id access-token)))
+
+(m/=> handle-client-update [:=> [:cat :any :string :string :map] :map])
+
+(defn handle-client-update
+  "Handles RFC 7592 §2.2 client update requests.
+
+  Takes the `store`, `client-id`, bearer `access-token`, and the updated
+  metadata `request` map with keyword keys. The request is a full replacement
+  of mutable metadata; immutable fields (`client_id`, `client_secret`,
+  `registration_access_token`) are ignored per RFC 7592 §2.2.
+  Returns the updated client configuration map.
+  Throws `ex-info` with `\"invalid_token\"` on auth failure or
+  `\"invalid_client_metadata\"` on validation errors."
+  [store client-id access-token request]
+  (let [existing (authenticate-client store client-id access-token)]
+    (when-not (m/validate RegistrationRequest request)
+      (throw (ex-info "invalid_client_metadata"
+                      {:type   ::error/invalid-client-metadata
+                       :errors (m/explain RegistrationRequest request)})))
+    (let [defaulted (apply-defaults request)
+          _         (validate-request defaulted)
+          updated   (update-request->client-config defaulted existing)
+          stored    (proto/update-client store client-id updated)]
+      (client-config->response stored))))
+
+(m/=> handle-client-delete [:=> [:cat :any :string :string] :nil])
+
+(defn handle-client-delete
+  "Handles RFC 7592 §2.3 client delete (deregistration) requests.
+
+  Takes the `store`, `client-id`, and bearer `access-token`. Authenticates the
+  request and removes the client from the store. Returns nil on success.
+  Throws `ex-info` with `\"invalid_token\"` on auth failure."
+  [store client-id access-token]
+  (authenticate-client store client-id access-token)
+  (proto/delete-client store client-id)
+  nil)
 

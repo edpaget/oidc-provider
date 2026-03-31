@@ -27,7 +27,14 @@
         (let [merged (-> (merge existing updated-config)
                          (assoc :client-id client-id))]
           (swap! clients assoc client-id merged)
-          merged)))))
+          merged))))
+
+  (delete-client [_ client-id]
+    (let [existed? (atom false)]
+      (swap! clients (fn [m]
+                       (reset! existed? (contains? m client-id))
+                       (dissoc m client-id)))
+      @existed?)))
 
 (defn create-client-store
   "Creates an in-memory [[InMemoryClientStore]]. When called with an

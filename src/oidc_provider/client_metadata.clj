@@ -227,7 +227,10 @@
     (proto/register-client inner client-config))
 
   (update-client [_ client-id updated-config]
-    (proto/update-client inner client-id updated-config)))
+    (proto/update-client inner client-id updated-config))
+
+  (delete-client [_ client-id]
+    (proto/delete-client inner client-id)))
 
 (m/=> create-metadata-resolving-store [:=> [:cat :any :map] [:fn #(satisfies? proto/ClientStore %)]])
 

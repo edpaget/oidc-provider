@@ -104,13 +104,145 @@
       (is (= 401 (:status response))))))
 
 (deftest registration-method-not-allowed-test
-  (testing "DELETE returns 405 with Allow header"
+  (testing "PATCH returns 405 with Allow header listing all supported methods"
     (let [response (core/registration-response
                     (make-provider)
-                    {:request-method :delete
+                    {:request-method :patch
                      :uri            "/register/some-id"})]
       (is (= 405 (:status response)))
-      (is (= "GET, POST" (get-in response [:headers "Allow"]))))))
+      (is (= "DELETE, GET, POST, PUT" (get-in response [:headers "Allow"]))))))
+
+;; ---------------------------------------------------------------------------
+;; PUT (client update) response tests
+;; ---------------------------------------------------------------------------
+
+(defn- register-via-ring
+  "Registers a client via the Ring handler, returns the response body."
+  [provider]
+  (:body (core/registration-response
+          provider
+          {:request-method :post
+           :body           {:redirect_uris ["https://app.example.com/callback"]}})))
+
+(deftest put-client-update-success-test
+  (testing "PUT with valid token returns 200 with updated config"
+    (let [provider (make-provider)
+          reg      (register-via-ring provider)
+          response (core/registration-response
+                    provider
+                    {:request-method :put
+                     :uri            (str "/register/" (:client_id reg))
+                     :headers        {"authorization" (str "Bearer " (:registration_access_token reg))}
+                     :body           {:redirect_uris ["https://new.example.com/callback"]}})]
+      (is (= 200 (:status response)))
+      (is (= ["https://new.example.com/callback"] (:redirect_uris (:body response)))))))
+
+(deftest put-client-update-invalid-token-test
+  (testing "PUT with wrong token returns 401"
+    (let [provider (make-provider)
+          reg      (register-via-ring provider)
+          response (core/registration-response
+                    provider
+                    {:request-method :put
+                     :uri            (str "/register/" (:client_id reg))
+                     :headers        {"authorization" "Bearer wrong-token"}
+                     :body           {:redirect_uris ["https://new.example.com/callback"]}})]
+      (is (= 401 (:status response))))))
+
+(deftest put-client-update-missing-auth-test
+  (testing "PUT without Authorization header returns 401"
+    (let [provider (make-provider)
+          reg      (register-via-ring provider)
+          response (core/registration-response
+                    provider
+                    {:request-method :put
+                     :uri            (str "/register/" (:client_id reg))
+                     :headers        {}
+                     :body           {:redirect_uris ["https://new.example.com/callback"]}})]
+      (is (= 401 (:status response))))))
+
+(deftest put-client-update-invalid-metadata-test
+  (testing "PUT with invalid metadata returns 400"
+    (let [provider (make-provider)
+          reg      (register-via-ring provider)
+          response (core/registration-response
+                    provider
+                    {:request-method :put
+                     :uri            (str "/register/" (:client_id reg))
+                     :headers        {"authorization" (str "Bearer " (:registration_access_token reg))}
+                     :body           {:redirect_uris ["not-a-url"]}})]
+      (is (= 400 (:status response)))
+      (is (= :invalid_client_metadata (:error (:body response)))))))
+
+(deftest put-client-update-non-map-body-test
+  (testing "PUT with non-map body returns 400"
+    (let [provider (make-provider)
+          reg      (register-via-ring provider)
+          response (core/registration-response
+                    provider
+                    {:request-method :put
+                     :uri            (str "/register/" (:client_id reg))
+                     :headers        {"authorization" (str "Bearer " (:registration_access_token reg))}
+                     :body           "not a map"})]
+      (is (= 400 (:status response))))))
+
+;; ---------------------------------------------------------------------------
+;; DELETE (client deregistration) response tests
+;; ---------------------------------------------------------------------------
+
+(deftest delete-client-success-test
+  (testing "DELETE with valid token returns 204"
+    (let [provider (make-provider)
+          reg      (register-via-ring provider)
+          response (core/registration-response
+                    provider
+                    {:request-method :delete
+                     :uri            (str "/register/" (:client_id reg))
+                     :headers        {"authorization" (str "Bearer " (:registration_access_token reg))}})]
+      (is (= 204 (:status response)))
+      (is (nil? (:body response))))))
+
+(deftest delete-client-invalid-token-test
+  (testing "DELETE with wrong token returns 401"
+    (let [provider (make-provider)
+          reg      (register-via-ring provider)
+          response (core/registration-response
+                    provider
+                    {:request-method :delete
+                     :uri            (str "/register/" (:client_id reg))
+                     :headers        {"authorization" "Bearer wrong-token"}})]
+      (is (= 401 (:status response))))))
+
+(deftest delete-client-missing-auth-test
+  (testing "DELETE without Authorization header returns 401"
+    (let [provider (make-provider)
+          reg      (register-via-ring provider)
+          response (core/registration-response
+                    provider
+                    {:request-method :delete
+                     :uri            (str "/register/" (:client_id reg))
+                     :headers        {}})]
+      (is (= 401 (:status response))))))
+
+(deftest get-after-delete-returns-401-test
+  (testing "GET after DELETE returns 401"
+    (let [provider (make-provider)
+          reg      (register-via-ring provider)
+          _        (core/registration-response
+                    provider
+                    {:request-method :delete
+                     :uri            (str "/register/" (:client_id reg))
+                     :headers        {"authorization" (str "Bearer " (:registration_access_token reg))}})
+          response (core/registration-response
+                    provider
+                    {:request-method :get
+                     :uri            (str "/register/" (:client_id reg))
+                     :headers        {"authorization" (str "Bearer " (:registration_access_token reg))}})]
+      (is (= 401 (:status response))))))
+
+;; ---------------------------------------------------------------------------
+;; Registration error description tests
+;; ---------------------------------------------------------------------------
 
 (deftest registration-malli-error-description-test
   (testing "Malli validation failure uses generic error_description"

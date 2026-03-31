@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `handle-client-update` for RFC 7592 §2.2 client metadata update via PUT
+- `handle-client-delete` for RFC 7592 §2.3 client deregistration via DELETE
+- `delete-client` method on `ClientStore` protocol
+- `registration-response` now dispatches PUT and DELETE in addition to POST and GET
 - `userinfo-response` for the UserInfo endpoint (OIDC Core §5.3) with Bearer token authentication
 - `token-response` for the token endpoint with RFC 6749 §5.1 compliant `Cache-Control: no-store` and `Pragma: no-cache` headers on all success and error responses
 - `registration-response` for dynamic client registration (RFC 7591) and client read (RFC 7592)

@@ -16,6 +16,9 @@ Integrators are responsible for adding Ring middleware to handle serialization a
 
 Do not add `cheshire.core` or any JSON library as a dependency of `oidc-provider.core`. If you find yourself calling `json/generate-string` or `json/parse-string` in core, you are violating this boundary.
 
+### Error dispatch
+All domain-layer `ex-info` throws must include a `:type` key from the `oidc-provider.error` hierarchy (e.g., `::error/invalid-token`, `::error/invalid-client-metadata`). Ring handlers must dispatch on `:type` via `error/auth-error?` or `error/request-error?` — never match on `ex-message` strings. If you find yourself comparing `(ex-message e)` to a string literal, you are violating this boundary.
+
 ---
 
 # General Guidelines
