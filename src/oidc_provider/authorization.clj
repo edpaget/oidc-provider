@@ -3,8 +3,11 @@
   (:require
    [clojure.string :as str]
    [malli.core :as m]
+   [oidc-provider.error :as error]
    [oidc-provider.protocol :as proto]
-   [oidc-provider.token :as token]))
+   [oidc-provider.token :as token])
+  (:import
+   [com.nimbusds.oauth2.sdk OAuth2Error]))
 
 (set! *warn-on-reflection* true)
 
@@ -43,14 +46,19 @@
   (when-not (some #{redirect-uri} (:redirect-uris client))
     (throw (ex-info "Invalid redirect_uri"
                     {:redirect-uri redirect-uri
-                     :allowed      (:redirect-uris client)}))))
+                     :allowed      (:redirect-uris client)
+                     :type         ::error/invalid-request
+                     :error        (.getCode OAuth2Error/INVALID_REQUEST)
+                     :redirect     false}))))
 
 (defn- validate-response-type
   [client response-type]
   (when-not (some #{response-type} (:response-types client))
     (throw (ex-info "Unsupported response_type"
                     {:response-type response-type
-                     :supported     (:response-types client)}))))
+                     :supported     (:response-types client)
+                     :type          ::error/unsupported-response-type
+                     :error         (.getCode OAuth2Error/UNSUPPORTED_RESPONSE_TYPE)}))))
 
 (defn- validate-scope
   [client scope-str]
@@ -59,14 +67,17 @@
     (when (some (fn [scope] (not (some #{scope} client-scopes))) requested-scopes)
       (throw (ex-info "Invalid scope"
                       {:requested requested-scopes
-                       :allowed   client-scopes})))))
+                       :allowed   client-scopes
+                       :type      ::error/invalid-scope
+                       :error     (.getCode OAuth2Error/INVALID_SCOPE)})))))
 
 (defn- validate-pkce-params
   [params]
   (cond
     (and (:code_challenge_method params) (not (:code_challenge params)))
     (throw (ex-info "Invalid request: code_challenge_method requires code_challenge"
-                    {:error "invalid_request"}))
+                    {:type  ::error/invalid-request
+                     :error (.getCode OAuth2Error/INVALID_REQUEST)}))
 
     (and (:code_challenge params) (not (:code_challenge_method params)))
     (assoc params :code_challenge_method "S256")
@@ -78,7 +89,8 @@
   (when (and (= (:client-type client) "public")
              (not (:code_challenge params)))
     (throw (ex-info "Public clients must use PKCE"
-                    {:error "invalid_request"}))))
+                    {:type  ::error/invalid-request
+                     :error (.getCode OAuth2Error/INVALID_REQUEST)}))))
 
 (defn parse-authorization-request
   "Validates a pre-parsed authorization request.
@@ -96,12 +108,19 @@
   [params client-store]
   (when-not (m/validate AuthorizationRequest params)
     (throw (ex-info "Invalid authorization request"
-                    {:errors (m/explain AuthorizationRequest params)})))
+                    {:errors   (m/explain AuthorizationRequest params)
+                     :type     ::error/invalid-request
+                     :error    (.getCode OAuth2Error/INVALID_REQUEST)
+                     :redirect false})))
   (let [params    (-> params validate-pkce-params normalize-resource)
         client-id (:client_id params)
         client    (proto/get-client client-store client-id)]
     (when-not client
-      (throw (ex-info "Unknown client" {:client-id client-id})))
+      (throw (ex-info "Unknown client"
+                      {:client-id client-id
+                       :type      ::error/invalid-request
+                       :error     (.getCode OAuth2Error/INVALID_REQUEST)
+                       :redirect  false})))
     (validate-redirect-uri client (:redirect_uri params))
     (let [params (if (and (nil? (:resource params))
                           (:default-resource client))

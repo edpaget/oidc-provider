@@ -1,7 +1,9 @@
 (ns oidc-provider.core-ring-test
   (:require
+   [clojure.string :as str]
    [clojure.test :refer [deftest is testing]]
    [oidc-provider.core :as core]
+   [oidc-provider.error :as error]
    [oidc-provider.protocol :as proto]
    [oidc-provider.registration :as reg]
    [oidc-provider.store :as store]
@@ -563,3 +565,32 @@
                                             :headers        {"authorization" (str "Bearer " access-token)}})]
       (is (= 200 (:status response)))
       (is (= "test-user" (:sub (:body response)))))))
+
+;; ---------------------------------------------------------------------------
+;; Authorization error response tests
+;; ---------------------------------------------------------------------------
+
+(deftest authorization-error-non-redirectable-test
+  (testing "non-redirectable error returns 400 with error body"
+    (let [provider (make-provider)
+          e        (ex-info "Unknown client"
+                            {:type     ::error/invalid-request
+                             :error    "invalid_request"
+                             :redirect false})]
+      (is (= {:status 400
+              :body   {:error             "invalid_request"
+                       :error_description "Unknown client"}}
+             (core/authorization-error-response provider e))))))
+
+(deftest authorization-error-redirectable-test
+  (testing "redirectable error returns 302 with error redirect"
+    (let [provider (make-provider)
+          e        (ex-info "Unsupported response_type"
+                            {:type         ::error/unsupported-response-type
+                             :error        "unsupported_response_type"
+                             :redirect_uri "https://app.example.com/callback"
+                             :state        "xyz"})
+          location (get-in (core/authorization-error-response provider e)
+                           [:headers "Location"])]
+      (is (str/includes? location "error=unsupported_response_type"))
+      (is (str/includes? location "state=xyz")))))

@@ -494,6 +494,32 @@
 
 (m/=> revocation-response [:=> [:cat :any RingRequest] RingResponse])
 
+(defn authorization-error-response
+  "Returns a Ring response for an authorization endpoint error.
+
+  Dispatches on the `:type` key in `ex-data` via [[oidc-provider.error/request-error?]].
+  Non-redirectable errors (`:redirect false` — invalid `redirect_uri` or unknown
+  `client_id`) return a 400 response with the error in the body. Redirectable errors
+  build a 302 error redirect using the `:redirect_uri` and `:state` from ex-data."
+  [provider e]
+  (let [data            (ex-data e)
+        provider-config (:provider-config provider)]
+    (if (and (error/request-error? (:type data))
+             (false? (:redirect data)))
+      {:status 400
+       :body   {:error             (:error data)
+                :error_description (ex-message e)}}
+      {:status  302
+       :headers {"Location" (authz/build-redirect-url
+                             (authz/handle-authorization-denial
+                              {:redirect_uri (:redirect_uri data)
+                               :state        (:state data)}
+                              (:error data)
+                              (ex-message e)
+                              provider-config))}})))
+
+(m/=> authorization-error-response [:=> [:cat :any [:fn #(instance? clojure.lang.ExceptionInfo %)]] RingResponse])
+
 (defn token-response
   "Returns a Ring response for the OAuth2 token endpoint (RFC 6749 §3.2).
 
