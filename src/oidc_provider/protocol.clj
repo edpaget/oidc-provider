@@ -121,7 +121,22 @@
     Takes an authorization code string, removes it from storage, and returns its
     metadata map. If the code does not exist (or has already been consumed), returns
     `nil`. This prevents replay attacks where concurrent requests could both read the
-    same code before either deletes it."))
+    same code before either deletes it.")
+
+  (mark-code-exchanged [this code access-token refresh-token]
+    "Records that an authorization code was exchanged for tokens.
+
+    Takes the authorization code, the issued access token string, and an optional
+    refresh token string (may be `nil`). Stores a record associating the code with
+    its issued tokens so that replay detection can revoke them per RFC 6749 §10.5.
+    Returns true if recorded successfully.")
+
+  (get-code-tokens [this code]
+    "Retrieves the tokens issued for a previously consumed authorization code.
+
+    Takes an authorization code string and returns a map with `:access-token` and
+    optionally `:refresh-token` if the code was previously exchanged, or `nil` if
+    no record exists."))
 
 (defprotocol TokenStore
   "Protocol for managing access and refresh tokens.

@@ -46,7 +46,7 @@
    (let [clients-map (into {} (map (fn [c] [(:client-id c) c])) initial-clients)]
      (->InMemoryClientStore (atom clients-map)))))
 
-(defrecord InMemoryAuthorizationCodeStore [codes]
+(defrecord InMemoryAuthorizationCodeStore [codes consumed]
   proto/AuthorizationCodeStore
   (save-authorization-code [_ code user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource]
     (swap! codes assoc code (cond-> {:user-id      user-id
@@ -72,12 +72,21 @@
       (swap! codes (fn [m]
                      (reset! result (get m code))
                      (dissoc m code)))
-      @result)))
+      @result))
+
+  (mark-code-exchanged [_ code access-token refresh-token]
+    (swap! consumed assoc code (cond-> {:access-token access-token}
+                                 refresh-token (assoc :refresh-token refresh-token)))
+    true)
+
+  (get-code-tokens [_ code]
+    (get @consumed code)))
 
 (defn create-authorization-code-store
-  "Creates an in-memory [[InMemoryAuthorizationCodeStore]] backed by an atom."
+  "Creates an in-memory [[InMemoryAuthorizationCodeStore]] backed by atoms for
+  active codes and consumed-code token records."
   []
-  (->InMemoryAuthorizationCodeStore (atom {})))
+  (->InMemoryAuthorizationCodeStore (atom {}) (atom {})))
 
 (defrecord InMemoryTokenStore [access-tokens refresh-tokens]
   proto/TokenStore
@@ -142,4 +151,8 @@
   (delete-authorization-code [_ code]
     (proto/delete-authorization-code inner (util/hash-token code)))
   (consume-authorization-code [_ code]
-    (proto/consume-authorization-code inner (util/hash-token code))))
+    (proto/consume-authorization-code inner (util/hash-token code)))
+  (mark-code-exchanged [_ code access-token refresh-token]
+    (proto/mark-code-exchanged inner (util/hash-token code) access-token refresh-token))
+  (get-code-tokens [_ code]
+    (proto/get-code-tokens inner (util/hash-token code))))

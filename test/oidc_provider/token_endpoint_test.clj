@@ -1,6 +1,7 @@
 (ns oidc-provider.token-endpoint-test
   (:require
    [clojure.test :refer [deftest is testing]]
+   [oidc-provider.error :as error]
    [oidc-provider.protocol :as proto]
    [oidc-provider.store :as store]
    [oidc-provider.token :as token]
@@ -1351,3 +1352,93 @@
           access-data     (proto/get-access-token token-store (:access_token response))]
       (is (nil? (:resource response)))
       (is (nil? (:resource access-data))))))
+
+;; ---------------------------------------------------------------------------
+;; Authorization code replay detection tests
+;; ---------------------------------------------------------------------------
+
+(deftest authorization-code-replay-revokes-tokens-test
+  (testing "replaying a consumed code revokes the previously issued tokens"
+    (let [code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
+          claims-provider (->TestClaimsProvider)
+          provider-config (make-provider-config {:id-token-ttl-seconds 3600})
+          client          {:client-id          "test-client"
+                           :client-type        "confidential"
+                           :client-secret-hash secret123-hash
+                           :grant-types        ["authorization_code" "refresh_token"]
+                           :scopes             ["openid"]}
+          code            (token/generate-authorization-code)
+          expiry          (+ (System/currentTimeMillis) (* 1000 600))]
+      (proto/save-authorization-code code-store code "user-123" "test-client"
+                                     "https://app.example.com/callback"
+                                     ["openid"] "nonce123" expiry nil nil nil)
+      (let [response (token-ep/handle-authorization-code-grant
+                      {:code code :redirect_uri "https://app.example.com/callback"}
+                      client provider-config code-store token-store claims-provider)
+            at       (:access_token response)
+            rt       (:refresh_token response)]
+        (is (= "user-123" (:user-id (proto/get-access-token token-store at))))
+        (is (= "user-123" (:user-id (proto/get-refresh-token token-store rt))))
+        (is (thrown? clojure.lang.ExceptionInfo
+                     (token-ep/handle-authorization-code-grant
+                      {:code code :redirect_uri "https://app.example.com/callback"}
+                      client provider-config code-store token-store claims-provider)))
+        (is (nil? (proto/get-access-token token-store at)))
+        (is (nil? (proto/get-refresh-token token-store rt)))))))
+
+(deftest authorization-code-replay-error-metadata-test
+  (testing "replay error includes type and reason in ex-data"
+    (let [code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
+          claims-provider (->TestClaimsProvider)
+          provider-config (make-provider-config {:id-token-ttl-seconds 3600})
+          client          {:client-id          "test-client"
+                           :client-type        "confidential"
+                           :client-secret-hash secret123-hash
+                           :grant-types        ["authorization_code"]
+                           :scopes             ["openid"]}
+          code            (token/generate-authorization-code)
+          expiry          (+ (System/currentTimeMillis) (* 1000 600))]
+      (proto/save-authorization-code code-store code "user-123" "test-client"
+                                     "https://app.example.com/callback"
+                                     ["openid"] "nonce123" expiry nil nil nil)
+      (token-ep/handle-authorization-code-grant
+       {:code code :redirect_uri "https://app.example.com/callback"}
+       client provider-config code-store token-store claims-provider)
+      (try
+        (token-ep/handle-authorization-code-grant
+         {:code code :redirect_uri "https://app.example.com/callback"}
+         client provider-config code-store token-store claims-provider)
+        (is false "expected exception")
+        (catch clojure.lang.ExceptionInfo e
+          (is (= ::error/invalid-grant (:type (ex-data e))))
+          (is (= :replay (:reason (ex-data e)))))))))
+
+(deftest authorization-code-replay-without-refresh-token-test
+  (testing "replay revokes access token when no refresh token was issued"
+    (let [code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
+          claims-provider (->TestClaimsProvider)
+          provider-config (make-provider-config {:id-token-ttl-seconds 3600})
+          client          {:client-id          "test-client"
+                           :client-type        "confidential"
+                           :client-secret-hash secret123-hash
+                           :grant-types        ["authorization_code"]
+                           :scopes             ["openid"]}
+          code            (token/generate-authorization-code)
+          expiry          (+ (System/currentTimeMillis) (* 1000 600))]
+      (proto/save-authorization-code code-store code "user-123" "test-client"
+                                     "https://app.example.com/callback"
+                                     ["openid"] "nonce123" expiry nil nil nil)
+      (let [response (token-ep/handle-authorization-code-grant
+                      {:code code :redirect_uri "https://app.example.com/callback"}
+                      client provider-config code-store token-store claims-provider)
+            at       (:access_token response)]
+        (is (nil? (:refresh_token response)))
+        (is (= "user-123" (:user-id (proto/get-access-token token-store at))))
+        (is (thrown? clojure.lang.ExceptionInfo
+                     (token-ep/handle-authorization-code-grant
+                      {:code code :redirect_uri "https://app.example.com/callback"}
+                      client provider-config code-store token-store claims-provider)))
+        (is (nil? (proto/get-access-token token-store at)))))))

@@ -3,6 +3,7 @@
   (:require
    [clojure.string :as str]
    [malli.core :as m]
+   [oidc-provider.error :as error]
    [oidc-provider.protocol :as proto]
    [oidc-provider.token :as token]
    [oidc-provider.util :as util])
@@ -190,7 +191,15 @@
     (throw (ex-info "Missing code parameter" {})))
   (let [code-data (proto/consume-authorization-code code-store code)]
     (when-not code-data
-      (throw (ex-info "Invalid or expired authorization code" {:code code})))
+      (let [replayed? (when-let [tokens (proto/get-code-tokens code-store code)]
+                        (proto/revoke-token token-store (:access-token tokens))
+                        (when (:refresh-token tokens)
+                          (proto/revoke-token token-store (:refresh-token tokens)))
+                        true)]
+        (throw (ex-info "Invalid or expired authorization code"
+                        {:type   ::error/invalid-grant
+                         :code   code
+                         :reason (if replayed? :replay :not-found)}))))
     (when (> (.millis ^java.time.Clock (:clock provider-config)) (:expiry code-data))
       (throw (ex-info "Authorization code expired" {:code code})))
     (when (not= (:client-id code-data) (:client-id client))
@@ -224,6 +233,7 @@
       (proto/save-access-token token-store access-token user-id (:client-id client) scope expiry resource)
       (when refresh-token
         (proto/save-refresh-token token-store refresh-token user-id (:client-id client) scope refresh-expiry resource))
+      (proto/mark-code-exchanged code-store code access-token refresh-token)
       (cond-> {:access_token access-token
                :token_type   "Bearer"
                :expires_in   ttl

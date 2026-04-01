@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Non-redirectable authorization errors (`redirect_uri` mismatch, unknown `client_id`, schema failures) include `{:redirect false}` in `ex-data` so Ring handlers can display an error page instead of redirecting
 - `authorization-error-response` Ring handler that dispatches on the `oidc-provider.error` type hierarchy — returns 400 for non-redirectable errors, 302 error redirect otherwise
 - `::error/unsupported-response-type` and `::error/invalid-scope` error types in the error hierarchy
+- Authorization code replay detection with token revocation per RFC 6749 §10.5 — replaying a consumed code revokes all previously issued access and refresh tokens
+- `mark-code-exchanged` and `get-code-tokens` methods on `AuthorizationCodeStore` protocol for consumed-code tracking
 - Multi-audience ID token support via `:additional-audiences` opt in `generate-id-token` — `azp` claim is set automatically when multiple audiences are present per OIDC Core §2
 - Optional `:default-resource` client config field for audience binding when RFC 8707 resource indicators are not used — tokens issued for the client are scoped to the default resource URIs unless overridden by an explicit `resource` parameter
 - `at_hash` (access token hash) claim in ID tokens via `:access-token` opt, per OIDC Core §3.1.3.6
