@@ -7,7 +7,8 @@
    [oidc-provider.protocol :as proto]
    [oidc-provider.token :as token])
   (:import
-   [com.nimbusds.oauth2.sdk OAuth2Error]))
+   [com.nimbusds.oauth2.sdk OAuth2Error ParseException]
+   [com.nimbusds.openid.connect.sdk OIDCError Prompt Prompt$Type]))
 
 (set! *warn-on-reflection* true)
 
@@ -84,6 +85,26 @@
 
     :else params))
 
+(def ^:private prompt-type->keyword
+  "Maps Nimbus `Prompt$Type` enum values to keywords."
+  {Prompt$Type/NONE           :none
+   Prompt$Type/LOGIN          :login
+   Prompt$Type/CONSENT        :consent
+   Prompt$Type/SELECT_ACCOUNT :select-account})
+
+(defn- parse-prompt
+  "Parses a `prompt` parameter string using Nimbus `Prompt/parse`. Returns a set
+  of keywords (e.g., `#{:login :consent}`). Throws `invalid_request` when the
+  value is malformed or contains an invalid combination like `none login`."
+  [prompt-str]
+  (try
+    (let [^Prompt prompt (Prompt/parse ^String prompt-str)]
+      (into #{} (map prompt-type->keyword) prompt))
+    (catch ParseException _
+      (throw (ex-info "Invalid prompt parameter"
+                      {:type  ::error/invalid-request
+                       :error (.getCode OAuth2Error/INVALID_REQUEST)})))))
+
 (defn- validate-public-client-pkce
   [client params]
   (when (and (= (:client-type client) "public")
@@ -104,7 +125,10 @@
    The `:resource` parameter may be a string (single value) or a vector (multiple
    values); it is normalized to a vector. When the request has no `:resource` parameter
    and the client has a `:default-resource` configured, the default is applied
-   automatically. Throws `ex-info` on validation errors or if the client is unknown."
+   automatically. When `prompt` is present, its value is parsed and validated per
+   OIDC Core §3.1.2.1 and the result is included as `:prompt-values` — a set of
+   keywords (e.g., `#{:login :consent}`). Throws `ex-info` on validation errors or
+   if the client is unknown."
   [params client-store]
   (when-not (m/validate AuthorizationRequest params)
     (throw (ex-info "Invalid authorization request"
@@ -133,12 +157,13 @@
         (validate-public-client-pkce client params)
         (when-let [resources (:resource params)]
           (proto/validate-resource-indicators resources))
+        (cond-> params
+          (:prompt params) (assoc :prompt-values (parse-prompt (:prompt params))))
         (catch clojure.lang.ExceptionInfo e
           (throw (ex-info (ex-message e)
                           (cond-> (assoc (ex-data e)
                                          :redirect_uri (:redirect_uri params))
-                            (:state params) (assoc :state (:state params)))))))
-      params)))
+                            (:state params) (assoc :state (:state params))))))))))
 
 (defn handle-authorization-approval
   "Handles user approval of authorization request.
@@ -184,6 +209,23 @@
                    (:issuer provider-config) (assoc :iss (:issuer provider-config))
                    error-description (assoc :error_description error-description)
                    state (assoc :state state))})
+
+(defn validate-prompt-none
+  "Checks whether `prompt=none` was requested and the user is not authenticated.
+
+   Host applications should call this after resolving the user's authentication
+   state. If `:prompt-values` contains `:none` and `authenticated?` is false,
+   returns an error redirect response map with a `login_required` error code per
+   OIDC Core §3.1.2.6. Returns `nil` when no error applies — the host app should
+   proceed normally."
+  [{:keys [redirect_uri state prompt-values]} authenticated? provider-config]
+  (when (and (contains? prompt-values :none) (not authenticated?))
+    {:redirect-uri redirect_uri
+     :params       (cond-> {:error (.getCode OIDCError/LOGIN_REQUIRED)}
+                     (:issuer provider-config) (assoc :iss (:issuer provider-config))
+                     state (assoc :state state))}))
+
+(m/=> validate-prompt-none [:=> [:cat :map :boolean :map] [:maybe :map]])
 
 (defn build-redirect-url
   "Builds the redirect URL with query parameters.

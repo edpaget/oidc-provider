@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `prompt` parameter parsing and validation per OIDC Core §3.1.2.1 — uses Nimbus `Prompt/parse` to reject invalid combinations (e.g., `none` with other values) and exposes parsed values as `:prompt-values` keyword set in the validated request map
+- `validate-prompt-none` helper for host applications to enforce `prompt=none` semantics — returns a `login_required` error redirect when the user is not authenticated, per OIDC Core §3.1.2.6
 - Standard OAuth2 error codes on all authorization endpoint validation errors per RFC 6749 §4.1.2.1 — `invalid_request`, `unsupported_response_type`, `invalid_scope` sourced from Nimbus `OAuth2Error` constants
 - Non-redirectable authorization errors (`redirect_uri` mismatch, unknown `client_id`, schema failures) include `{:redirect false}` in `ex-data` so Ring handlers can display an error page instead of redirecting
 - `authorization-error-response` Ring handler that dispatches on the `oidc-provider.error` type hierarchy — returns 400 for non-redirectable errors, 302 error redirect otherwise

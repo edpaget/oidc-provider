@@ -555,3 +555,81 @@
                         :resource      "https://other.example.com"}
           result       (authz/parse-authorization-request params client-store)]
       (is (= ["https://other.example.com"] (:resource result))))))
+
+;; --- prompt parameter tests ---
+
+(deftest parse-prompt-none-test
+  (testing "prompt=none is parsed into :prompt-values set"
+    (let [client-store (make-client-store)
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"
+                        :prompt        "none"}
+          result       (authz/parse-authorization-request params client-store)]
+      (is (= #{:none} (:prompt-values result))))))
+
+(deftest parse-prompt-multiple-values-test
+  (testing "prompt=login consent is parsed into set with both values"
+    (let [client-store (make-client-store)
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"
+                        :prompt        "login consent"}
+          result       (authz/parse-authorization-request params client-store)]
+      (is (= #{:login :consent} (:prompt-values result))))))
+
+(deftest parse-prompt-invalid-combination-test
+  (testing "prompt=none login is rejected with invalid_request"
+    (let [client-store (make-client-store)
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"
+                        :prompt        "none login"
+                        :state         "xyz"}]
+      (try
+        (authz/parse-authorization-request params client-store)
+        (is false "expected exception")
+        (catch clojure.lang.ExceptionInfo e
+          (is (= ::error/invalid-request (:type (ex-data e))))
+          (is (= "invalid_request" (:error (ex-data e))))
+          (is (= "xyz" (:state (ex-data e))))
+          (is (= "https://app.example.com/callback" (:redirect_uri (ex-data e)))))))))
+
+(deftest parse-prompt-absent-test
+  (testing "no prompt param means no :prompt-values key in result"
+    (let [client-store (make-client-store)
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"}
+          result       (authz/parse-authorization-request params client-store)]
+      (is (not (contains? result :prompt-values))))))
+
+(deftest validate-prompt-none-unauthenticated-test
+  (testing "returns login_required error when prompt=none and user not authenticated"
+    (let [parsed-request  {:redirect_uri  "https://app.example.com/callback"
+                           :state         "xyz"
+                           :prompt-values #{:none}}
+          provider-config {:issuer "https://test.example.com"}
+          result          (authz/validate-prompt-none parsed-request false provider-config)]
+      (is (= "https://app.example.com/callback" (:redirect-uri result)))
+      (is (= "login_required" (get-in result [:params :error])))
+      (is (= "xyz" (get-in result [:params :state])))
+      (is (= "https://test.example.com" (get-in result [:params :iss]))))))
+
+(deftest validate-prompt-none-authenticated-test
+  (testing "returns nil when prompt=none and user is authenticated"
+    (let [parsed-request  {:redirect_uri  "https://app.example.com/callback"
+                           :prompt-values #{:none}}
+          provider-config {:issuer "https://test.example.com"}]
+      (is (nil? (authz/validate-prompt-none parsed-request true provider-config))))))
+
+(deftest validate-prompt-none-not-requested-test
+  (testing "returns nil when prompt was not none"
+    (let [parsed-request  {:redirect_uri  "https://app.example.com/callback"
+                           :prompt-values #{:login}}
+          provider-config {:issuer "https://test.example.com"}]
+      (is (nil? (authz/validate-prompt-none parsed-request false provider-config))))))
