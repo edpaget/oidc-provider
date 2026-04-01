@@ -81,23 +81,31 @@
   claim), a `client-id` (set as the `aud` claim), a `claims` map of additional
   claims to include, and an `opts` map supporting `:nonce` for replay protection,
   `:auth-time` for the authentication timestamp, `:azp` to include the authorized
-  party claim per OIDC Core §2, and `:access-token` to compute the `at_hash` claim
-  per OIDC Core §3.1.3.6."
+  party claim per OIDC Core §2, `:access-token` to compute the `at_hash` claim
+  per OIDC Core §3.1.3.6, and `:additional-audiences` for multi-audience tokens.
+  When `:additional-audiences` is provided, the `aud` claim contains the `client-id`
+  plus the additional audiences (deduplicated), and `azp` is set automatically."
   [{:keys [issuer key-set active-signing-key-id id-token-ttl-seconds clock] :as config}
    user-id client-id claims
-   {:keys [nonce auth-time azp access-token]}]
+   {:keys [nonce auth-time azp access-token additional-audiences]}]
   {:pre [(m/validate ProviderConfig config)]}
   (when-not key-set
     (throw (ex-info "Signing key required for ID token generation; configure :signing-key or :signing-keys" {})))
   (let [ttl                           (or id-token-ttl-seconds 3600)
+        audiences                     (if (seq additional-audiences)
+                                        (distinct (into [client-id] additional-audiences))
+                                        [client-id])
+        multi-aud?                    (> (count audiences) 1)
         ^JWTClaimsSet$Builder builder (JWTClaimsSet$Builder.)]
     (doto builder
       (.issuer issuer)
       (.subject user-id)
-      (.audience (java.util.Arrays/asList (into-array String [client-id])))
+      (.audience (java.util.Arrays/asList (into-array String audiences)))
       (.expirationTime ^Date (add-seconds clock ttl))
       (.issueTime ^Date (Date/from (Instant/now clock))))
-    (when azp
+    (doseq [[k v] (remove (fn [[k _]] (protected-claims (name k))) claims)]
+      (.claim builder (name k) v))
+    (when (or azp multi-aud?)
       (.claim builder "azp" client-id))
     (when access-token
       (.claim builder "at_hash"
@@ -106,8 +114,6 @@
       (.claim builder "nonce" nonce))
     (when auth-time
       (.claim builder "auth_time" (long auth-time)))
-    (doseq [[k v] (remove (fn [[k _]] (protected-claims (name k))) claims)]
-      (.claim builder (name k) v))
     (let [claims-set            (.build builder)
           ^RSAKey signing-key   (active-signing-key key-set active-signing-key-id)
           header                (-> (JWSHeader$Builder. JWSAlgorithm/RS256)
@@ -139,8 +145,9 @@
   "Validates an ID token's signature and claims against the given
   `provider-config`. Verifies that the `token` string was signed with a key from
   the provider's key set, that the issuer matches, that `expected-client-id`
-  appears in the audience, and that the token has not expired. Returns the
-  validated claims as a keyword map, or throws `ex-info` on failure."
+  appears in the audience list (supporting both single and multi-audience tokens),
+  and that the token has not expired. Returns the validated claims as a keyword
+  map, or throws `ex-info` on failure."
   [{:keys [issuer key-set clock] :as config} token expected-client-id]
   {:pre [(m/validate ProviderConfig config)]}
   (when-not key-set

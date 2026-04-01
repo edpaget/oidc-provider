@@ -206,3 +206,58 @@
           jwt-str (token/generate-id-token config "user-1" "client-1" {:at_hash "evil"} {})
           claims  (token/validate-id-token config jwt-str "client-1")]
       (is (nil? (:at_hash claims))))))
+
+(deftest generate-id-token-single-audience-test
+  (testing "single audience has no azp claim"
+    (let [config  (single-key-config)
+          jwt-str (token/generate-id-token config "user-1" "client-1" {} {})
+          claims  (token/validate-id-token config jwt-str "client-1")]
+      (is (= ["client-1"] (:aud claims)))
+      (is (nil? (:azp claims))))))
+
+(deftest generate-id-token-multi-audience-test
+  (testing "multiple audiences includes all values and sets azp"
+    (let [config  (single-key-config)
+          jwt-str (token/generate-id-token config "user-1" "client-1" {}
+                                           {:additional-audiences ["https://api.example.com"]})
+          claims  (token/validate-id-token config jwt-str "client-1")]
+      (is (= ["client-1" "https://api.example.com"] (:aud claims)))
+      (is (= "client-1" (:azp claims))))))
+
+(deftest generate-id-token-empty-additional-audiences-test
+  (testing "empty additional-audiences behaves like single audience"
+    (let [config  (single-key-config)
+          jwt-str (token/generate-id-token config "user-1" "client-1" {}
+                                           {:additional-audiences []})
+          claims  (token/validate-id-token config jwt-str "client-1")]
+      (is (= ["client-1"] (:aud claims)))
+      (is (nil? (:azp claims))))))
+
+(deftest validate-id-token-multi-audience-test
+  (testing "validation succeeds when expected client-id is in multi-audience list"
+    (let [config  (single-key-config)
+          jwt-str (token/generate-id-token config "user-1" "client-1" {}
+                                           {:additional-audiences ["https://api.example.com"
+                                                                   "https://other.example.com"]})
+          claims  (token/validate-id-token config jwt-str "client-1")]
+      (is (= "user-1" (:sub claims)))
+      (is (= ["client-1" "https://api.example.com" "https://other.example.com"] (:aud claims)))
+      (is (= "client-1" (:azp claims))))))
+
+(deftest generate-id-token-deduplicates-audiences-test
+  (testing "duplicate client-id in additional-audiences is deduplicated"
+    (let [config  (single-key-config)
+          jwt-str (token/generate-id-token config "user-1" "client-1" {}
+                                           {:additional-audiences ["client-1"]})
+          claims  (token/validate-id-token config jwt-str "client-1")]
+      (is (= ["client-1"] (:aud claims)))
+      (is (nil? (:azp claims))))))
+
+(deftest generate-id-token-nil-additional-audiences-test
+  (testing "nil additional-audiences behaves like single audience"
+    (let [config  (single-key-config)
+          jwt-str (token/generate-id-token config "user-1" "client-1" {}
+                                           {:additional-audiences nil})
+          claims  (token/validate-id-token config jwt-str "client-1")]
+      (is (= ["client-1"] (:aud claims)))
+      (is (nil? (:azp claims))))))

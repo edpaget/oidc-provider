@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Multi-audience ID token support via `:additional-audiences` opt in `generate-id-token` — `azp` claim is set automatically when multiple audiences are present per OIDC Core §2
 - Optional `:default-resource` client config field for audience binding when RFC 8707 resource indicators are not used — tokens issued for the client are scoped to the default resource URIs unless overridden by an explicit `resource` parameter
 - `at_hash` (access token hash) claim in ID tokens via `:access-token` opt, per OIDC Core §3.1.3.6
 - Optional `azp` (authorized party) claim in ID tokens via `:azp` opt, per OIDC Core §2
