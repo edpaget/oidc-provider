@@ -935,7 +935,7 @@
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
-                                     ["openid" "profile"] "nonce123" expiry nil nil nil nil)
+                                     ["openid" "profile" "offline_access"] "nonce123" expiry nil nil nil nil)
       (let [response     (token-ep/handle-authorization-code-grant
                           {:code         code
                            :redirect_uri "https://app.example.com/callback"}
@@ -947,6 +947,59 @@
             refresh-data (proto/get-refresh-token token-store (:refresh_token response))]
         (is (= "user-123" (:user-id refresh-data)))
         (is (= "test-client" (:client-id refresh-data)))))))
+
+(deftest offline-access-issues-refresh-token-test
+  (testing "refresh token issued when offline_access in scope and client supports it"
+    (let [client-store    (store/create-client-store
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code" "refresh_token"]
+                             :response-types     ["code"]
+                             :scopes             ["openid" "offline_access"]}])
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
+          claims-provider (->TestClaimsProvider)
+          provider-config (make-provider-config {:id-token-ttl-seconds 3600})
+          code            (token/generate-authorization-code)
+          expiry          (+ (System/currentTimeMillis) (* 1000 600))]
+      (proto/save-authorization-code code-store code "user-123" "test-client"
+                                     "https://app.example.com/callback"
+                                     ["openid" "offline_access"] nil expiry nil nil nil nil)
+      (let [response     (token-ep/handle-authorization-code-grant
+                          {:code         code
+                           :redirect_uri "https://app.example.com/callback"}
+                          (proto/get-client client-store "test-client")
+                          provider-config code-store token-store claims-provider)
+            refresh-data (proto/get-refresh-token token-store (:refresh_token response))]
+        (is (= "user-123" (:user-id refresh-data)))))))
+
+(deftest no-offline-access-no-refresh-token-test
+  (testing "no refresh token when offline_access absent even with refresh_token grant type"
+    (let [client-store    (store/create-client-store
+                           [{:client-id          "test-client"
+                             :client-type        "confidential"
+                             :client-secret-hash secret123-hash
+                             :redirect-uris      ["https://app.example.com/callback"]
+                             :grant-types        ["authorization_code" "refresh_token"]
+                             :response-types     ["code"]
+                             :scopes             ["openid" "profile"]}])
+          code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          token-store     (store/->HashingTokenStore (store/create-token-store))
+          claims-provider (->TestClaimsProvider)
+          provider-config (make-provider-config {:id-token-ttl-seconds 3600})
+          code            (token/generate-authorization-code)
+          expiry          (+ (System/currentTimeMillis) (* 1000 600))]
+      (proto/save-authorization-code code-store code "user-123" "test-client"
+                                     "https://app.example.com/callback"
+                                     ["openid" "profile"] nil expiry nil nil nil nil)
+      (let [response (token-ep/handle-authorization-code-grant
+                      {:code         code
+                       :redirect_uri "https://app.example.com/callback"}
+                      (proto/get-client client-store "test-client")
+                      provider-config code-store token-store claims-provider)]
+        (is (nil? (:refresh_token response)))))))
 
 (deftest parse-basic-auth-url-decoded-test
   (testing "URL-decodes client_id and client_secret per RFC 6749 §2.3.1"
@@ -1069,7 +1122,7 @@
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-1" "test-client"
                                      "https://app.example.com/callback"
-                                     ["openid"] nil expiry nil nil nil nil)
+                                     ["openid" "offline_access"] nil expiry nil nil nil nil)
       (let [auth-response    (token-ep/handle-token-request
                               {:grant_type   "authorization_code"
                                :code         code
@@ -1367,12 +1420,12 @@
                            :client-type        "confidential"
                            :client-secret-hash secret123-hash
                            :grant-types        ["authorization_code" "refresh_token"]
-                           :scopes             ["openid"]}
+                           :scopes             ["openid" "offline_access"]}
           code            (token/generate-authorization-code)
           expiry          (+ (System/currentTimeMillis) (* 1000 600))]
       (proto/save-authorization-code code-store code "user-123" "test-client"
                                      "https://app.example.com/callback"
-                                     ["openid"] "nonce123" expiry nil nil nil nil)
+                                     ["openid" "offline_access"] "nonce123" expiry nil nil nil nil)
       (let [response (token-ep/handle-authorization-code-grant
                       {:code code :redirect_uri "https://app.example.com/callback"}
                       client provider-config code-store token-store claims-provider)

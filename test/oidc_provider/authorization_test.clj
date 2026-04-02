@@ -712,3 +712,39 @@
           code            (get-in response [:params :code])
           code-data       (proto/get-authorization-code code-store code)]
       (is (= 1700000000 (:auth-time code-data))))))
+
+;; --- offline_access scope tests ---
+
+(deftest offline-access-stripped-without-refresh-token-grant-test
+  (testing "offline_access is removed from scope when client lacks refresh_token grant"
+    (let [client-store (store/create-client-store
+                        [{:client-id          "test-client"
+                          :client-type        "confidential"
+                          :client-secret-hash secret-hash
+                          :redirect-uris      ["https://app.example.com/callback"]
+                          :grant-types        ["authorization_code"]
+                          :response-types     ["code"]
+                          :scopes             ["openid" "offline_access"]}])
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid offline_access"}
+          result       (authz/parse-authorization-request params client-store)]
+      (is (= "openid" (:scope result))))))
+
+(deftest offline-access-kept-with-refresh-token-grant-test
+  (testing "offline_access is preserved when client has refresh_token grant"
+    (let [client-store (store/create-client-store
+                        [{:client-id          "test-client"
+                          :client-type        "confidential"
+                          :client-secret-hash secret-hash
+                          :redirect-uris      ["https://app.example.com/callback"]
+                          :grant-types        ["authorization_code" "refresh_token"]
+                          :response-types     ["code"]
+                          :scopes             ["openid" "offline_access"]}])
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid offline_access"}
+          result       (authz/parse-authorization-request params client-store)]
+      (is (= "openid offline_access" (:scope result))))))

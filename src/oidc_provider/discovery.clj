@@ -66,7 +66,7 @@
            :response_types_supported              (or response-types-supported ["code"])
            :subject_types_supported               (or subject-types-supported ["public"])
            :id_token_signing_alg_values_supported (or id-token-signing-alg-values-supported ["RS256"])
-           :scopes_supported                      (or scopes-supported ["openid" "profile" "email"])
+           :scopes_supported                      (or scopes-supported ["openid" "profile" "email" "offline_access"])
            :grant_types_supported                 (or grant-types-supported token-ep/default-grant-types-supported)
            :token_endpoint_auth_methods_supported (or token-endpoint-auth-methods-supported
                                                       ["client_secret_basic" "client_secret_post" "none"])

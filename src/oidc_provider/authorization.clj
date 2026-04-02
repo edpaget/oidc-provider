@@ -169,9 +169,17 @@
         (validate-public-client-pkce client params)
         (when-let [resources (:resource params)]
           (proto/validate-resource-indicators resources))
-        (cond-> params
-          (:prompt params)  (assoc :prompt-values (parse-prompt (:prompt params)))
-          (:max_age params) (assoc :max-age (parse-max-age (:max_age params))))
+        (let [params (if (and (:scope params)
+                              (not (some #{"refresh_token"} (:grant-types client))))
+                       (let [filtered (str/join " " (remove #{"offline_access"}
+                                                            (str/split (:scope params) #" ")))]
+                         (if (str/blank? filtered)
+                           (dissoc params :scope)
+                           (assoc params :scope filtered)))
+                       params)]
+          (cond-> params
+            (:prompt params)  (assoc :prompt-values (parse-prompt (:prompt params)))
+            (:max_age params) (assoc :max-age (parse-max-age (:max_age params)))))
         (catch clojure.lang.ExceptionInfo e
           (throw (ex-info (ex-message e)
                           (cond-> (assoc (ex-data e)

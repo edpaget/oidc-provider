@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Refresh token issuance in the authorization code flow now requires `offline_access` scope in addition to the client having `refresh_token` in `grant-types`, per OIDC Core §11
+
 ### Added
+- `offline_access` in the default `scopes_supported` discovery metadata
 - `prompt` parameter parsing and validation per OIDC Core §3.1.2.1 — uses Nimbus `Prompt/parse` to reject invalid combinations (e.g., `none` with other values) and exposes parsed values as `:prompt-values` keyword set in the validated request map
 - `validate-prompt-none` helper for host applications to enforce `prompt=none` semantics — returns a `login_required` error redirect when the user is not authenticated, per OIDC Core §3.1.2.6
 - `max_age` parameter parsing to integer with `:max-age` in the validated request map per OIDC Core §3.1.2.1 — host applications use this to check authentication freshness
