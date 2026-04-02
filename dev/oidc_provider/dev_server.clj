@@ -111,39 +111,49 @@
 (defn- routes
   "Creates a Ring handler dispatching to OIDC endpoints."
   [provider]
-  (let [reg-handler      (provider/registration-handler provider)
-        revoke-handler   (provider/revocation-handler provider)
-        userinfo-handler (provider/userinfo-handler provider)]
-    (fn [{:keys [uri request-method] :as request}]
-      (cond
-        (and (= uri "/.well-known/openid-configuration") (= request-method :get))
-        (json-response 200 (provider/discovery-metadata provider))
+  (fn [{:keys [uri request-method] :as request}]
+    (cond
+      (and (= uri "/.well-known/openid-configuration") (= request-method :get))
+      (json-response 200 (provider/discovery-metadata provider))
 
-        (and (= uri "/jwks") (= request-method :get))
-        (json-response 200 (provider/jwks provider))
+      (and (= uri "/jwks") (= request-method :get))
+      (json-response 200 (provider/jwks provider))
 
-        (and (= uri "/token") (= request-method :post))
-        (token-handler provider request)
+      (and (= uri "/token") (= request-method :post))
+      (token-handler provider request)
 
-        (and (= uri "/authorize") (= request-method :get))
-        (authorize-handler provider request)
+      (and (= uri "/authorize") (= request-method :get))
+      (authorize-handler provider request)
 
-        (= uri "/userinfo")
-        (userinfo-handler request)
+      (= uri "/userinfo")
+      (provider/userinfo-response provider request)
 
-        (register-route? uri)
-        (reg-handler request)
+      (register-route? uri)
+      (provider/registration-response provider request)
 
-        (and (= uri "/revoke") (= request-method :post))
-        (revoke-handler request)
+      (and (= uri "/revoke") (= request-method :post))
+      (provider/revocation-response provider request)
 
-        :else
-        (json-response 404 {"error" "not_found"})))))
+      :else
+      (json-response 404 {"error" "not_found"}))))
+
+(defn- wrap-json-body
+  "Middleware that serializes Clojure map response bodies to JSON strings
+  and sets the Content-Type header."
+  [handler]
+  (fn [request]
+    (let [response (handler request)]
+      (if (map? (:body response))
+        (-> response
+            (update :body json/generate-string)
+            (assoc-in [:headers "Content-Type"] "application/json"))
+        response))))
 
 (defn create-app
   "Creates the Ring application with middleware."
   [provider]
   (-> (routes provider)
+      wrap-json-body
       wrap-keyword-params
       wrap-params))
 

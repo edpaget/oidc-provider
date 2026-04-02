@@ -7,7 +7,7 @@
 #   MAVEN_CACHE=./m2 docker compose -f builder-compose.yml run builder
 #   cd ..
 #
-# Then start with: docker compose up -d --wait
+# Then start with: docker compose up -d
 # Access the UI at: https://localhost.emobix.co.uk:8443/
 
 services:
@@ -15,18 +15,12 @@ services:
     image: mongo:6.0.27
     volumes:
       - mongodb-data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.runCommand('ping').ok"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
   server:
     build:
       context: ./conformance-suite/server-dev
     depends_on:
-      mongodb:
-        condition: service_healthy
+      - mongodb
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -38,20 +32,13 @@ services:
       --fintechlabs.startredir=true
       --fintechlabs.base_url=https://localhost.emobix.co.uk:8443
       --spring.data.mongodb.uri=mongodb://mongodb:27017/test_suite
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/actuator/health || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 12
-      start_period: 15s
 
-  nginx:
+  httpd:
     build:
-      context: ./conformance-suite/nginx
+      context: ./conformance-suite/httpd
       dockerfile: Dockerfile-static
     depends_on:
-      server:
-        condition: service_healthy
+      - server
     ports:
       - "8443:8443"
 
