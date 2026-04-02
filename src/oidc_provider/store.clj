@@ -48,7 +48,7 @@
 
 (defrecord InMemoryAuthorizationCodeStore [codes consumed]
   proto/AuthorizationCodeStore
-  (save-authorization-code [_ code user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource]
+  (save-authorization-code [_ code user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource auth-time]
     (swap! codes assoc code (cond-> {:user-id      user-id
                                      :client-id    client-id
                                      :redirect-uri redirect-uri
@@ -57,7 +57,8 @@
                                      :expiry       expiry}
                               code-challenge        (assoc :code-challenge code-challenge)
                               code-challenge-method (assoc :code-challenge-method code-challenge-method)
-                              resource              (assoc :resource resource)))
+                              resource              (assoc :resource resource)
+                              auth-time             (assoc :auth-time auth-time)))
     true)
 
   (get-authorization-code [_ code]
@@ -144,8 +145,8 @@
   ensuring the backing store never holds plaintext code values."}
  HashingAuthorizationCodeStore [inner]
   proto/AuthorizationCodeStore
-  (save-authorization-code [_ code user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource]
-    (proto/save-authorization-code inner (util/hash-token code) user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource))
+  (save-authorization-code [_ code user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource auth-time]
+    (proto/save-authorization-code inner (util/hash-token code) user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource auth-time))
   (get-authorization-code [_ code]
     (proto/get-authorization-code inner (util/hash-token code)))
   (delete-authorization-code [_ code]

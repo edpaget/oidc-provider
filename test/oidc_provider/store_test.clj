@@ -68,7 +68,7 @@
     (let [code-store (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
           expiry     (+ (System/currentTimeMillis) 60000)]
       (proto/save-authorization-code code-store "code-1" "user-1" "client-1"
-                                     "https://app.example.com/cb" ["openid"] nil expiry nil nil nil)
+                                     "https://app.example.com/cb" ["openid"] nil expiry nil nil nil nil)
       (let [data (proto/consume-authorization-code code-store "code-1")]
         (is (= "user-1" (:user-id data)))
         (is (= "client-1" (:client-id data)))
@@ -84,7 +84,7 @@
     (let [code-store (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
           expiry     (+ (System/currentTimeMillis) 60000)]
       (proto/save-authorization-code code-store "code-1" "user-1" "client-1"
-                                     "https://app.example.com/cb" ["openid"] nil expiry nil nil nil)
+                                     "https://app.example.com/cb" ["openid"] nil expiry nil nil nil nil)
       (is (= "user-1" (:user-id (proto/consume-authorization-code code-store "code-1"))))
       (is (nil? (proto/consume-authorization-code code-store "code-1"))))))
 
@@ -144,7 +144,7 @@
           decorator (store/->HashingAuthorizationCodeStore inner)
           expiry    (+ (System/currentTimeMillis) 60000)]
       (proto/save-authorization-code decorator "code-plain" "user-1" "client-1"
-                                     "https://app.example.com/cb" ["openid"] nil expiry nil nil nil)
+                                     "https://app.example.com/cb" ["openid"] nil expiry nil nil nil nil)
       (is (= "user-1" (:user-id (proto/get-authorization-code decorator "code-plain"))))
       (is (not (contains? @(.codes inner) "code-plain"))))))
 
@@ -154,6 +154,6 @@
           decorator (store/->HashingAuthorizationCodeStore inner)
           expiry    (+ (System/currentTimeMillis) 60000)]
       (proto/save-authorization-code decorator "code-consume" "user-1" "client-1"
-                                     "https://app.example.com/cb" ["openid"] nil expiry nil nil nil)
+                                     "https://app.example.com/cb" ["openid"] nil expiry nil nil nil nil)
       (is (= "user-1" (:user-id (proto/consume-authorization-code decorator "code-consume"))))
       (is (nil? (proto/get-authorization-code decorator "code-consume"))))))

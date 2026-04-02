@@ -633,3 +633,82 @@
                            :prompt-values #{:login}}
           provider-config {:issuer "https://test.example.com"}]
       (is (nil? (authz/validate-prompt-none parsed-request false provider-config))))))
+
+;; --- max_age parameter tests ---
+
+(deftest parse-max-age-string-test
+  (testing "max_age string is parsed to integer :max-age"
+    (let [client-store (make-client-store)
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"
+                        :max_age       "300"}
+          result       (authz/parse-authorization-request params client-store)]
+      (is (= 300 (:max-age result))))))
+
+(deftest parse-max-age-integer-test
+  (testing "max_age integer is parsed correctly"
+    (let [client-store (make-client-store)
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"
+                        :max_age       300}
+          result       (authz/parse-authorization-request params client-store)]
+      (is (= 300 (:max-age result))))))
+
+(deftest parse-max-age-absent-test
+  (testing "no max_age means no :max-age key in result"
+    (let [client-store (make-client-store)
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"}
+          result       (authz/parse-authorization-request params client-store)]
+      (is (not (contains? result :max-age))))))
+
+(deftest parse-max-age-invalid-test
+  (testing "non-numeric max_age is rejected with invalid_request"
+    (let [client-store (make-client-store)
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"
+                        :max_age       "abc"
+                        :state         "xyz"}]
+      (try
+        (authz/parse-authorization-request params client-store)
+        (is false "expected exception")
+        (catch clojure.lang.ExceptionInfo e
+          (is (= ::error/invalid-request (:type (ex-data e))))
+          (is (= "invalid_request" (:error (ex-data e))))
+          (is (= "xyz" (:state (ex-data e)))))))))
+
+(deftest validate-max-age-fresh-test
+  (testing "returns true when auth is within max_age"
+    (let [now   1000000
+          clock (Clock/fixed (java.time.Instant/ofEpochMilli (* now 1000)) java.time.ZoneOffset/UTC)]
+      (is (true? (authz/validate-max-age 300 (- now 200) clock))))))
+
+(deftest validate-max-age-stale-test
+  (testing "returns false when auth exceeds max_age"
+    (let [now   1000000
+          clock (Clock/fixed (java.time.Instant/ofEpochMilli (* now 1000)) java.time.ZoneOffset/UTC)]
+      (is (false? (authz/validate-max-age 300 (- now 400) clock))))))
+
+(deftest handle-authorization-approval-stores-auth-time-test
+  (testing "auth-time is stored with authorization code"
+    (let [code-store      (store/->HashingAuthorizationCodeStore (store/create-authorization-code-store))
+          provider-config {:issuer                         "https://test.example.com"
+                           :authorization-code-ttl-seconds 600
+                           :clock                          (Clock/systemUTC)}
+          request         {:response_type "code"
+                           :client_id     "test-client"
+                           :redirect_uri  "https://app.example.com/callback"
+                           :scope         "openid"}
+          response        (authz/handle-authorization-approval
+                           request "user-123" provider-config code-store 1700000000)
+          code            (get-in response [:params :code])
+          code-data       (proto/get-authorization-code code-store code)]
+      (is (= 1700000000 (:auth-time code-data))))))

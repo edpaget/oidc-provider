@@ -105,6 +105,18 @@
                       {:type  ::error/invalid-request
                        :error (.getCode OAuth2Error/INVALID_REQUEST)})))))
 
+(defn- parse-max-age
+  "Parses a `max_age` parameter value to a non-negative long. The value may be a
+  string (from query params) or an integer. Throws `invalid_request` when the
+  value is not a valid non-negative integer."
+  [max-age-val]
+  (let [v (parse-long (str max-age-val))]
+    (when (or (nil? v) (neg? v))
+      (throw (ex-info "Invalid max_age parameter"
+                      {:type  ::error/invalid-request
+                       :error (.getCode OAuth2Error/INVALID_REQUEST)})))
+    v))
+
 (defn- validate-public-client-pkce
   [client params]
   (when (and (= (:client-type client) "public")
@@ -158,42 +170,55 @@
         (when-let [resources (:resource params)]
           (proto/validate-resource-indicators resources))
         (cond-> params
-          (:prompt params) (assoc :prompt-values (parse-prompt (:prompt params))))
+          (:prompt params)  (assoc :prompt-values (parse-prompt (:prompt params)))
+          (:max_age params) (assoc :max-age (parse-max-age (:max_age params))))
         (catch clojure.lang.ExceptionInfo e
           (throw (ex-info (ex-message e)
                           (cond-> (assoc (ex-data e)
                                          :redirect_uri (:redirect_uri params))
                             (:state params) (assoc :state (:state params))))))))))
 
+(m/=> parse-authorization-request [:=> [:cat :map :any] :map])
+
 (defn handle-authorization-approval
   "Handles user approval of authorization request.
 
    Takes a parsed authorization request (from [[parse-authorization-request]]), the
-   user ID of the approving user, provider configuration, and an AuthorizationCodeStore.
-   Generates an authorization code, calculates its expiry time, parses the requested
-   scopes, and saves the authorization code to the store. Returns an authorization
-   response map containing the redirect URI and response parameters (including the code
-   and optional state). Currently supports response_type \"code\"; throws ex-info for
+   user ID of the approving user, provider configuration, an AuthorizationCodeStore,
+   and an optional `auth-time` (epoch seconds) indicating when the user last
+   authenticated. When `:max-age` was present in the authorization request, the host
+   application should supply `auth-time` so that the `auth_time` claim appears in
+   the resulting ID token per OIDC Core §3.1.2.1. Returns an authorization response
+   map containing the redirect URI and response parameters (including the code and
+   optional state). Currently supports response_type \"code\"; throws ex-info for
    unsupported response types."
-  [{:keys [response_type client_id redirect_uri scope state nonce
-           code_challenge code_challenge_method resource]}
-   user-id
-   provider-config
-   code-store]
-  (if (= response_type "code")
-    (let [code   (token/generate-authorization-code)
-          expiry (+ (.millis ^java.time.Clock (:clock provider-config))
-                    (* 1000 (or (:authorization-code-ttl-seconds provider-config) 600)))
-          scopes (when scope (vec (str/split scope #" ")))]
-      (proto/save-authorization-code code-store code user-id client_id
-                                     redirect_uri scopes nonce expiry
-                                     code_challenge code_challenge_method resource)
-      {:redirect-uri redirect_uri
-       :params       (cond-> {:code code}
-                       (:issuer provider-config) (assoc :iss (:issuer provider-config))
-                       state (assoc :state state))})
-    (throw (ex-info "Unsupported response_type"
-                    {:response-type response_type}))))
+  ([parsed-request user-id provider-config code-store]
+   (handle-authorization-approval parsed-request user-id provider-config code-store nil))
+  ([{:keys [response_type client_id redirect_uri scope state nonce
+            code_challenge code_challenge_method resource]}
+    user-id
+    provider-config
+    code-store
+    auth-time]
+   (if (= response_type "code")
+     (let [code   (token/generate-authorization-code)
+           expiry (+ (.millis ^java.time.Clock (:clock provider-config))
+                     (* 1000 (or (:authorization-code-ttl-seconds provider-config) 600)))
+           scopes (when scope (vec (str/split scope #" ")))]
+       (proto/save-authorization-code code-store code user-id client_id
+                                      redirect_uri scopes nonce expiry
+                                      code_challenge code_challenge_method resource
+                                      auth-time)
+       {:redirect-uri redirect_uri
+        :params       (cond-> {:code code}
+                        (:issuer provider-config) (assoc :iss (:issuer provider-config))
+                        state (assoc :state state))})
+     (throw (ex-info "Unsupported response_type"
+                     {:response-type response_type})))))
+
+(m/=> handle-authorization-approval [:function
+                                     [:=> [:cat :map :string :map :any] :map]
+                                     [:=> [:cat :map :string :map :any [:maybe :int]] :map]])
 
 (defn handle-authorization-denial
   "Handles user denial of authorization request.
@@ -209,6 +234,8 @@
                    (:issuer provider-config) (assoc :iss (:issuer provider-config))
                    error-description (assoc :error_description error-description)
                    state (assoc :state state))})
+
+(m/=> handle-authorization-denial [:=> [:cat :map [:maybe :string] [:maybe :string] :map] :map])
 
 (defn validate-prompt-none
   "Checks whether `prompt=none` was requested and the user is not authenticated.
@@ -227,6 +254,18 @@
 
 (m/=> validate-prompt-none [:=> [:cat :map :boolean :map] [:maybe :map]])
 
+(defn validate-max-age
+  "Checks whether the user's authentication is still fresh per OIDC Core §3.1.2.1.
+
+   Takes `max-age-seconds` from the authorization request, `auth-time-seconds`
+   (epoch seconds when the user last authenticated), and a `java.time.Clock`.
+   Returns `true` if the elapsed time since authentication is within `max-age`,
+   `false` if re-authentication is required."
+  [max-age-seconds auth-time-seconds ^java.time.Clock clock]
+  (<= (- (quot (.millis clock) 1000) auth-time-seconds) max-age-seconds))
+
+(m/=> validate-max-age [:=> [:cat :int :int :any] :boolean])
+
 (defn build-redirect-url
   "Builds the redirect URL with query parameters.
 
@@ -242,3 +281,5 @@
     (str redirect-uri
          (if (str/includes? redirect-uri "?") "&" "?")
          query-string)))
+
+(m/=> build-redirect-url [:=> [:cat :map] :string])

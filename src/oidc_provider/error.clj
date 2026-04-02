@@ -19,6 +19,7 @@
       (derive ::unsupported-grant-type ::request-error)
       (derive ::unsupported-response-type ::request-error)
       (derive ::invalid-scope ::request-error)
+      (derive ::invalid-target ::request-error)
       (derive ::invalid-client ::auth-error)
       (derive ::invalid-token ::auth-error)))
 

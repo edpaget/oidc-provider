@@ -228,6 +228,7 @@
                              (token/generate-id-token
                               provider-config user-id (:client-id client)
                               user-claims {:nonce        (:nonce code-data)
+                                           :auth-time    (:auth-time code-data)
                                            :azp          true
                                            :access-token access-token})))]
       (proto/save-access-token token-store access-token user-id (:client-id client) scope expiry resource)

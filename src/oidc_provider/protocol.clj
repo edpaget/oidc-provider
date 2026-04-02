@@ -5,7 +5,8 @@
   along with storage protocols ([[ClientStore]], [[AuthorizationCodeStore]],
   [[TokenStore]]) for pluggable persistence."
   (:require
-   [malli.util :as mu]))
+   [malli.util :as mu]
+   [oidc-provider.error :as error]))
 
 (set! *warn-on-reflection* true)
 
@@ -90,23 +91,25 @@
   Wrap the backing store with [[oidc-provider.store/HashingAuthorizationCodeStore]]
   to transparently SHA-256 hash codes before delegation, ensuring every
   implementation stores hashed keys rather than plaintext codes."
-  (save-authorization-code [this code user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource]
+  (save-authorization-code [this code user-id client-id redirect-uri scope nonce expiry code-challenge code-challenge-method resource auth-time]
     "Saves an authorization code with associated metadata.
 
     Takes an authorization code string, user identifier, OAuth2 client identifier,
     the redirect URI from the authorization request, a vector of scope strings, an
     optional nonce for replay protection, an expiration timestamp (milliseconds
     since epoch), optional PKCE `code-challenge` and `code-challenge-method`
-    strings, and an optional `resource` vector of target resource indicator URIs
-    (per RFC 8707). Stores the code and metadata. Returns true if saved successfully.")
+    strings, an optional `resource` vector of target resource indicator URIs
+    (per RFC 8707), and an optional `auth-time` (epoch seconds) recording when the
+    user authenticated. Stores the code and metadata. Returns true if saved
+    successfully.")
 
   (get-authorization-code [this code]
     "Retrieves authorization code metadata.
 
     Takes an authorization code string and looks up its associated metadata. Returns
     a map with keys `[:user-id :client-id :redirect-uri :scope :nonce :expiry]`
-    and optionally `:code-challenge`, `:code-challenge-method`, and `:resource`
-    if found, or nil if the code doesn't exist or has been deleted.")
+    and optionally `:code-challenge`, `:code-challenge-method`, `:resource`, and
+    `:auth-time` if found, or nil if the code doesn't exist or has been deleted.")
 
   (delete-authorization-code [this code]
     "Deletes an authorization code.
@@ -192,4 +195,6 @@
       (when (or (not (.isAbsolute uri))
                 (.getFragment uri))
         (throw (ex-info "Invalid resource indicator"
-                        {:error "invalid_target" :resource r}))))))
+                        {:type     ::error/invalid-target
+                         :error    "invalid_target"
+                         :resource r}))))))

@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - `prompt` parameter parsing and validation per OIDC Core §3.1.2.1 — uses Nimbus `Prompt/parse` to reject invalid combinations (e.g., `none` with other values) and exposes parsed values as `:prompt-values` keyword set in the validated request map
 - `validate-prompt-none` helper for host applications to enforce `prompt=none` semantics — returns a `login_required` error redirect when the user is not authenticated, per OIDC Core §3.1.2.6
+- `max_age` parameter parsing to integer with `:max-age` in the validated request map per OIDC Core §3.1.2.1 — host applications use this to check authentication freshness
+- `validate-max-age` helper to check whether the user's authentication is still within the requested `max_age` window
+- `auth_time` claim propagation through authorization code store to ID tokens — when `auth-time` is supplied to `handle-authorization-approval`, it flows through code exchange to the `auth_time` JWT claim per OIDC Core §2
 - Standard OAuth2 error codes on all authorization endpoint validation errors per RFC 6749 §4.1.2.1 — `invalid_request`, `unsupported_response_type`, `invalid_scope` sourced from Nimbus `OAuth2Error` constants
 - Non-redirectable authorization errors (`redirect_uri` mismatch, unknown `client_id`, schema failures) include `{:redirect false}` in `ex-data` so Ring handlers can display an error page instead of redirecting
 - `authorization-error-response` Ring handler that dispatches on the `oidc-provider.error` type hierarchy — returns 400 for non-redirectable errors, 302 error redirect otherwise
