@@ -76,17 +76,6 @@
       :claims-provider        (->TestClaimsProvider)
       :allow-http-issuer      true})))
 
-(defn- token-handler
-  "Handles POST /token requests."
-  [provider request]
-  (try
-    (let [result (provider/token-request
-                  provider
-                  (:params request)
-                  (get-in request [:headers "authorization"]))]
-      (json-response 200 result))
-    (catch clojure.lang.ExceptionInfo e
-      (error-response e))))
 
 (defn- authorize-handler
   "Handles GET /authorize requests. Validates the authorization request
@@ -120,7 +109,7 @@
       (json-response 200 (provider/jwks provider))
 
       (and (= uri "/token") (= request-method :post))
-      (token-handler provider request)
+      (provider/token-response provider request)
 
       (and (= uri "/authorize") (= request-method :get))
       (authorize-handler provider request)

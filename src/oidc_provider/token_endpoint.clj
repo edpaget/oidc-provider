@@ -186,9 +186,9 @@
   [{:keys [code redirect_uri code_verifier]} client provider-config code-store token-store claims-provider]
   (when-not (some #{"authorization_code"} (:grant-types client))
     (throw (ex-info "Client not authorized for authorization_code grant"
-                    {:client-id (:client-id client)})))
+                    {:error "unauthorized_client" :client-id (:client-id client)})))
   (when-not code
-    (throw (ex-info "Missing code parameter" {})))
+    (throw (ex-info "Missing code parameter" {:error "invalid_request"})))
   (let [code-data (proto/consume-authorization-code code-store code)]
     (when-not code-data
       (let [replayed? (when-let [tokens (proto/get-code-tokens code-store code)]
@@ -197,18 +197,21 @@
                           (proto/revoke-token token-store (:refresh-token tokens)))
                         true)]
         (throw (ex-info "Invalid or expired authorization code"
-                        {:type   ::error/invalid-grant
+                        {:error  "invalid_grant"
+                         :type   ::error/invalid-grant
                          :code   code
                          :reason (if replayed? :replay :not-found)}))))
     (when (> (.millis ^java.time.Clock (:clock provider-config)) (:expiry code-data))
-      (throw (ex-info "Authorization code expired" {:code code})))
+      (throw (ex-info "Authorization code expired" {:error "invalid_grant" :code code})))
     (when (not= (:client-id code-data) (:client-id client))
-      (throw (ex-info "Client mismatch" {:expected (:client-id code-data)
+      (throw (ex-info "Client mismatch" {:error    "invalid_grant"
+                                         :expected (:client-id code-data)
                                          :actual   (:client-id client)})))
     (when (and (:redirect-uri code-data) (not redirect_uri))
-      (throw (ex-info "Missing redirect_uri parameter" {:code code})))
+      (throw (ex-info "Missing redirect_uri parameter" {:error "invalid_grant" :code code})))
     (when (and redirect_uri (not= (:redirect-uri code-data) redirect_uri))
-      (throw (ex-info "Redirect URI mismatch" {:expected (:redirect-uri code-data)
+      (throw (ex-info "Redirect URI mismatch" {:error    "invalid_grant"
+                                               :expected (:redirect-uri code-data)
                                                :actual   redirect_uri})))
     (verify-pkce code-data code_verifier)
     (let [user-id        (:user-id code-data)

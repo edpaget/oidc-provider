@@ -3,8 +3,6 @@
 
   "oidcc-prompt-none-not-logged-in": "oidc-request-parameters/phase-1-enforce-prompt-parameter",
   "oidcc-max-age-10000": "oidc-request-parameters/phase-2-enforce-max-age-parameter",
-  "oidcc-codereuse": "authorization-error-handling/phase-2-authorization-code-replay-revocation",
-  "oidcc-codereuse-30seconds": "authorization-error-handling/phase-2-authorization-code-replay-revocation",
   "oidcc-refresh-token": "task:conformance-refresh-token-flow",
   "oidcc-server-client-secret-post": "task:conformance-client-secret-post-config",
   "oidcc-unsigned-request-object-supported-correctly-or-rejected-as-unsupported": "task:reject-unsupported-request-objects"
