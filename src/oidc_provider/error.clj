@@ -16,6 +16,7 @@
       (derive ::invalid-request ::request-error)
       (derive ::invalid-grant ::request-error)
       (derive ::invalid-client-metadata ::request-error)
+      (derive ::unauthorized-client ::request-error)
       (derive ::unsupported-grant-type ::request-error)
       (derive ::unsupported-response-type ::request-error)
       (derive ::invalid-scope ::request-error)

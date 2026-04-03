@@ -101,34 +101,43 @@
   (let [client-id (:client-id client)]
     (when-not (#{"none" "client_secret_basic" "client_secret_post"} auth-method)
       (throw (ex-info "Unsupported token_endpoint_auth_method"
-                      {:client-id client-id :auth-method auth-method})))
+                      {:error "invalid_client" :type ::error/invalid-client
+                       :client-id client-id :auth-method auth-method})))
     (when (and (= auth-method "none")
                (or (= (:client-type client) "confidential")
                    (:client-secret-hash client)))
       (throw (ex-info "Confidential client must not use auth method 'none'"
-                      {:client-id client-id})))
+                      {:error "invalid_client" :type ::error/invalid-client
+                       :client-id client-id})))
     (when (= auth-method "client_secret_basic")
       (when-not basic-auth
         (throw (ex-info "Client requires Basic authentication"
-                        {:client-id client-id}))))
+                        {:error "invalid_client" :type ::error/invalid-client
+                         :client-id client-id}))))
     (when (= auth-method "client_secret_post")
       (when has-basic-header
         (throw (ex-info "Client requires POST body authentication"
-                        {:client-id client-id})))
+                        {:error "invalid_client" :type ::error/invalid-client
+                         :client-id client-id})))
       (when-not (:client_secret params)
         (throw (ex-info "Client requires POST body authentication with client_secret"
-                        {:client-id client-id}))))
+                        {:error "invalid_client" :type ::error/invalid-client
+                         :client-id client-id}))))
     (when (and (= auth-method "none") (or client-secret has-basic-header))
       (throw (ex-info "Public client must not provide a client_secret"
-                      {:client-id client-id})))
+                      {:error "invalid_client" :type ::error/invalid-client
+                       :client-id client-id})))
     (when (and (#{"client_secret_basic" "client_secret_post"} auth-method)
                (not (:client-secret-hash client)))
       (throw (ex-info "Client configured for secret-based auth has no stored credentials"
-                      {:client-id client-id})))
+                      {:error "invalid_client" :type ::error/invalid-client
+                       :client-id client-id})))
     (when (and (#{"client_secret_basic" "client_secret_post"} auth-method)
                (:client-secret-hash client))
       (when-not (util/verify-client-secret (or client-secret "") (:client-secret-hash client))
-        (throw (ex-info "Invalid client credentials" {:client-id client-id}))))))
+        (throw (ex-info "Invalid client credentials"
+                        {:error "invalid_client" :type ::error/invalid-client
+                         :client-id client-id}))))))
 
 (defn authenticate-client
   "Authenticates an OAuth2 client from request parameters or Basic auth header.
@@ -142,10 +151,13 @@
         basic-auth (parse-basic-auth authorization-header)
         client-id  (or (:client-id basic-auth) (:client_id params))]
     (when-not client-id
-      (throw (ex-info "Missing client_id" {})))
+      (throw (ex-info "Missing client_id"
+                      {:error "invalid_request" :type ::error/invalid-request})))
     (let [client        (proto/get-client client-store client-id)
           _             (when-not client
-                          (throw (ex-info "Unknown client" {:client-id client-id})))
+                          (throw (ex-info "Unknown client"
+                                          {:error "invalid_client" :type ::error/invalid-client
+                                           :client-id client-id})))
           auth-method   (resolve-auth-method client)
           client-secret (case auth-method
                           "client_secret_basic" (:client-secret basic-auth)
@@ -164,17 +176,20 @@
   (let [stored-challenge (:code-challenge code-data)]
     (cond
       (and stored-challenge (not code-verifier))
-      (throw (ex-info "Missing code_verifier for PKCE" {:error "invalid_grant"}))
+      (throw (ex-info "Missing code_verifier for PKCE"
+                      {:error "invalid_grant" :type ::error/invalid-grant}))
 
       (and code-verifier (not stored-challenge))
-      (throw (ex-info "Unexpected code_verifier" {:error "invalid_grant"}))
+      (throw (ex-info "Unexpected code_verifier"
+                      {:error "invalid_grant" :type ::error/invalid-grant}))
 
       (and stored-challenge code-verifier)
       (let [verifier (CodeVerifier. ^String code-verifier)
             method   (CodeChallengeMethod/parse (or (:code-challenge-method code-data) "S256"))
             computed (.getValue (CodeChallenge/compute method verifier))]
         (when-not (util/constant-time-eq? computed stored-challenge)
-          (throw (ex-info "PKCE verification failed" {:error "invalid_grant"})))))))
+          (throw (ex-info "PKCE verification failed"
+                          {:error "invalid_grant" :type ::error/invalid-grant})))))))
 
 (defn handle-authorization-code-grant
   "Exchanges an authorization code for tokens per RFC 6749 §4.1.3.
@@ -186,9 +201,11 @@
   [{:keys [code redirect_uri code_verifier]} client provider-config code-store token-store claims-provider]
   (when-not (some #{"authorization_code"} (:grant-types client))
     (throw (ex-info "Client not authorized for authorization_code grant"
-                    {:error "unauthorized_client" :client-id (:client-id client)})))
+                    {:error "unauthorized_client" :type ::error/unauthorized-client
+                     :client-id (:client-id client)})))
   (when-not code
-    (throw (ex-info "Missing code parameter" {:error "invalid_request"})))
+    (throw (ex-info "Missing code parameter"
+                    {:error "invalid_request" :type ::error/invalid-request})))
   (let [code-data (proto/consume-authorization-code code-store code)]
     (when-not code-data
       (let [replayed? (when-let [tokens (proto/get-code-tokens code-store code)]
@@ -202,17 +219,19 @@
                          :code   code
                          :reason (if replayed? :replay :not-found)}))))
     (when (> (.millis ^java.time.Clock (:clock provider-config)) (:expiry code-data))
-      (throw (ex-info "Authorization code expired" {:error "invalid_grant" :code code})))
+      (throw (ex-info "Authorization code expired"
+                      {:error "invalid_grant" :type ::error/invalid-grant :code code})))
     (when (not= (:client-id code-data) (:client-id client))
-      (throw (ex-info "Client mismatch" {:error    "invalid_grant"
-                                         :expected (:client-id code-data)
-                                         :actual   (:client-id client)})))
+      (throw (ex-info "Client mismatch"
+                      {:error "invalid_grant" :type ::error/invalid-grant
+                       :expected (:client-id code-data) :actual (:client-id client)})))
     (when (and (:redirect-uri code-data) (not redirect_uri))
-      (throw (ex-info "Missing redirect_uri parameter" {:error "invalid_grant" :code code})))
+      (throw (ex-info "Missing redirect_uri parameter"
+                      {:error "invalid_grant" :type ::error/invalid-grant :code code})))
     (when (and redirect_uri (not= (:redirect-uri code-data) redirect_uri))
-      (throw (ex-info "Redirect URI mismatch" {:error    "invalid_grant"
-                                               :expected (:redirect-uri code-data)
-                                               :actual   redirect_uri})))
+      (throw (ex-info "Redirect URI mismatch"
+                      {:error "invalid_grant" :type ::error/invalid-grant
+                       :expected (:redirect-uri code-data) :actual redirect_uri})))
     (verify-pkce code-data code_verifier)
     (let [user-id        (:user-id code-data)
           scope          (:scope code-data)
@@ -256,18 +275,24 @@
   [{:keys [refresh_token scope resource]} client provider-config token-store]
   (when-not (some #{"refresh_token"} (:grant-types client))
     (throw (ex-info "Client not authorized for refresh_token grant"
-                    {:client-id (:client-id client)})))
+                    {:error "unauthorized_client" :type ::error/unauthorized-client
+                     :client-id (:client-id client)})))
   (when-not refresh_token
-    (throw (ex-info "Missing refresh_token parameter" {})))
+    (throw (ex-info "Missing refresh_token parameter"
+                    {:error "invalid_request" :type ::error/invalid-request})))
   (let [token-data (proto/get-refresh-token token-store refresh_token)]
     (when-not token-data
-      (throw (ex-info "Invalid refresh token" {:refresh-token refresh_token})))
+      (throw (ex-info "Invalid refresh token"
+                      {:error "invalid_grant" :type ::error/invalid-grant
+                       :refresh-token refresh_token})))
     (when-let [expiry (:expiry token-data)]
       (when (> (.millis ^java.time.Clock (:clock provider-config)) expiry)
-        (throw (ex-info "Refresh token expired" {:error "invalid_grant"}))))
+        (throw (ex-info "Refresh token expired"
+                        {:error "invalid_grant" :type ::error/invalid-grant}))))
     (when (not= (:client-id token-data) (:client-id client))
-      (throw (ex-info "Client mismatch" {:expected (:client-id token-data)
-                                         :actual   (:client-id client)})))
+      (throw (ex-info "Client mismatch"
+                      {:error "invalid_grant" :type ::error/invalid-grant
+                       :expected (:client-id token-data) :actual (:client-id client)})))
     (let [requested-scope   (when scope (vec (str/split scope #" ")))
           token-scope       (:scope token-data)
           final-scope       (or requested-scope token-scope)
@@ -276,14 +301,13 @@
       (when (and requested-scope
                  (not (every? (set token-scope) requested-scope)))
         (throw (ex-info "Requested scope exceeds original scope"
-                        {:original  token-scope
-                         :requested requested-scope})))
+                        {:error "invalid_scope" :type ::error/invalid-scope
+                         :original token-scope :requested requested-scope})))
       (when (and resource original-resource
                  (not (every? (set original-resource) resource)))
         (throw (ex-info "Requested resource exceeds original grant"
-                        {:error     "invalid_target"
-                         :original  original-resource
-                         :requested resource})))
+                        {:error "invalid_target" :type ::error/invalid-target
+                         :original original-resource :requested resource})))
       (let [access-token   (token/generate-access-token)
             ttl            (or (:access-token-ttl-seconds provider-config) 3600)
             now            (.millis ^java.time.Clock (:clock provider-config))
@@ -316,12 +340,14 @@
   [{:keys [scope resource]} client provider-config token-store]
   (when-not (some #{"client_credentials"} (:grant-types client))
     (throw (ex-info "Client not authorized for client_credentials grant"
-                    {:client-id (:client-id client)})))
+                    {:error "unauthorized_client" :type ::error/unauthorized-client
+                     :client-id (:client-id client)})))
   (when-not (or (= (:client-type client) "confidential")
                 (and (nil? (:client-type client))
                      (:client-secret-hash client)))
     (throw (ex-info "client_credentials grant requires a confidential client"
-                    {:client-id (:client-id client)})))
+                    {:error "unauthorized_client" :type ::error/unauthorized-client
+                     :client-id (:client-id client)})))
   (let [resource        (or resource (:default-resource client))
         requested-scope (if scope (vec (str/split scope #" ")) [])
         client-scope    (:scopes client)
@@ -330,8 +356,8 @@
                           requested-scope)]
     (when-not (every? (set client-scope) final-scope)
       (throw (ex-info "Invalid scope for client"
-                      {:requested final-scope
-                       :allowed   client-scope})))
+                      {:error "invalid_scope" :type ::error/invalid-scope
+                       :requested final-scope :allowed client-scope})))
     (let [access-token (token/generate-access-token)
           ttl          (or (:access-token-ttl-seconds provider-config) 3600)
           expiry       (+ (.millis ^java.time.Clock (:clock provider-config)) (* 1000 ttl))]
@@ -357,7 +383,8 @@
   [params authorization-header provider-config client-store code-store token-store claims-provider]
   (when-not (m/validate TokenRequest params)
     (throw (ex-info "Invalid token request"
-                    {:errors (m/explain TokenRequest params)})))
+                    {:error "invalid_request" :type ::error/invalid-request
+                     :errors (m/explain TokenRequest params)})))
   (let [resources             (normalize-resource (:resource params))
         _                     (when resources (proto/validate-resource-indicators resources))
         params                (cond-> params resources (assoc :resource resources))
@@ -365,7 +392,8 @@
                                   default-grant-types-supported)
         _                     (when-not (some #{(:grant_type params)} grant-types-supported)
                                 (throw (ex-info "Unsupported grant type"
-                                                {:error "unsupported_grant_type"})))
+                                                {:error "unsupported_grant_type"
+                                                 :type  ::error/unsupported-grant-type})))
         client                (authenticate-client params authorization-header client-store)
         response              (case (:grant_type params)
                                 "authorization_code"
@@ -380,6 +408,7 @@
 
                                 (throw (ex-info "Unimplemented grant type"
                                                 {:error      "unsupported_grant_type"
+                                                 :type       ::error/unsupported-grant-type
                                                  :grant-type (:grant_type params)})))]
     (when-not (m/validate TokenResponse response)
       (throw (ex-info "Invalid token response generated"
