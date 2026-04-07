@@ -40,7 +40,7 @@ Two test clients are pre-registered on startup:
 | Client ID | Client Secret | Auth Method |
 |-----------|---------------|-------------|
 | `test-client` | `test-secret` | `client_secret_basic` |
-| `test-client-2` | `test-secret-2` | `client_secret_post` |
+| `test-client-2` | `test-secret-2` | `client_secret_basic` |
 
 ### 3. Run conformance tests
 
@@ -148,7 +148,5 @@ The following conformance tests are currently skipped or expected to fail due to
 **Expected failures** (run but allowed to fail):
 - `oidcc-prompt-none-not-logged-in` — `prompt=none` not yet enforced
 - `oidcc-max-age-10000` — `max_age` parameter not yet enforced
-- `oidcc-codereuse`, `oidcc-codereuse-30seconds` — Authorization code replay detection not yet implemented
-- `oidcc-refresh-token` — Refresh token flow conformance gaps
 - `oidcc-server-client-secret-post` — `client_secret_post` configuration issues
 - `oidcc-unsigned-request-object-supported-correctly-or-rejected-as-unsupported` — Request object handling

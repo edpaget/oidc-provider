@@ -159,7 +159,7 @@
       :redirect-uris              redirect-uris
       :grant-types                ["authorization_code" "refresh_token"]
       :response-types             ["code"]
-      :scopes                     ["openid" "profile" "email"]
+      :scopes                     ["openid" "profile" "email" "offline_access"]
       :token-endpoint-auth-method "client_secret_basic"})
     (provider/register-client
      provider
@@ -169,8 +169,8 @@
       :redirect-uris              redirect-uris
       :grant-types                ["authorization_code" "refresh_token"]
       :response-types             ["code"]
-      :scopes                     ["openid" "profile" "email"]
-      :token-endpoint-auth-method "client_secret_post"})))
+      :scopes                     ["openid" "profile" "email" "offline_access"]
+      :token-endpoint-auth-method "client_secret_basic"})))
 
 (defn -main
   "Starts the dev OIDC provider server. Port defaults to 9090 and can be
