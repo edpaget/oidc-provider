@@ -1,8 +1,6 @@
 {
-  "_comment": "Tests expected to fail due to missing protocol features. Run but don't cause CI failure. Each entry references the roadmap/task that would fix it.",
+  "_comment": "Tests expected to fail due to missing protocol features. Run but don't cause CI failure.",
 
-  "oidcc-prompt-none-not-logged-in": "Dev server auto-approves all requests; no concept of unauthenticated user for prompt=none",
-  "oidcc-max-age-10000": "Dev server has no session tracking to supply auth_time for max_age enforcement",
   "oidcc-server-client-secret-post": "task:conformance-client-secret-post-config",
   "oidcc-unsigned-request-object-supported-correctly-or-rejected-as-unsupported": "task:reject-unsupported-request-objects"
 }
