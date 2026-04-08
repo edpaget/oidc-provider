@@ -1,9 +1,9 @@
 {
-  "_comment": "Tests skipped because they timeout waiting for protocol features not yet implemented. Each entry references the roadmap that would fix it.",
+  "_comment": "Tests skipped because they timeout waiting for protocol features not yet implemented or dev server limitations.",
 
-  "oidcc-response-type-missing": "authorization-error-handling/phase-1-standardize-authz-error-codes",
-  "oidcc-prompt-login": "oidc-request-parameters/phase-1-enforce-prompt-parameter",
-  "oidcc-max-age-1": "oidc-request-parameters/phase-2-enforce-max-age-parameter",
-  "oidcc-ensure-registered-redirect-uri": "authorization-error-handling/phase-1-standardize-authz-error-codes",
+  "oidcc-response-type-missing": "Authorization error redirect works but browser simulation times out on conformance callback processing",
+  "oidcc-ensure-registered-redirect-uri": "Authorization error redirect works but browser simulation times out on conformance callback processing",
+  "oidcc-prompt-login": "Dev server auto-approves all requests; no session management for prompt=login re-authentication",
+  "oidcc-max-age-1": "Dev server has no session tracking; cannot detect stale authentication for max_age=1",
   "oidcc-ensure-request-object-with-redirect-uri": "task:reject-unsupported-request-objects"
 }

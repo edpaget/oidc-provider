@@ -89,7 +89,7 @@
        :headers {"Location" redirect-url}
        :body    ""})
     (catch clojure.lang.ExceptionInfo e
-      (error-response e))))
+      (provider/authorization-error-response provider e))))
 
 (defn- register-route?
   "Returns true when the URI targets the registration endpoint."
