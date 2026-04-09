@@ -11,5 +11,9 @@
   "client2": {
     "client_id": "test-client-2",
     "client_secret": "test-secret-2"
+  },
+  "client_secret_post": {
+    "client_id": "test-client-post",
+    "client_secret": "test-secret-post"
   }
 }

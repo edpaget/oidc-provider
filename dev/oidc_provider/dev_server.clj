@@ -177,8 +177,8 @@
       wrap-params))
 
 (defn- register-test-clients
-  "Pre-registers two test clients with known credentials. The conformance
-  suite requires two separate clients for its test scenarios."
+  "Pre-registers three test clients with known credentials. The conformance
+  suite requires separate clients for different auth method test variants."
   [provider]
   (let [redirect-uris ["https://example.com/callback" conformance-callback]]
     (provider/register-client
@@ -200,7 +200,17 @@
       :grant-types                ["authorization_code" "refresh_token"]
       :response-types             ["code"]
       :scopes                     ["openid" "profile" "email" "offline_access"]
-      :token-endpoint-auth-method "client_secret_basic"})))
+      :token-endpoint-auth-method "client_secret_basic"})
+    (provider/register-client
+     provider
+     {:client-id                  "test-client-post"
+      :client-type                "confidential"
+      :client-secret-hash         (util/hash-client-secret "test-secret-post")
+      :redirect-uris              redirect-uris
+      :grant-types                ["authorization_code" "refresh_token"]
+      :response-types             ["code"]
+      :scopes                     ["openid" "profile" "email" "offline_access"]
+      :token-endpoint-auth-method "client_secret_post"})))
 
 (defn -main
   "Starts the dev OIDC provider server. Port defaults to 9090 and can be

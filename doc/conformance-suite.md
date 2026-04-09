@@ -35,12 +35,13 @@ BASE_URL=http://host.docker.internal:9090 clojure -M:dev
 
 The `BASE_URL` variable tells the provider to advertise `host.docker.internal` in its discovery metadata so the conformance suite (running in Docker) can reach it. The server listens on `http://localhost:9090`.
 
-Two test clients are pre-registered on startup:
+Three test clients are pre-registered on startup:
 
 | Client ID | Client Secret | Auth Method |
 |-----------|---------------|-------------|
 | `test-client` | `test-secret` | `client_secret_basic` |
 | `test-client-2` | `test-secret-2` | `client_secret_basic` |
+| `test-client-post` | `test-secret-post` | `client_secret_post` |
 
 ### 3. Run conformance tests
 
