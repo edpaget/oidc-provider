@@ -264,17 +264,21 @@
 
    Takes a Provider instance, a parsed authorization request, and the user ID of
    the user who approved the request. Generates an authorization code, stores it,
-   and builds the redirect URL to send the user back to the client. Returns the
-   redirect URL string."
-  [provider request user-id]
-  (let [response (authz/handle-authorization-approval
-                  request
-                  user-id
-                  (:provider-config provider)
-                  (:code-store provider))]
-    (authz/build-redirect-url response)))
+   and builds the redirect URL to send the user back to the client. Optionally
+   accepts `auth-time` (epoch seconds) so the `auth_time` claim appears in the
+   resulting ID token per OIDC Core §3.1.2.1. Returns the redirect URL string."
+  ([provider request user-id]
+   (authorize provider request user-id nil))
+  ([provider request user-id auth-time]
+   (let [response (authz/handle-authorization-approval
+                   request
+                   user-id
+                   (:provider-config provider)
+                   (:code-store provider)
+                   auth-time)]
+     (authz/build-redirect-url response))))
 
-(m/=> authorize [:=> [:cat :any :map :string] :string])
+(m/=> authorize [:=> [:cat :any :map :string [:maybe :int]] :string])
 
 (defn deny-authorization
   "Handles authorization denial.

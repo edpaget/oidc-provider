@@ -8,6 +8,7 @@
   (:require
    [cheshire.core :as json]
    [clojure.string :as str]
+   [oidc-provider.authorization :as authz]
    [oidc-provider.core :as provider]
    [oidc-provider.protocol :as proto]
    [oidc-provider.token :as token]
@@ -43,14 +44,6 @@
    :headers {"Content-Type" "application/json"}
    :body    (json/generate-string body)})
 
-(defn- error-response
-  "Builds a JSON error response from an `ExceptionInfo`."
-  [^clojure.lang.ExceptionInfo e]
-  (let [data (ex-data e)]
-    (json-response (or (:status data) 400)
-                   {"error"             (or (:error data) "invalid_request")
-                    "error_description" (.getMessage e)})))
-
 (def ^:private conformance-callback
   "Redirect URI used by the conformance suite."
   "https://localhost.emobix.co.uk:8443/test/a/oidc-provider/callback")
@@ -77,17 +70,54 @@
       :allow-http-issuer      true})))
 
 
+;; ---------------------------------------------------------------------------
+;; Session management
+;; ---------------------------------------------------------------------------
+
+(def ^:private auth-state
+  "Server-side authentication state. Tracks the current auth-time (epoch seconds)
+  for the test user. `nil` means unauthenticated. Playwright creates fresh browser
+  contexts without cookies, so we track state server-side rather than via cookies."
+  (atom nil))
+
+(defn- current-auth-time
+  "Returns the current auth-time, or nil if unauthenticated."
+  []
+  @auth-state)
+
+(defn- authenticate!
+  "Creates a fresh authentication with current time. Returns the new auth-time."
+  []
+  (let [now (quot (System/currentTimeMillis) 1000)]
+    (reset! auth-state now)
+    now))
+
 (defn- authorize-handler
-  "Handles GET /authorize requests. Validates the authorization request
-  and immediately approves it for the hardcoded test user, returning a
-  302 redirect with an authorization code."
+  "Handles GET /authorize requests. Manages authentication state for prompt and
+  max_age conformance, then auto-approves for the test user."
   [provider request]
   (try
-    (let [parsed      (provider/parse-authorization-request provider (:params request))
-          redirect-url (provider/authorize provider parsed test-user-id)]
-      {:status  302
-       :headers {"Location" redirect-url}
-       :body    ""})
+    (let [parsed        (provider/parse-authorization-request provider (:params request))
+          prompt-values (:prompt-values parsed)
+          max-age       (:max-age parsed)
+          clock         (get-in provider [:provider-config :clock])
+          auth-time     (if (contains? prompt-values :login)
+                          (authenticate!)
+                          (current-auth-time))]
+      (if-let [err (authz/validate-prompt-none parsed (some? auth-time)
+                                               (:provider-config provider))]
+        {:status  302
+         :headers {"Location" (authz/build-redirect-url err)}
+         :body    ""}
+        (let [auth-time (if (or (nil? auth-time)
+                                (and max-age
+                                     (not (authz/validate-max-age max-age auth-time clock))))
+                          (authenticate!)
+                          auth-time)
+              redirect-url (provider/authorize provider parsed test-user-id auth-time)]
+          {:status  302
+           :headers {"Location" redirect-url}
+           :body    ""})))
     (catch clojure.lang.ExceptionInfo e
       (provider/authorization-error-response provider e))))
 

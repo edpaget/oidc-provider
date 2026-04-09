@@ -1,6 +1,7 @@
 {
-  "_comment": "Tests expected to fail due to missing protocol features. Run but don't cause CI failure.",
+  "_comment": "Tests expected to fail due to missing protocol features or dev server limitations.",
 
+  "oidcc-prompt-none-not-logged-in": "Dev server auto-authenticates all users; cannot simulate unauthenticated state after other tests have run",
   "oidcc-server-client-secret-post": "task:conformance-client-secret-post-config",
   "oidcc-unsigned-request-object-supported-correctly-or-rejected-as-unsupported": "task:reject-unsupported-request-objects"
 }
