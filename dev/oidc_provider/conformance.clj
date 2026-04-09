@@ -201,13 +201,56 @@
     false))
 
 ;; ---------------------------------------------------------------------------
+;; Placeholder filling
+;; ---------------------------------------------------------------------------
+
+(def ^:private dummy-png
+  "Minimal 1x1 white PNG, base64-encoded."
+  (str "data:image/png;base64,"
+       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4"
+       "2mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg=="))
+
+(defn- find-unfilled-placeholders
+  "Returns placeholder IDs from the test log that have not been filled.
+  Placeholders are log entries with an `upload` key."
+  [^HttpClient client ^String base-url ^String module-id]
+  (let [logs (get-test-log client base-url module-id)]
+    (->> logs
+         (keep :upload)
+         distinct
+         vec)))
+
+(defn- fill-placeholder
+  "Fills a placeholder by uploading a dummy PNG image."
+  [^HttpClient client ^String base-url ^String module-id ^String placeholder-id]
+  (try
+    (let [uri     (str base-url "/api/log/" module-id "/images/" placeholder-id)
+          request (-> (HttpRequest/newBuilder)
+                      (.uri (URI/create uri))
+                      (.timeout (Duration/ofSeconds 10))
+                      (.header "Content-Type" "text/plain")
+                      (.POST (HttpRequest$BodyPublishers/ofString dummy-png))
+                      (.build))]
+      (.send ^HttpClient client request (HttpResponse$BodyHandlers/ofString)))
+    (catch Exception _)))
+
+(defn- fill-placeholders
+  "Fills all unfilled placeholders for a test module."
+  [^HttpClient client ^String base-url ^String module-id]
+  (let [placeholders (find-unfilled-placeholders client base-url module-id)]
+    (doseq [p placeholders]
+      (fill-placeholder client base-url module-id p))))
+
+;; ---------------------------------------------------------------------------
 ;; Test execution
 ;; ---------------------------------------------------------------------------
 
 (defn- run-module
   "Runs a single test module following the conformance suite lifecycle:
   create → wait for CONFIGURED/WAITING/FINISHED → start if CONFIGURED →
-  simulate browser each time the test enters WAITING → wait for FINISHED."
+  simulate browser each time the test enters WAITING → wait for FINISHED.
+  After browser simulation, fills any pending placeholders (screenshot
+  uploads) so tests that expect manual interaction can complete."
   [^Browser browser ^HttpClient client ^String base-url plan-id module-name module-variant]
   (let [module    (create-test-from-plan client base-url plan-id module-name module-variant)
         module-id (:id module)
@@ -227,6 +270,7 @@
 
           :else
           (do (simulate-browser browser client base-url module-id)
+              (fill-placeholders client base-url module-id)
               (recur (inc attempts))))))))
 
 (defn- load-test-list

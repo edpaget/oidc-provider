@@ -1,9 +1,5 @@
 {
-  "_comment": "Tests skipped because they timeout during browser simulation.",
+  "_comment": "Tests skipped because they require unimplemented protocol features.",
 
-  "oidcc-prompt-login": "Browser simulation times out; prompt=login re-authentication works server-side but callback processing hangs",
-  "oidcc-max-age-1": "Browser simulation times out; max_age=1 re-authentication works server-side but callback processing hangs",
-  "oidcc-response-type-missing": "Authorization error redirect works but browser simulation times out on conformance callback processing",
-  "oidcc-ensure-registered-redirect-uri": "Authorization error redirect works but browser simulation times out on conformance callback processing",
   "oidcc-ensure-request-object-with-redirect-uri": "task:reject-unsupported-request-objects"
 }
