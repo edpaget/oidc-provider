@@ -35,7 +35,16 @@
              :preferred_username "testuser")
       (some #{"email"} scope)
       (assoc :email          "test@example.com"
-             :email_verified true))))
+             :email_verified true)
+      (some #{"phone"} scope)
+      (assoc :phone_number          "+1-555-555-1234"
+             :phone_number_verified true)
+      (some #{"address"} scope)
+      (assoc :address {:street_address "123 Test Street"
+                       :locality       "Testville"
+                       :region         "TS"
+                       :postal_code    "12345"
+                       :country        "US"}))))
 
 (defn- json-response
   "Builds a Ring response map with JSON content type."
@@ -65,6 +74,7 @@
       :userinfo-endpoint      (str base-url "/userinfo")
       :registration-endpoint  (str base-url "/register")
       :revocation-endpoint    (str base-url "/revoke")
+      :scopes-supported       ["openid" "profile" "email" "address" "phone" "offline_access"]
       :signing-key            rsa-key
       :claims-provider        (->TestClaimsProvider)
       :allow-http-issuer      true})))
@@ -193,7 +203,7 @@
       :redirect-uris              redirect-uris
       :grant-types                ["authorization_code" "refresh_token"]
       :response-types             ["code"]
-      :scopes                     ["openid" "profile" "email" "offline_access"]
+      :scopes                     ["openid" "profile" "email" "address" "phone" "offline_access"]
       :token-endpoint-auth-method "client_secret_basic"})
     (provider/register-client
      provider
@@ -203,7 +213,7 @@
       :redirect-uris              redirect-uris
       :grant-types                ["authorization_code" "refresh_token"]
       :response-types             ["code"]
-      :scopes                     ["openid" "profile" "email" "offline_access"]
+      :scopes                     ["openid" "profile" "email" "address" "phone" "offline_access"]
       :token-endpoint-auth-method "client_secret_basic"})
     (provider/register-client
      provider
@@ -213,7 +223,7 @@
       :redirect-uris              redirect-uris
       :grant-types                ["authorization_code" "refresh_token"]
       :response-types             ["code"]
-      :scopes                     ["openid" "profile" "email" "offline_access"]
+      :scopes                     ["openid" "profile" "email" "address" "phone" "offline_access"]
       :token-endpoint-auth-method "client_secret_post"})))
 
 (defn -main
