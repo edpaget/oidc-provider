@@ -26,7 +26,9 @@
    [:ui_locales {:optional true} :string]
    [:code_challenge {:optional true} :string]
    [:code_challenge_method {:optional true} [:enum "S256"]]
-   [:resource {:optional true} [:or :string [:vector :string]]]])
+   [:resource {:optional true} [:or :string [:vector :string]]]
+   [:request {:optional true} :string]
+   [:request_uri {:optional true} :string]])
 
 (def AuthorizationResponse
   "Malli schema for authorization response."
@@ -158,6 +160,12 @@
                        :error     (.getCode OAuth2Error/INVALID_REQUEST)
                        :redirect  false})))
     (validate-redirect-uri client (:redirect_uri params))
+    (when (or (:request params) (:request_uri params))
+      (throw (ex-info "Request objects are not supported"
+                      {:type         ::error/invalid-request
+                       :error        "request_not_supported"
+                       :redirect_uri (:redirect_uri params)
+                       :state        (:state params)})))
     (let [params (if (and (nil? (:resource params))
                           (:default-resource client))
                    (assoc params :resource (:default-resource client))

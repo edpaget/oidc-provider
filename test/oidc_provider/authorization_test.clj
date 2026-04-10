@@ -81,6 +81,49 @@
           (is (= "invalid_request" (:error (ex-data e))))
           (is (false? (:redirect (ex-data e)))))))))
 
+(deftest parse-authorization-request-rejects-request-param-test
+  (testing "throws request_not_supported when request parameter is present"
+    (let [client-store (store/create-client-store
+                        [{:client-id          "test-client"
+                          :client-type        "confidential"
+                          :client-secret-hash secret-hash
+                          :redirect-uris      ["https://app.example.com/callback"]
+                          :response-types     ["code"]
+                          :scopes             ["openid"]}])
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"
+                        :request       "eyJhbGciOiJub25lIn0.eyJyZXNwb25zZV90eXBlIjoiY29kZSJ9."}]
+      (try
+        (authz/parse-authorization-request params client-store)
+        (is false "expected exception")
+        (catch clojure.lang.ExceptionInfo e
+          (is (= "request_not_supported" (:error (ex-data e))))
+          (is (= ::error/invalid-request (:type (ex-data e))))
+          (is (= "https://app.example.com/callback" (:redirect_uri (ex-data e)))))))))
+
+(deftest parse-authorization-request-rejects-request-uri-param-test
+  (testing "throws request_not_supported when request_uri parameter is present"
+    (let [client-store (store/create-client-store
+                        [{:client-id          "test-client"
+                          :client-type        "confidential"
+                          :client-secret-hash secret-hash
+                          :redirect-uris      ["https://app.example.com/callback"]
+                          :response-types     ["code"]
+                          :scopes             ["openid"]}])
+          params       {:response_type "code"
+                        :client_id     "test-client"
+                        :redirect_uri  "https://app.example.com/callback"
+                        :scope         "openid"
+                        :request_uri   "https://example.com/request.jwt"}]
+      (try
+        (authz/parse-authorization-request params client-store)
+        (is false "expected exception")
+        (catch clojure.lang.ExceptionInfo e
+          (is (= "request_not_supported" (:error (ex-data e))))
+          (is (= ::error/invalid-request (:type (ex-data e)))))))))
+
 (defn- make-client-store
   "Creates a client store with a single test client."
   [& {:keys [response-types scopes]

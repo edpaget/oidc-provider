@@ -1,6 +1,5 @@
 {
-  "_comment": "Tests expected to fail due to missing protocol features or dev server limitations.",
+  "_comment": "Tests expected to fail due to dev server limitations.",
 
-  "oidcc-prompt-none-not-logged-in": "Dev server auto-authenticates all users; cannot simulate unauthenticated state after other tests have run",
-  "oidcc-unsigned-request-object-supported-correctly-or-rejected-as-unsupported": "task:reject-unsupported-request-objects"
+  "oidcc-prompt-none-not-logged-in": "Dev server auto-authenticates all users; cannot simulate unauthenticated state after other tests have run"
 }

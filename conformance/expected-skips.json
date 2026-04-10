@@ -1,5 +1,3 @@
 {
-  "_comment": "Tests skipped because they require unimplemented protocol features.",
-
-  "oidcc-ensure-request-object-with-redirect-uri": "task:reject-unsupported-request-objects"
+  "_comment": "Tests skipped because they timeout during browser simulation or require unimplemented features."
 }
