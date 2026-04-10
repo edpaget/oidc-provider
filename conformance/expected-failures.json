@@ -1,5 +1,3 @@
 {
-  "_comment": "Tests expected to fail due to dev server limitations.",
-
-  "oidcc-prompt-none-not-logged-in": "Dev server auto-authenticates all users; cannot simulate unauthenticated state after other tests have run"
+  "_comment": "Tests expected to fail. Currently empty — all known failures are resolved or tracked as tasks."
 }

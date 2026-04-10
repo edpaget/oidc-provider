@@ -309,6 +309,15 @@
                       (apply str (map #(str "\n    " (:name %)) unexpected)))))
       (count unexpected))))
 
+(defn- reset-dev-server
+  "Resets the dev server's auth state by POSTing to /reset. This ensures
+  each test module starts with a clean authentication state."
+  [^HttpClient client ^String dev-server-url]
+  (try
+    (let [request (build-request :post (str dev-server-url "/reset"))]
+      (send-request client request))
+    (catch Exception _)))
+
 (defn run-basic-op
   "Runs the Basic OP conformance test plan. Returns the number of
   unexpected failures. Tests in `expected-skips.json` are not run.
@@ -318,6 +327,10 @@
                               (System/getenv "CONFORMANCE_SERVER")
                               "https://localhost.emobix.co.uk:8443")
         config            (json/parse-string (slurp (or config-file "conformance/basic-op-config.json")) true)
+        discovery-url     (get-in config [:server :discoveryUrl])
+        dev-server-url    (when discovery-url
+                            (let [uri (URI/create discovery-url)]
+                              (rewrite-host-url (str (.getScheme uri) "://" (.getAuthority uri)))))
         skips             (load-test-list "conformance/expected-skips.json")
         expected-failures (load-test-list "conformance/expected-failures.json")
         client            (create-http-client)]
@@ -338,7 +351,9 @@
                            (if (skips testModule)
                              (do (println (str "  Skipping: " testModule))
                                  (conj acc {:name testModule :result "SKIPPED"}))
-                             (do (print (str "  Running: " testModule "... "))
+                             (do (when dev-server-url
+                                   (reset-dev-server client dev-server-url))
+                                 (print (str "  Running: " testModule "... "))
                                  (flush)
                                  (try
                                    (let [info (run-module browser client base-url plan-id testModule variant)]

@@ -153,6 +153,10 @@
       (and (= uri "/revoke") (= request-method :post))
       (provider/revocation-response provider request)
 
+      (and (= uri "/reset") (= request-method :post))
+      (do (reset! auth-state nil)
+          {:status 204 :headers {} :body ""})
+
       :else
       (json-response 404 {"error" "not_found"}))))
 
