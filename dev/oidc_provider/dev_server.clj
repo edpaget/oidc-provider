@@ -75,6 +75,9 @@
       :registration-endpoint  (str base-url "/register")
       :revocation-endpoint    (str base-url "/revoke")
       :scopes-supported       ["openid" "profile" "email" "address" "phone" "offline_access"]
+      :claims-supported       ["sub" "name" "given_name" "family_name"
+                                "preferred_username" "email" "email_verified"
+                                "phone_number" "phone_number_verified" "address"]
       :signing-key            rsa-key
       :claims-provider        (->TestClaimsProvider)
       :allow-http-issuer      true})))
@@ -170,7 +173,7 @@
       :else
       (json-response 404 {"error" "not_found"}))))
 
-(defn- wrap-json-body
+(defn- wrap-json-response
   "Middleware that serializes Clojure map response bodies to JSON strings
   and sets the Content-Type header."
   [handler]
@@ -182,11 +185,26 @@
             (assoc-in [:headers "Content-Type"] "application/json"))
         response))))
 
+(defn- wrap-json-request
+  "Middleware that parses JSON request bodies into keyword maps. Only
+  applies to requests with a JSON content type."
+  [handler]
+  (fn [request]
+    (if (and (:body request)
+             (some-> (get-in request [:headers "content-type"])
+                     (str/includes? "json")))
+      (let [body-str (slurp (:body request))
+            parsed   (when-not (str/blank? body-str)
+                       (json/parse-string body-str true))]
+        (handler (assoc request :body parsed)))
+      (handler request))))
+
 (defn create-app
   "Creates the Ring application with middleware."
   [provider]
   (-> (routes provider)
-      wrap-json-body
+      wrap-json-response
+      wrap-json-request
       wrap-keyword-params
       wrap-params))
 
