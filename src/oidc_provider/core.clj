@@ -353,7 +353,8 @@
     (reg/handle-registration-request
      request client-store
      {:clock                 (:clock provider-config)
-      :registration-endpoint (:registration-endpoint (:config provider))})))
+      :registration-endpoint (:registration-endpoint (:config provider))
+      :scopes-supported      (:scopes-supported (:config provider))})))
 
 (m/=> dynamic-register-client [:=> [:cat :any :map] :map])
 

@@ -131,11 +131,16 @@
   request)
 
 (defn- request->client-config
-  "Converts a registration request to a kebab-case `ClientConfig` map."
-  [request]
+  "Converts a registration request to a kebab-case `ClientConfig` map.
+  When no scope is provided and `default-scopes` is given, uses those
+  as the client's allowed scopes per RFC 7591 §2."
+  [request default-scopes]
   (let [auth-method (:token_endpoint_auth_method request)
         scope-str   (:scope request)
-        scopes      (if scope-str (vec (str/split scope-str #" ")) [])]
+        scopes      (cond
+                      scope-str      (vec (str/split scope-str #" "))
+                      default-scopes (vec default-scopes)
+                      :else          [])]
     (cond-> {:client-id                  (util/generate-client-id)
              :client-type                (if (= auth-method "none") "public" "confidential")
              :redirect-uris              (:redirect_uris request)
@@ -172,8 +177,10 @@
   Takes a `request` map with keyword keys, a `client-store` implementing
   [[oidc-provider.protocol/ClientStore]], and an optional `opts` map. The `opts`
   map supports `:clock` (a `java.time.Clock`, defaults to UTC) for generating
-  `client_id_issued_at`, and `:registration-endpoint` (a base URL string) for
-  constructing `registration_client_uri` per RFC 7592.
+  `client_id_issued_at`, `:registration-endpoint` (a base URL string) for
+  constructing `registration_client_uri` per RFC 7592, and `:scopes-supported`
+  (a sequence of scope strings) used as the default scopes when the client
+  omits the `scope` field per RFC 7591 §2.
 
   Throws `ex-info` with `\"invalid_client_metadata\"` message on validation errors."
   ([request client-store]
@@ -183,7 +190,8 @@
      (throw (ex-info "invalid_client_metadata"
                      {:type   ::error/invalid-client-metadata
                       :errors (m/explain RegistrationRequest request)})))
-   (let [config       (-> request apply-defaults validate-request request->client-config)
+   (let [config       (-> request apply-defaults validate-request
+                          (request->client-config (:scopes-supported opts)))
          reg-token    (:registration-access-token config)
          secret       (when (not= (:token-endpoint-auth-method config) "none")
                         (util/generate-client-secret))
