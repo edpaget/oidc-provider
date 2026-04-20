@@ -191,7 +191,7 @@
                      {:type   ::error/invalid-client-metadata
                       :errors (m/explain RegistrationRequest request)})))
    (let [config       (-> request apply-defaults validate-request
-                         (request->client-config (:scopes-supported opts)))
+                          (request->client-config (:scopes-supported opts)))
          reg-token    (:registration-access-token config)
          secret       (when (not= (:token-endpoint-auth-method config) "none")
                         (util/generate-client-secret))
