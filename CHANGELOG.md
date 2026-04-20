@@ -10,7 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 - Refresh token issuance in the authorization code flow now requires `offline_access` scope in addition to the client having `refresh_token` in `grant-types`, per OIDC Core §11
 
+### Fixed
+- Dynamic client registration now assigns default scopes from `scopes_supported` when the client omits the `scope` field, per RFC 7591 §2
+
 ### Added
+- Comprehensive OIDCC conformance test plan (`oidcc-test-plan`) via `clojure -M:conformance-comprehensive` — exercises PKCE, dynamic client registration, refresh tokens, request objects, and strict redirect URI validation beyond the Basic OP certification profile
+- `:scopes-supported` option in `handle-registration-request` opts for setting default scopes on dynamically registered clients
 - `offline_access` in the default `scopes_supported` discovery metadata
 - `prompt` parameter parsing and validation per OIDC Core §3.1.2.1 — uses Nimbus `Prompt/parse` to reject invalid combinations (e.g., `none` with other values) and exposes parsed values as `:prompt-values` keyword set in the validated request map
 - `validate-prompt-none` helper for host applications to enforce `prompt=none` semantics — returns a `login_required` error redirect when the user is not authenticated, per OIDC Core §3.1.2.6

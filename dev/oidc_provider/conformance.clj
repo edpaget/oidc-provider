@@ -2,8 +2,9 @@
   "Conformance suite test runner.
 
   Drives the OpenID Foundation Conformance Suite REST API to create and
-  run a Basic OP test plan, using Playwright for headless browser
-  automation. Expects the conformance suite to be running (see
+  run OIDCC test plans, using Playwright for headless browser automation.
+  Supports the Basic OP certification plan and the comprehensive
+  `oidcc-test-plan`. Expects the conformance suite to be running (see
   `docker-compose.yml`)."
   (:require
    [cheshire.core :as json])
@@ -21,12 +22,21 @@
 
 (set! *warn-on-reflection* true)
 
-(def ^:private plan-name
+(def ^:private basic-op-plan-name
   "oidcc-basic-certification-test-plan")
 
-(def ^:private plan-variant
+(def ^:private basic-op-plan-variant
   {"server_metadata"     "discovery"
    "client_registration" "static_client"})
+
+(def ^:private comprehensive-plan-name
+  "oidcc-test-plan")
+
+(def ^:private comprehensive-plan-variant
+  {"client_registration" "dynamic_client"
+   "response_type"       "code"
+   "client_auth_type"    "client_secret_basic"
+   "response_mode"       "default"})
 
 ;; ---------------------------------------------------------------------------
 ;; HTTP client for conformance suite REST API
@@ -93,7 +103,7 @@
 
 (defn- create-plan
   "Creates a test plan and returns the plan map with `:id` and `:modules`."
-  [^HttpClient client ^String base-url config]
+  [^HttpClient client ^String base-url ^String plan-name plan-variant config]
   (let [variant-json (json/generate-string plan-variant)
         uri          (str base-url "/api/plan"
                          "?planName=" plan-name
@@ -318,29 +328,29 @@
       (send-request client request))
     (catch Exception _)))
 
-(defn run-basic-op
-  "Runs the Basic OP conformance test plan. Returns the number of
-  unexpected failures. Tests in `expected-skips.json` are not run.
-  Tests in `expected-failures.json` run but don't count as failures."
-  [{:keys [base-url config-file]}]
+(defn- run-plan
+  "Runs a conformance test plan. Returns the number of unexpected failures.
+  Tests in the skips file are not run. Tests in the failures file run but
+  don't count as failures."
+  [{:keys [base-url plan-name plan-variant config-file skips-file failures-file]}]
   (let [base-url          (or base-url
                               (System/getenv "CONFORMANCE_SERVER")
                               "https://localhost.emobix.co.uk:8443")
-        config            (json/parse-string (slurp (or config-file "conformance/basic-op-config.json")) true)
+        config            (json/parse-string (slurp config-file) true)
         discovery-url     (get-in config [:server :discoveryUrl])
         dev-server-url    (when discovery-url
                             (let [uri (URI/create discovery-url)]
                               (rewrite-host-url (str (.getScheme uri) "://" (.getAuthority uri)))))
-        skips             (load-test-list "conformance/expected-skips.json")
-        expected-failures (load-test-list "conformance/expected-failures.json")
+        skips             (load-test-list skips-file)
+        expected-failures (load-test-list failures-file)
         client            (create-http-client)]
     (println (str "Conformance server: " base-url))
     (when (seq skips)
-      (println (str "Skipping " (count skips) " tests (see conformance/expected-skips.json)")))
+      (println (str "Skipping " (count skips) " tests (see " skips-file ")")))
     (println (str "Creating test plan: " plan-name))
     (with-open [pw (Playwright/create)]
       (let [browser (create-browser pw)
-            plan    (create-plan client base-url config)
+            plan    (create-plan client base-url plan-name plan-variant config)
             plan-id (:id plan)
             modules (:modules plan)]
         (println (str "Plan created: " plan-id " (" (count modules) " modules)"))
@@ -368,8 +378,38 @@
           (finally
             (.close browser)))))))
 
+(defn run-basic-op
+  "Runs the Basic OP conformance test plan. Returns the number of
+  unexpected failures. Tests in `expected-skips.json` are not run.
+  Tests in `expected-failures.json` run but don't count as failures."
+  [{:keys [base-url config-file]}]
+  (run-plan {:base-url      base-url
+             :plan-name     basic-op-plan-name
+             :plan-variant  basic-op-plan-variant
+             :config-file   (or config-file "conformance/basic-op-config.json")
+             :skips-file    "conformance/expected-skips.json"
+             :failures-file "conformance/expected-failures.json"}))
+
+(defn run-comprehensive-op
+  "Runs the comprehensive OIDCC conformance test plan (`oidcc-test-plan`)
+  with dynamic client registration. Exercises PKCE, redirect URI
+  validation, refresh tokens, request objects, and registration tests
+  beyond the Basic OP certification profile. Returns the number of
+  unexpected failures."
+  [{:keys [base-url config-file]}]
+  (run-plan {:base-url      base-url
+             :plan-name     comprehensive-plan-name
+             :plan-variant  comprehensive-plan-variant
+             :config-file   (or config-file "conformance/comprehensive-op-config.json")
+             :skips-file    "conformance/comprehensive-expected-skips.json"
+             :failures-file "conformance/comprehensive-expected-failures.json"}))
+
 (defn -main
-  "Runs the Basic OP conformance tests against the conformance suite."
-  [& _args]
-  (let [failures (run-basic-op {})]
+  "Runs conformance tests against the conformance suite. Pass
+  `--comprehensive` to run the full `oidcc-test-plan` instead of the
+  Basic OP certification plan."
+  [& args]
+  (let [failures (if (some #{"--comprehensive"} args)
+                   (run-comprehensive-op {})
+                   (run-basic-op {}))]
     (System/exit (if (zero? failures) 0 1))))
