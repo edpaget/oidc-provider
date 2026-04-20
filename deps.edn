@@ -45,7 +45,7 @@
                 :source-uri   "https://github.com/edpaget/oidc-provider/blob/{version}/{filepath}#L{line}"}}
 
   :deploy
-  {:extra-deps {slipset/deps-deploy {:mvn/version "0.2.2"}}
+  {:extra-deps {slipset/deps-deploy {:mvn/version "0.2.3"}}
    :exec-fn    deps-deploy.deps-deploy/deploy
    :exec-args  {:installer :remote}}
 
