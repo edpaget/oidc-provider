@@ -45,7 +45,7 @@
                 :source-uri   "https://github.com/edpaget/oidc-provider/blob/{version}/{filepath}#L{line}"}}
 
   :deploy
-  {:extra-deps {slipset/deps-deploy {:mvn/version "0.2.2"}}
+  {:extra-deps {slipset/deps-deploy {:mvn/version "0.2.3"}}
    :exec-fn    deps-deploy.deps-deploy/deploy
    :exec-args  {:installer :remote}}
 
@@ -61,4 +61,12 @@
                  ring/ring-core                      {:mvn/version "1.15.3"}
                  com.microsoft.playwright/playwright {:mvn/version "1.58.0"}}
    :jvm-opts    ["-Djdk.internal.httpclient.disableHostnameVerification=true"]
-   :main-opts   ["-m" "oidc-provider.conformance"]}}}
+   :main-opts   ["-m" "oidc-provider.conformance"]}
+
+  :conformance-comprehensive
+  {:extra-paths ["dev"]
+   :extra-deps  {ring/ring-jetty-adapter              {:mvn/version "1.15.3"}
+                 ring/ring-core                      {:mvn/version "1.15.3"}
+                 com.microsoft.playwright/playwright {:mvn/version "1.58.0"}}
+   :jvm-opts    ["-Djdk.internal.httpclient.disableHostnameVerification=true"]
+   :main-opts   ["-m" "oidc-provider.conformance" "--comprehensive"]}}}

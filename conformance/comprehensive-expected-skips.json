@@ -1,0 +1,6 @@
+{
+  "_comment": "Tests skipped for the comprehensive oidcc-test-plan",
+  "oidcc-server-rotate-keys": "Server key rotation not implemented in dev server",
+  "oidcc-request-uri-unsigned": "request_uri parameter not supported (discovery: request_uri_parameter_supported=false)",
+  "oidcc-request-uri-signed-rs256": "request_uri parameter not supported (discovery: request_uri_parameter_supported=false)"
+}
