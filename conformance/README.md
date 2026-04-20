@@ -30,10 +30,15 @@ The OIDC provider runs at http://localhost:9090 with two pre-registered test cli
 ### 3. Run conformance tests
 
 ```bash
+# Basic OP certification plan (~30 modules)
 clojure -M:conformance
+
+# Comprehensive OIDCC plan (~50 modules, includes PKCE, dynamic registration,
+# refresh tokens, request objects, redirect URI validation)
+clojure -M:conformance-comprehensive
 ```
 
-This creates a Basic OP test plan via the conformance suite REST API, runs all test modules, and reports results.
+The basic plan runs the `oidcc-basic-certification-test-plan` with static client registration. The comprehensive plan runs `oidcc-test-plan` with dynamic client registration, exercising OAuth 2.1-relevant tests beyond the basic certification profile.
 
 ## Configuration
 
@@ -46,16 +51,25 @@ This creates a Basic OP test plan via the conformance suite REST API, runs all t
 
 ### Test Plan Config
 
-The test plan configuration is in `conformance/basic-op-config.json`. It uses `host.docker.internal` to reach the dev server from inside Docker. On macOS/Windows this works out of the box; on Linux, the `docker-compose.yml` includes `extra_hosts` to map it.
+Test plan configurations are in the `conformance/` directory:
+
+- `basic-op-config.json` — Basic OP certification plan
+- `comprehensive-op-config.json` — Comprehensive OIDCC plan
+
+Both use `host.docker.internal` to reach the dev server from inside Docker. On macOS/Windows this works out of the box; on Linux, the `docker-compose.yml` includes `extra_hosts` to map it.
+
+Each plan has its own expected-skips and expected-failures JSON files for tracking known gaps.
 
 ## Manual Testing
 
 You can also create and run test plans via the web UI at https://localhost.emobix.co.uk:8443/:
 
 1. Click "Create a new test plan"
-2. Select "OpenID Connect Core: Basic Certification Profile Authorization server test"
-3. Set Server metadata to "discovery" and Client registration to "static_client"
-4. Paste the contents of `conformance/basic-op-config.json` as the configuration
+2. Select a test plan:
+   - "OpenID Connect Core: Basic Certification Profile Authorization server test" for basic
+   - "OpenID Connect Core: Comprehensive Authorization server test" for comprehensive
+3. Set variants (Server metadata: "discovery", Client registration: "static_client" or "dynamic_client")
+4. Paste the contents of the corresponding config JSON as the configuration
 5. Click "Create Test Plan" and then run individual tests
 
 ## Cleanup
