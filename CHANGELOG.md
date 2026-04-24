@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `build.clj` now writes the `v`-prefixed git tag (e.g. `v0.7.1`) to the pom's `<scm><tag>`, so cljdoc can locate the release revision on GitHub
+
 ## [0.7.0] - 2026-04-20
 
 ### Changed

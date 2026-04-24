@@ -21,7 +21,7 @@
                 :scm {:url "https://github.com/edpaget/oidc-provider"
                       :connection "scm:git:git://github.com/edpaget/oidc-provider.git"
                       :developerConnection "scm:git:ssh://git@github.com/edpaget/oidc-provider.git"
-                      :tag version}
+                      :tag (str "v" version)}
                 :pom-data [[:licenses
                             [:license
                              [:name "Apache-2.0"]
