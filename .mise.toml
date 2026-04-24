@@ -2,6 +2,6 @@
 RDM_PROJECT = "oidc-provider"
 
 [tools]
-"java" = "temurin-21.0.10+7.0.LTS"
+"java" = "temurin-21.0.11+10.0.LTS"
 "clojure" = "latest"
 "clj-kondo" = "latest"
