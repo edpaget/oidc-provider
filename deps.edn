@@ -1,7 +1,7 @@
 {:paths ["src"]
 
  :deps
- {org.clojure/clojure    {:mvn/version "1.12.4"}
+ {org.clojure/clojure    {:mvn/version "1.12.5"}
   metosin/malli          {:mvn/version "0.20.1"}
   cheshire/cheshire      {:mvn/version "6.2.0"}
   com.nimbusds/nimbus-jose-jwt {:mvn/version "10.9"}
